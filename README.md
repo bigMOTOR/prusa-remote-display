@@ -24,6 +24,7 @@ printer and never sends printer-control commands.
 2. **Print and assemble the case.** Follow the [printing](enclosure/printing.md)
    and [assembly](enclosure/assembly.md) guides. The case needs no soldering,
    threaded inserts or glue.
+   [Case files on Printables](https://www.printables.com/model/1901185).
 3. **Install and connect.** Install the firmware in your browser using a
    computer and a USB data cable. Then enter your Wi-Fi and PrusaLink details
    on the display's local setup page. You do not need to compile firmware.
