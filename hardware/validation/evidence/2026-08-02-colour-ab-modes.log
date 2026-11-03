@@ -1,0 +1,70 @@
+# Phase C1 — vendor panel tuning A/B: exact bytes transmitted per mode
+# Firmware 0.1.0-dev, profile hardware-validation, ESP-IDF v5.5.4, SPI2 @ 40 MHz.
+# Datasheet: ST7789T3_SPEC_V1.0.pdf
+#   sha256 7a91ce95b3f743111b975f9189c97d99a8c6bcaa0ed026dcaaf6c2979adf9d17
+# Normalisation: ANSI escapes and CR removed.
+
+==================================================================
+MODE A   build sha256=fefb9a8fa4b8f87438dc529c6c08125aa10365c9b416b56178b1a1d2891477aa
+==================================================================
+I (1011) prd.display: tuning=A-generic (no additional registers written)
+I (1017) prd.display: tuning=A-generic active
+I (1017) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (1086) prd.app: colour A/B chart drawn markers=1 tuning=A-generic
+
+==================================================================
+MODE B   build sha256=a42910d7c181cf343ef7e2bb3350280637a3165e66f29e5a50585d9d07546aa6
+==================================================================
+I (1011) prd.display: tuning=B-vendor-exact applying, exact bytes follow
+I (1013) prd.display: tx cmd=0x36 params=00
+I (1015) prd.display: tx cmd=0x3A params=55
+I (1017) prd.display: tx cmd=0xB0 params=00 E8
+I (1019) prd.display: tx cmd=0xB2 params=0C 0C 00 33 33
+I (1021) prd.display: tx cmd=0xB7 params=75
+I (1023) prd.display: tx cmd=0xBB params=1A
+I (1025) prd.display: tx cmd=0xC0 params=80
+I (1027) prd.display: tx cmd=0xC2 params=01 FF
+I (1029) prd.display: tx cmd=0xC3 params=13
+I (1031) prd.display: tx cmd=0xC4 params=20
+I (1033) prd.display: tx cmd=0xC6 params=0F
+I (1035) prd.display: tx cmd=0xD0 params=A4
+I (1037) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+I (1040) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+I (1042) prd.display: tx cmd=0xB0 params=00 F0
+I (1042) prd.display: restored RAMCTRL big-endian and orientation after vendor sequence
+I (1048) prd.display: tuning=B-vendor-exact active
+I (1048) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (1117) prd.app: colour A/B chart drawn markers=2 tuning=B-vendor-exac
+
+==================================================================
+MODE C   build sha256=06b649a2b91db46783c7dd141316a32090bfa4d556d25f63f5a51d4a2560c0e4
+==================================================================
+I (1011) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+I (1013) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+I (1015) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+I (1022) prd.display: tuning=C-vendor-gamma-only active
+I (1022) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (1091) prd.app: colour A/B chart drawn markers=3 tuning=C-vendor-gamma-only
+
+==================================================================
+MODE D   build sha256=fb4d3fba628bea0bb54209a0f0f24a182157d44deb3693a9fbe4c0d59ba99996
+==================================================================
+I (1011) prd.display: tuning=D-vendor-analogue+gamma applying, exact bytes follow
+I (1013) prd.display: tx cmd=0xB2 params=0C 0C 00 33 33
+I (1015) prd.display: tx cmd=0xB7 params=75
+I (1017) prd.display: tx cmd=0xBB params=1A
+I (1019) prd.display: tx cmd=0xC0 params=80
+I (1021) prd.display: tx cmd=0xC2 params=01 FF
+I (1023) prd.display: tx cmd=0xC3 params=13
+I (1025) prd.display: tx cmd=0xC4 params=20
+I (1027) prd.display: tx cmd=0xC6 params=0F
+I (1029) prd.display: tx cmd=0xD0 params=A4 A1
+I (1031) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+I (1033) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+I (1040) prd.display: tuning=D-vendor-analogue+gamma active
+I (1040) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (1109) prd.app: colour A/B chart drawn markers=4 tuning=D-vendor-analogue+gamma
+
+RESULT: A dull accent + elevated black | B accent WRONG (azure) + orientation flipped
+        C accent CORRECT + black good, orientation unchanged  <-- recommended
+        D accent WRONG (azure) + orientation flipped

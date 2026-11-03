@@ -1,0 +1,22 @@
+# 30-minute stability soak — Bootstrap Spec §19.8
+# Firmware: 0.1.0-dev  git=88d7b3e095b4  dirty=false  profile=hardware-validation
+# Board left untouched on USB-C bus power; heartbeat cadence and uptime
+# monotonicity used as the liveness/no-reset criteria.
+
+[  0.0m] soak started on /dev/cu.usbmodem2101 for 32 minutes
+[  5.0m] 30 heartbeats, uptime 451s, healthy
+[ 10.0m] 60 heartbeats, uptime 751s, healthy
+[ 15.0m] 90 heartbeats, uptime 1051s, healthy
+[ 20.0m] 120 heartbeats, uptime 1351s, healthy
+[ 25.0m] 150 heartbeats, uptime 1651s, healthy
+[ 30.0m] 180 heartbeats, uptime 1951s, healthy
+
+=== SOAK RESULT ===
+duration            : 32.0 min
+heartbeats received : 192
+uptime span         : 161s -> 2071s (31.8 min of continuous uptime)
+heartbeat gap       : min 9.56s / max 10.17s (expected ~10s)
+unexpected reboots  : 0
+serial link drops   : 0
+faults              : 0
+VERDICT: PASS

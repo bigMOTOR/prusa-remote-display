@@ -1,0 +1,145 @@
+<!-- SPDX-FileCopyrightText: 2026 Mykola Fiantsev -->
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+
+# Firmware release procedure
+
+This is the release-owner path for turning one reviewed commit into public firmware assets. It does
+not make the repository public, create a GitHub Release, change repository settings, sign with a
+publisher key or flash a board by itself.
+
+Follow the stable release order and required delivery checks in [Release evidence](releases/README.md).
+A green software preflight is not physical evidence.
+
+## 1. Freeze the identity
+
+Choose the reviewed full commit SHA and release tag. `firmware/version.txt` is canonical; the tag
+must be `v` followed by that exact version. The release build must come from a clean checkout of the
+chosen commit. Create the tag on that commit and ensure it is present in the checkout before
+configuring or building; otherwise the build metadata records an empty `releaseTag`.
+
+## 2. Build and sign
+
+Run the release build through the repository wrapper, then follow
+[Local application signing](ota-signing.md). Signing is owner-operated and uses the established
+publisher identity. Automated tests use disposable keys and never the publisher key.
+
+Package the verified signed application with the same release build and trusted public key:
+
+```sh
+./firmware/tools/package-firmware.py --profile release \
+  --signed-app /path/to/new-signed.bin \
+  --verification-key /path/to/trusted-public.pem
+```
+
+The signed bundle is created under `firmware/build/release/artifacts-signed/`. The ordinary unsigned
+CI artifact is not the live OTA image.
+
+The standalone initial-flash bundle also contains `bootloader.bin`,
+`partition-table.bin`, `ota_data_initial.bin` and portable `flash_args.json`.
+Its four regions refer to files in that bundle, not paths in the build tree.
+Do not confuse this initial-install set with the app-only OTA contract below.
+A browser installer additionally needs a reviewed merged image with the exact
+build's flash parameters and a separately verified USB installation path; this
+bundle alone does not provide that page or prove a successful board install.
+
+## 3. Run the offline publication preflight
+
+Supply the intended tag and full reviewed commit independently; do not copy them out of the
+manifest being checked:
+
+```sh
+./firmware/tools/check-release-assets.py firmware/build/release/artifacts-signed \
+  --tag v1.0.0 --commit FULL_40_CHARACTER_COMMIT_SHA
+```
+
+The gate checks the clean release identity, reference target, dual-slot fit, signed-image metadata,
+exact image size and digest, and `SHA256SUMS` binding for the two live OTA assets. It never loads a
+private key. It is a consistency check after the signed packager, not a replacement for the
+packager's cryptographic verification or physical installation tests.
+
+## 4. Publish only the live OTA contract
+
+The stable GitHub Release consumed by the device must contain these exact live asset names from the
+verified signed bundle:
+
+- `manifest.json`
+- `prusa_remote_display.bin`
+
+The release must be non-draft, non-prerelease and immutable. Repository Release immutability must be
+enabled before the first public stable release; otherwise the device deliberately rejects the release. The
+manifest and image must originate from the same release object. Do not rename either asset or
+substitute the unsigned CI image.
+
+Publication is an owner action. After publication, independently verify that GitHub's release API
+reports the intended tag, `immutable: true`, and exactly one asset with each required name before
+treating live discovery as available.
+
+The rejection/recovery campaign uses the separately gated hardware-validation channel and
+the ordered procedure in [Physical OTA validation](development/ota-physical-validation.md). It must
+not publish intentionally invalid immutable candidates in the official product release history.
+
+## 5. Browser-site publication checks
+
+Prepare the browser bundle with `firmware/tools/prepare-installer.py` and the
+trusted public key, then the full firmware notice/source accompaniment and site
+as described in [the installer guide](../installer/README.md). No private key is
+used by these tools. Review the exact tracked-project source archive, separate linked build/config/SDK inventory
+and the complete upstream notices before enabling installation.
+
+The single stable **immutable** release must have unique uploaded assets named
+`manifest.json`, `prusa_remote_display.bin`, `SHA256SUMS`,
+`prusa-remote-display-1.0.0-source.tar.gz` and `installer-site.zip` for v1.0.0.
+For other stable tags, use `prusa-remote-display-VERSION-source.tar.gz`, where
+VERSION is the validated tag without its leading `v`. The ZIP is the exact reviewed
+site with relative files at its root, no directory entries or links, at most
+1000 members and 20 MiB uncompressed (also at most 20 MiB compressed). It includes
+`source.json` and full `firmware-notices/` texts generated by the accompaniment
+tool. Save the ZIP SHA-256 independently before owner release approval. Public
+source/archive availability and licence gates are not established by filenames.
+
+After a **separate owner yes** for settings, enable repository release immutability
+before publishing and configure Pages for GitHub Actions. Create the `github-pages`
+environment with **bigMOTOR as the sole required reviewer**, and one deployment branch rule:
+branch `main`. Required reviewers must be supported by the repository plan and
+visibility. Allow owner self-review if the owner triggers the manual workflow;
+otherwise the sole owner cannot approve their own request. Set **Allow administrators
+to bypass configured protection rules** to **disabled** (`can_admins_bypass: false`).
+Keep **Prevent self-review** disabled for this owner-triggered workflow. No automatic
+publication is implied. Verify actual settings; the workflow fails
+closed if owner-review or the exact branch policy is absent.
+
+After the repository and immutable release are public, and a **separate owner
+yes** for deployment, run **Publish browser installer** on `main`. Supply the
+reviewed numeric release ID, exact tag, full firmware commit and site ZIP SHA-256.
+Do not interpolate these inputs into code; the workflow passes quoted values as
+environment variables. It downloads publicly without credentials, checks the
+release object and unique GitHub asset digests, reuses the existing OTA publication
+gate, and requires byte equality between the immutable signed application and
+bytes after `0x20000` in the actual site's merged image. It checks web-manifest,
+merged-image, notice and corresponding-source identity/hashes. The downloaded
+source archive is compared byte-for-byte with the frozen Git tree again, rejecting
+old, changed, extra or missing files and links. Checker code stays on trusted `main`; only the exact reviewed firmware commit
+object is fetched at depth one, without changing the checkout or executing it. The workflow records release
+and asset IDs in `installer-deployment-receipt`. This is consistency/authenticated
+release binding after signed packaging, not a replacement for cryptographic
+signature verification or physical tests.
+
+All action references are full SHA pins. Only the final deploy job receives
+`pages: write` and `id-token: write`; it depends on successful verification and
+waits for the protected environment's approval. Verification uses `contents: read` and `actions: read` (environment inspection) only;
+no repository settings, publisher keys, devices or pull-request deployment path.
+A manual workflow invocation is itself a gated publication action.
+
+After deployment, fetch the live `release.json`, `source.json`, web manifest and
+merged image anonymously. Compare their hashes/identity with the saved receipt
+and reviewed ZIP; verify notice/source download and guide links. Save actual
+site URL, workflow URL/SHA and receipt before calling the installation link live.
+The intended first site is https://bigmotor.github.io/prusa-remote-display/;
+its existence and working USB install remain unverified until those checks.
+
+## 6. Keep evidence claims separate
+
+A successful build proves compilation. Signed packaging proves the chosen bytes match the build and
+publisher public identity. The offline preflight proves bundle consistency. GitHub API inspection
+proves the public immutable release contract. Only the physical matrix proves install, rejection,
+interruption and rollback behaviour on the device.

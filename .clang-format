@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# Formatting policy, Firmware Repository Bootstrap Specification v0.3 §12.1.
+#
+# The first block below is the specification verbatim. Nothing in it is a
+# preference; changing any of those keys is a specification change.
+---
+Language: Cpp
+
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 100
+PointerAlignment: Left
+DerivePointerAlignment: false
+SortIncludes: CaseSensitive
+AllowShortFunctionsOnASingleLine: Empty
+BreakBeforeBraces: Attach
+
+# --- Additions beyond §12.1 -------------------------------------------------
+#
+# §12.1 fixes the base style and eight keys. The keys below are the minimum
+# needed to make that base reproduce the structure the codebase already has, so
+# that introducing the formatter is a formatting change and not a rewrite.
+
+# The project uses C++17 (accepted decision D4). Telling clang-format the
+# standard keeps it from reformatting valid C++17 as though newer syntax were
+# available.
+Standard: c++17
+
+# Include blocks are preserved, not regrouped. This restates the LLVM default
+# rather than changing it, and is stated explicitly because the reason is
+# load-bearing: regrouping would sort across the `#pragma GCC diagnostic` guards
+# that exist specifically to contain ESP-IDF and LVGL headers, and moving an
+# include out of its guard breaks the build rather than merely the layout.
+#
+# A pragma line terminates an include block, so guarded includes sort within
+# their own guard. Verified across all 70 project sources: adding explicit
+# IncludeCategories on top of this changes not one byte, so none are set.
+IncludeBlocks: Preserve
+
+# Comments are hand-wrapped throughout, at the same 100 columns. Reflowing them
+# would rewrite nearly every explanatory block in the repository for no gain.
+ReflowComments: false

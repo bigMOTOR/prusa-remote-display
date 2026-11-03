@@ -1,0 +1,3587 @@
+Milestone 1 Phase D - backlight PWM and brightness validation
+Waveshare ESP32-S3-LCD-2.8 (SKU 30223, non-touch) - 2026-08-03
+
+Captured from the native USB Serial/JTAG console at 115200 baud.
+Firmware: hardware-validation profile, git 55bfa891b3d5, dirty=true
+(Phase D work uncommitted at capture time).
+
+Normalisation applied to this file, and nothing else:
+  - ANSI colour escapes removed
+  - CR removed and trailing whitespace stripped, so the file is LF-only
+  - ESP-IDF Verbose-level lines (prefix 'V') dropped: SPI bus-lock and
+    polling-transaction plumbing that repeats hundreds of times per pass.
+    Debug, Info, Warning and Error levels are kept in full.
+
+The unfiltered captures were scanned for faults before filtering:
+0 Guru Meditation, 0 panic, 0 backtrace, 0 stack overflow, 0 assert,
+0 watchdog, 0 FAILED draw or re-time. Raw captures kept outside the
+repository alongside the other Phase B/C/D artefacts.
+
+==============================================================================
+PART 1 - brightness step walk and fades at 5 kHz
+flow: CONFIG_PRD_DISPLAY_BRIGHTNESS_TEST
+
+Steps carry an on-screen marker count so a dark-room observer can name the
+step: 1=off 2=1% 3=2% 4=3% 5=4% 6=5% 7=10% 8=25% 9=50% 10=75% 11=100%
+==============================================================================
+10000 00002000
+I (28) boot:  3 phy_init         RF data          01 01 00012000 00001000
+I (28) boot:  4 factory_cfg      Unknown data     01 40 00013000 0000d000
+I (29) boot:  5 ota_0            OTA app          00 10 00020000 00680000
+I (29) boot:  6 ota_1            OTA app          00 11 006a0000 00680000
+I (30) boot:  7 coredump         Unknown data     01 03 00d20000 00100000
+I (30) boot:  8 assets           Unknown data     01 41 00e20000 001e0000
+I (30) boot: End of partition table
+I (31) esp_image: segment 0: paddr=00020020 vaddr=3c060020 size=172c8h ( 94920) map
+I (45) esp_image: segment 1: paddr=000372f0 vaddr=3fc97300 size=04534h ( 17716) load
+I (49) esp_image: segment 2: paddr=0003b82c vaddr=40374000 size=047ech ( 18412) load
+I (53) esp_image: segment 3: paddr=00040020 vaddr=42000020 size=54784h (345988) map
+I (104) esp_image: segment 4: paddr=000947ac vaddr=403787ec size=0eb00h ( 60160) load
+I (116) esp_image: segment 5: paddr=000a32b4 vaddr=50000000 size=00020h (    32) load
+I (124) boot: Loaded app from partition at offset 0x20000
+I (124) boot: Disabling RNG early entropy source...
+D (126) octal_psram: exp_data: 0x5a6b7c8d
+D (126) octal_psram: ref_data: 0x5a6b7c8d
+I (126) octal_psram: vendor id    : 0x0d (AP)
+I (126) octal_psram: dev id       : 0x02 (generation 3)
+I (126) octal_psram: density      : 0x03 (64 Mbit)
+I (127) octal_psram: good-die     : 0x01 (Pass)
+I (127) octal_psram: Latency      : 0x01 (Fixed)
+I (127) octal_psram: VCC          : 0x01 (3V)
+I (127) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (128) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (128) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (128) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (129) octal_psram: DriveStrength: 0x00 (1/1)
+I (129) MSPI Timing: Enter psram timing tuning
+D MSPI Timing: test nums: 1, test result: [id][good/bad][good_times]:
+D MSPI Timing: [0][good][1]
+D MSPI Timing: [1][bad][0]
+D MSPI Timing: [2][bad][0]
+D MSPI Timing: [3][good][1]
+D MSPI Timing: [4][good][1]
+D MSPI Timing: [5][good][1]
+D MSPI Timing: [6][good][1]
+D MSPI Timing: [7][bad][0]
+D MSPI Timing: [8][bad][0]
+D MSPI Timing: [9][good][1]
+D MSPI Timing: [10][good][1]
+D MSPI Timing: [11][good][1]
+D MSPI Timing: [12][good][1]
+D MSPI Timing: [13][bad][0]
+D MSPI Timing: tuning success, best point is index 5
+D MSPI Timing: PSRAM timing tuning index: 5
+I (134) esp_psram: Found 8MB PSRAM device
+I (134) esp_psram: Speed: 80MHz
+I (135) cpu_start: Multicore app
+D (136) cpu_start: Pro cpu up
+D (136) cpu_start: Starting app cpu, entry point is 0x403755d4
+D (0) cpu_start: App cpu up
+I (569) esp_psram: SPI SRAM memory test OK
+D (577) clk: RTC_SLOW_CLK calibration value: 3759219
+D (578) cpu_start: calling init function: 0x42002ab4 on core: 0
+D (578) cpu_start: calling init function: 0x420039e8 on core: 0
+I (578) cpu_start: Pro cpu start user code
+I (578) cpu_start: cpu freq: 160000000 Hz
+D (579) cpu_start: calling init function: 0x42002a04 on core: 0
+I (579) app_init: Application information:
+I (579) app_init: Project name:     prusa_remote_display
+I (579) app_init: App version:      0.1.0-dev
+I (579) app_init: ELF file SHA256:  0422ad198fc8b039...
+I (580) app_init: ESP-IDF:          v5.5.4
+D (580) cpu_start: calling init function: 0x42002ac8 on core: 0
+I (580) efuse_init: Min chip rev:     v0.0
+I (580) efuse_init: Max chip rev:     v0.99
+I (580) efuse_init: Chip rev:         v0.2
+D (581) cpu_start: calling init function: 0x42005548 on core: 0
+D (581) memory_layout: Checking 7 reserved memory ranges:
+D (581) memory_layout: Reserved memory range 0x3c000000 - 0x3e000000
+D (582) memory_layout: Reserved memory range 0x3fc84000 - 0x3fc97300
+D (582) memory_layout: Reserved memory range 0x3fc97300 - 0x3fc9e180
+D (582) memory_layout: Reserved memory range 0x3fceee34 - 0x3fcf0000
+D (583) memory_layout: Reserved memory range 0x40374000 - 0x40387300
+D (583) memory_layout: Reserved memory range 0x600fe000 - 0x600fe000
+D (583) memory_layout: Reserved memory range 0x600fffe8 - 0x60100000
+D (584) memory_layout: Building list of available memory regions:
+D (585) memory_layout: Available memory region 0x3fc9e180 - 0x3fca0000
+D (586) memory_layout: Available memory region 0x3fca0000 - 0x3fcb0000
+D (587) memory_layout: Available memory region 0x3fcb0000 - 0x3fcc0000
+D (587) memory_layout: Available memory region 0x3fcc0000 - 0x3fcd0000
+D (588) memory_layout: Available memory region 0x3fcd0000 - 0x3fce0000
+D (589) memory_layout: Available memory region 0x3fce0000 - 0x3fce9710
+D (590) memory_layout: Available memory region 0x3fce9710 - 0x3fceee34
+D (590) memory_layout: Available memory region 0x3fcf0000 - 0x3fcf8000
+D (592) memory_layout: Available memory region 0x600fe000 - 0x600fffe8
+I (592) heap_init: Initializing. RAM available for dynamic allocation:
+D (593) heap_init: New heap initialised at 0x3fc9e180
+I (593) heap_init: At 3FC9E180 len 0004B590 (301 KiB): RAM
+I (594) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+D (594) heap_init: New heap initialised at 0x3fcf0000
+I (594) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+D (594) heap_init: New heap initialised at 0x600fe000
+I (594) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+D (595) cpu_start: calling init function: 0x42009508 on core: 0
+D (595) cpu_start: calling init function: 0x42008948 on core: 0
+D (595) cpu_start: calling init function: 0x42009acc on core: 0
+I (844) esp_psram: Adding pool of 8192K of PSRAM memory to heap allocator
+D (844) cpu_start: calling init function: 0x42003a34 on core: 0
+D (845) intr_alloc: Connected src 39 to int 1 (cpu 0)
+D (845) cpu_start: calling init function: 0x42003a44 on core: 0
+D (846) cpu_start: calling init function: 0x4200a2b8 on core: 0
+D (846) cpu_start: calling init function: 0x4200b424 on core: 0
+D (846) cpu_start: calling init function: 0x4200a4f0 on core: 0
+D (846) cpu_start: calling init function: 0x42008954 on core: 0
+D (847) cpu_start: calling init function: 0x42003a50 on core: 0
+
+
+
+
+D (848) spi_flash: trying chip: issi
+D (848) spi_flash: trying chip: gd
+D (848) spi_flash: trying chip: mxic
+D (848) spi_flash: trying chip: winbond
+D (849) spi_flash: trying chip: boya
+D (849) spi_flash: trying chip: th
+D (849) spi_flash: trying chip: mxic (opi)
+D (849) spi_flash: trying chip: generic
+I (849) spi_flash: detected chip: generic
+I (849) spi_flash: flash io: qio
+D (850) chip_generic: set_io_mode: status before 0x200
+D (850) cpu_start: calling init function: 0x42002b64 on core: 0
+D (851) C++ init: Setting C++ exception emergency pool to 0.
+D (851) cpu_start: calling init function: 0x4204e748 on core: 0
+D (851) cpu_start: calling init function: 0x42006710 on core: 0
+I (852) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (852) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+D (853) cpu_start: calling init function: 0x4200b430 on core: 0
+I (853) esp_core_dump_flash: Init core dump to flash
+I (854) esp_core_dump_flash: Found partition 'coredump' @ d20000 1048576 bytes
+D (869) esp_core_dump_crc: Total length of hashed data: 11744
+I (869) esp_core_dump_flash: Core dump data checksum is correct
+I (870) esp_core_dump_flash: Found core dump 11748 bytes in flash @ 0xd20000
+D (870) cpu_start: calling init function: 0x4200d790 on core: 0
+I (870) nvs_sec_provider: NVS Encryption - Registering HMAC-based scheme...
+D (871) cpu_start: calling init function: 0x42003a84 on core: 0
+D (871) cpu_start: calling init function: 0x42009b88 on core: 0
+D (871) cpu_start: calling init function: 0x42003a90 on core: 0
+D (872) intr_alloc: Connected src 79 to int 2 (cpu 0)
+D (872) app_start: Starting scheduler on CPU0
+D (872) intr_alloc: Connected src 57 to int 3 (cpu 0)
+
+D (873) intr_alloc: Connected src 80 to int 0 (cpu 1)
+D (873) app_start: Starting scheduler on CPU1
+D (874) intr_alloc: Connected src 58 to int 1 (cpu 1)
+D (874) heap_init: New heap initialised at 0x3fce9710
+I (874) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+D (874) esp_psram: Allocating block of size 32768 bytes
+D (876) intr_alloc: Connected src 52 to int 5 (cpu 0)
+I (876) main_task: Calling app_main()
+I (878) prd.app: Prusa Remote Display 0.1.0-dev
+I (879) prd.boot: version=0.1.0-dev git=55bfa891b3d5 dirty=true profile=hardware-validation idf=v5.5.4 board=waveshare_esp32_s3_lcd_2_8
+I (879) prd.boot: phase=initializing
+I (880) prd.board: target=waveshare_esp32_s3_lcd_2_8 validation=provisional
+I (880) prd.board: chip=ESP32-S3 rev=0.2 cores=2 reset=usb
+I (880) prd.board: flash_detected=16777216 expected=16777216 result=pass
+I (881) prd.board: psram_detected=8388608 expected=8388608 result=pass
+W (881) prd.board: usb_console=native_usb_serial_jtag result=unvalidated
+I (882) prd.boot: phase=ready
+D (882) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (882) ledc: In slow speed mode, global clk set: 11
+D (883) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+I (884) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=60 output=disabled duty=0
+D (885) spi: SPI2 use gpio matrix.
+D (886) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (887) spi_hal: eff: 40000, limit: 80000k(/0), 0 dummy, -1 delay
+D (887) spi_master: SPI2: New device added to CS0, effective clock: 40000000 Hz
+D (887) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (888) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (888) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (908) spi_master: device0 locked the bus
+D (909) spi_master: device0 release bus
+D (1009) spi_master: device0 locked the bus
+D (1010) spi_master: device0 release bus
+D (1010) spi_master: device0 locked the bus
+D (1012) spi_master: device0 release bus
+D (1012) spi_master: device0 locked the bus
+D (1013) spi_master: device0 release bus
+I (1014) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (1014) spi_master: device0 locked the bus
+D (1016) spi_master: device0 release bus
+I (1016) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (1016) spi_master: device0 locked the bus
+D (1018) spi_master: device0 release bus
+I (1018) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (1019) spi_master: device0 locked the bus
+D (1019) spi_master: device0 release bus
+D (1020) spi_master: device0 locked the bus
+D (1021) spi_master: device0 release bus
+D (1022) spi_master: device0 locked the bus
+D (1023) spi_master: device0 release bus
+D (1023) spi_master: device0 locked the bus
+D (1024) spi_master: device0 release bus
+I (1024) prd.display: tuning=C-vendor-gamma-only active
+I (1025) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (1025) prd.app: brightness validation active freq_hz=5000 resolution_bits=12 max_duty=4096
+I (1026) prd.app: brightness pass=1 begin
+D (1031) spi_master: device0 locked the bus
+D (1032) spi_master: device0 release bus
+D (1033) spi_master: device0 locked the bus
+D (1034) spi_master: device0 release bus
+D (1034) spi_master: device0 locked the bus
+D (1036) spi_master: device0 release bus
+D (1042) spi_master: device0 locked the bus
+D (1043) spi_master: device0 release bus
+D (1043) spi_master: device0 locked the bus
+D (1045) spi_master: device0 release bus
+D (1045) spi_master: device0 locked the bus
+D (1047) spi_master: device0 release bus
+D (1053) spi_master: device0 locked the bus
+D (1054) spi_master: device0 release bus
+D (1054) spi_master: device0 locked the bus
+D (1056) spi_master: device0 release bus
+D (1056) spi_master: device0 locked the bus
+D (1058) spi_master: device0 release bus
+D (1064) spi_master: device0 locked the bus
+D (1065) spi_master: device0 release bus
+D (1065) spi_master: device0 locked the bus
+D (1067) spi_master: device0 release bus
+D (1067) spi_master: device0 locked the bus
+D (1069) spi_master: device0 release bus
+D (1075) spi_master: device0 locked the bus
+D (1076) spi_master: device0 release bus
+D (1076) spi_master: device0 locked the bus
+D (1078) spi_master: device0 release bus
+D (1078) spi_master: device0 locked the bus
+D (1080) spi_master: device0 release bus
+D (1086) spi_master: device0 locked the bus
+D (1087) spi_master: device0 release bus
+D (1087) spi_master: device0 locked the bus
+D (1089) spi_master: device0 release bus
+D (1089) spi_master: device0 locked the bus
+D (1091) spi_master: device0 release bus
+I (1092) prd.app: brightness step=off percent=0 duty=0/4096 enabled=yes
+D (5096) spi_master: device0 locked the bus
+D (5097) spi_master: device0 release bus
+D (5098) spi_master: device0 locked the bus
+D (5099) spi_master: device0 release bus
+D (5100) spi_master: device0 locked the bus
+D (5102) spi_master: device0 release bus
+D (5107) spi_master: device0 locked the bus
+D (5108) spi_master: device0 release bus
+D (5109) spi_master: device0 locked the bus
+D (5110) spi_master: device0 release bus
+D (5111) spi_master: device0 locked the bus
+D (5113) spi_master: device0 release bus
+D (5118) spi_master: device0 locked the bus
+D (5119) spi_master: device0 release bus
+D (5120) spi_master: device0 locked the bus
+D (5121) spi_master: device0 release bus
+D (5122) spi_master: device0 locked the bus
+D (5124) spi_master: device0 release bus
+D (5129) spi_master: device0 locked the bus
+D (5130) spi_master: device0 release bus
+D (5131) spi_master: device0 locked the bus
+D (5132) spi_master: device0 release bus
+D (5133) spi_master: device0 locked the bus
+D (5135) spi_master: device0 release bus
+D (5140) spi_master: device0 locked the bus
+D (5141) spi_master: device0 release bus
+D (5142) spi_master: device0 locked the bus
+D (5143) spi_master: device0 release bus
+D (5144) spi_master: device0 locked the bus
+D (5146) spi_master: device0 release bus
+D (5151) spi_master: device0 locked the bus
+D (5152) spi_master: device0 release bus
+D (5153) spi_master: device0 locked the bus
+D (5154) spi_master: device0 release bus
+D (5155) spi_master: device0 locked the bus
+D (5157) spi_master: device0 release bus
+I (5157) prd.app: brightness step=1% percent=1 duty=1/4096 enabled=yes
+D (9161) spi_master: device0 locked the bus
+D (9162) spi_master: device0 release bus
+D (9163) spi_master: device0 locked the bus
+D (9164) spi_master: device0 release bus
+D (9165) spi_master: device0 locked the bus
+D (9167) spi_master: device0 release bus
+D (9172) spi_master: device0 locked the bus
+D (9173) spi_master: device0 release bus
+D (9174) spi_master: device0 locked the bus
+D (9175) spi_master: device0 release bus
+D (9175) spi_master: device0 locked the bus
+D (9177) spi_master: device0 release bus
+D (9183) spi_master: device0 locked the bus
+D (9184) spi_master: device0 release bus
+D (9184) spi_master: device0 locked the bus
+D (9186) spi_master: device0 release bus
+D (9186) spi_master: device0 locked the bus
+D (9188) spi_master: device0 release bus
+D (9194) spi_master: device0 locked the bus
+D (9195) spi_master: device0 release bus
+D (9195) spi_master: device0 locked the bus
+D (9197) spi_master: device0 release bus
+D (9197) spi_master: device0 locked the bus
+D (9199) spi_master: device0 release bus
+D (9204) spi_master: device0 locked the bus
+D (9206) spi_master: device0 release bus
+D (9206) spi_master: device0 locked the bus
+D (9208) spi_master: device0 release bus
+D (9208) spi_master: device0 locked the bus
+D (9210) spi_master: device0 release bus
+D (9215) spi_master: device0 locked the bus
+D (9217) spi_master: device0 release bus
+D (9217) spi_master: device0 locked the bus
+D (9219) spi_master: device0 release bus
+D (9219) spi_master: device0 locked the bus
+D (9221) spi_master: device0 release bus
+I (9222) prd.app: brightness step=2% percent=2 duty=1/4096 enabled=yes
+D (10888) prd.app: heartbeat
+D (13226) spi_master: device0 locked the bus
+D (13227) spi_master: device0 release bus
+D (13228) spi_master: device0 locked the bus
+D (13229) spi_master: device0 release bus
+D (13230) spi_master: device0 locked the bus
+D (13232) spi_master: device0 release bus
+D (13237) spi_master: device0 locked the bus
+D (13238) spi_master: device0 release bus
+D (13239) spi_master: device0 locked the bus
+D (13240) spi_master: device0 release bus
+D (13241) spi_master: device0 locked the bus
+D (13243) spi_master: device0 release bus
+D (13248) spi_master: device0 locked the bus
+D (13249) spi_master: device0 release bus
+D (13250) spi_master: device0 locked the bus
+D (13251) spi_master: device0 release bus
+D (13252) spi_master: device0 locked the bus
+D (13254) spi_master: device0 release bus
+D (13259) spi_master: device0 locked the bus
+D (13260) spi_master: device0 release bus
+D (13261) spi_master: device0 locked the bus
+D (13262) spi_master: device0 release bus
+D (13263) spi_master: device0 locked the bus
+D (13265) spi_master: device0 release bus
+D (13270) spi_master: device0 locked the bus
+D (13271) spi_master: device0 release bus
+D (13272) spi_master: device0 locked the bus
+D (13273) spi_master: device0 release bus
+D (13274) spi_master: device0 locked the bus
+D (13276) spi_master: device0 release bus
+D (13281) spi_master: device0 locked the bus
+D (13282) spi_master: device0 release bus
+D (13283) spi_master: device0 locked the bus
+D (13284) spi_master: device0 release bus
+D (13285) spi_master: device0 locked the bus
+D (13287) spi_master: device0 release bus
+I (13287) prd.app: brightness step=3% percent=3 duty=2/4096 enabled=yes
+D (17291) spi_master: device0 locked the bus
+D (17292) spi_master: device0 release bus
+D (17293) spi_master: device0 locked the bus
+D (17294) spi_master: device0 release bus
+D (17295) spi_master: device0 locked the bus
+D (17297) spi_master: device0 release bus
+D (17302) spi_master: device0 locked the bus
+D (17303) spi_master: device0 release bus
+D (17304) spi_master: device0 locked the bus
+D (17305) spi_master: device0 release bus
+D (17306) spi_master: device0 locked the bus
+D (17308) spi_master: device0 release bus
+D (17313) spi_master: device0 locked the bus
+D (17314) spi_master: device0 release bus
+D (17315) spi_master: device0 locked the bus
+D (17316) spi_master: device0 release bus
+D (17316) spi_master: device0 locked the bus
+D (17319) spi_master: device0 release bus
+D (17324) spi_master: device0 locked the bus
+D (17325) spi_master: device0 release bus
+D (17326) spi_master: device0 locked the bus
+D (17327) spi_master: device0 release bus
+D (17327) spi_master: device0 locked the bus
+D (17329) spi_master: device0 release bus
+D (17335) spi_master: device0 locked the bus
+D (17336) spi_master: device0 release bus
+D (17337) spi_master: device0 locked the bus
+D (17338) spi_master: device0 release bus
+D (17338) spi_master: device0 locked the bus
+D (17341) spi_master: device0 release bus
+D (17346) spi_master: device0 locked the bus
+D (17347) spi_master: device0 release bus
+D (17348) spi_master: device0 locked the bus
+D (17349) spi_master: device0 release bus
+D (17349) spi_master: device0 locked the bus
+D (17352) spi_master: device0 release bus
+I (17352) prd.app: brightness step=4% percent=4 duty=3/4096 enabled=yes
+D (20888) prd.app: heartbeat
+D (21356) spi_master: device0 locked the bus
+D (21357) spi_master: device0 release bus
+D (21358) spi_master: device0 locked the bus
+D (21359) spi_master: device0 release bus
+D (21360) spi_master: device0 locked the bus
+D (21362) spi_master: device0 release bus
+D (21367) spi_master: device0 locked the bus
+D (21368) spi_master: device0 release bus
+D (21369) spi_master: device0 locked the bus
+D (21370) spi_master: device0 release bus
+D (21371) spi_master: device0 locked the bus
+D (21373) spi_master: device0 release bus
+D (21378) spi_master: device0 locked the bus
+D (21379) spi_master: device0 release bus
+D (21380) spi_master: device0 locked the bus
+D (21381) spi_master: device0 release bus
+D (21381) spi_master: device0 locked the bus
+D (21384) spi_master: device0 release bus
+D (21389) spi_master: device0 locked the bus
+D (21390) spi_master: device0 release bus
+D (21391) spi_master: device0 locked the bus
+D (21392) spi_master: device0 release bus
+D (21392) spi_master: device0 locked the bus
+D (21395) spi_master: device0 release bus
+D (21400) spi_master: device0 locked the bus
+D (21401) spi_master: device0 release bus
+D (21402) spi_master: device0 locked the bus
+D (21403) spi_master: device0 release bus
+D (21403) spi_master: device0 locked the bus
+D (21406) spi_master: device0 release bus
+D (21411) spi_master: device0 locked the bus
+D (21412) spi_master: device0 release bus
+D (21413) spi_master: device0 locked the bus
+D (21414) spi_master: device0 release bus
+D (21414) spi_master: device0 locked the bus
+D (21417) spi_master: device0 release bus
+I (21417) prd.app: brightness step=5% percent=5 duty=6/4096 enabled=yes
+D (25421) spi_master: device0 locked the bus
+D (25422) spi_master: device0 release bus
+D (25423) spi_master: device0 locked the bus
+D (25424) spi_master: device0 release bus
+D (25425) spi_master: device0 locked the bus
+D (25427) spi_master: device0 release bus
+D (25432) spi_master: device0 locked the bus
+D (25433) spi_master: device0 release bus
+D (25434) spi_master: device0 locked the bus
+D (25435) spi_master: device0 release bus
+D (25436) spi_master: device0 locked the bus
+D (25438) spi_master: device0 release bus
+D (25443) spi_master: device0 locked the bus
+D (25444) spi_master: device0 release bus
+D (25445) spi_master: device0 locked the bus
+D (25446) spi_master: device0 release bus
+D (25446) spi_master: device0 locked the bus
+D (25449) spi_master: device0 release bus
+D (25454) spi_master: device0 locked the bus
+D (25455) spi_master: device0 release bus
+D (25456) spi_master: device0 locked the bus
+D (25457) spi_master: device0 release bus
+D (25457) spi_master: device0 locked the bus
+D (25460) spi_master: device0 release bus
+D (25465) spi_master: device0 locked the bus
+D (25466) spi_master: device0 release bus
+D (25467) spi_master: device0 locked the bus
+D (25468) spi_master: device0 release bus
+D (25468) spi_master: device0 locked the bus
+D (25471) spi_master: device0 release bus
+D (25476) spi_master: device0 locked the bus
+D (25477) spi_master: device0 release bus
+D (25478) spi_master: device0 locked the bus
+D (25479) spi_master: device0 release bus
+D (25479) spi_master: device0 locked the bus
+D (25482) spi_master: device0 release bus
+I (25482) prd.app: brightness step=10% percent=10 duty=26/4096 enabled=yes
+D (29486) spi_master: device0 locked the bus
+D (29487) spi_master: device0 release bus
+D (29488) spi_master: device0 locked the bus
+D (29489) spi_master: device0 release bus
+D (29490) spi_master: device0 locked the bus
+D (29492) spi_master: device0 release bus
+D (29497) spi_master: device0 locked the bus
+D (29498) spi_master: device0 release bus
+D (29499) spi_master: device0 locked the bus
+D (29500) spi_master: device0 release bus
+D (29501) spi_master: device0 locked the bus
+D (29503) spi_master: device0 release bus
+D (29508) spi_master: device0 locked the bus
+D (29509) spi_master: device0 release bus
+D (29510) spi_master: device0 locked the bus
+D (29511) spi_master: device0 release bus
+D (29512) spi_master: device0 locked the bus
+D (29514) spi_master: device0 release bus
+D (29519) spi_master: device0 locked the bus
+D (29520) spi_master: device0 release bus
+D (29521) spi_master: device0 locked the bus
+D (29522) spi_master: device0 release bus
+D (29522) spi_master: device0 locked the bus
+D (29525) spi_master: device0 release bus
+D (29530) spi_master: device0 locked the bus
+D (29531) spi_master: device0 release bus
+D (29532) spi_master: device0 locked the bus
+D (29533) spi_master: device0 release bus
+D (29533) spi_master: device0 locked the bus
+D (29536) spi_master: device0 release bus
+D (29541) spi_master: device0 locked the bus
+D (29542) spi_master: device0 release bus
+D (29543) spi_master: device0 locked the bus
+D (29544) spi_master: device0 release bus
+D (29545) spi_master: device0 locked the bus
+D (29547) spi_master: device0 release bus
+I (29547) prd.app: brightness step=25% percent=25 duty=194/4096 enabled=yes
+D (30888) prd.app: heartbeat
+D (33551) spi_master: device0 locked the bus
+D (33552) spi_master: device0 release bus
+D (33553) spi_master: device0 locked the bus
+D (33554) spi_master: device0 release bus
+D (33555) spi_master: device0 locked the bus
+D (33557) spi_master: device0 release bus
+D (33562) spi_master: device0 locked the bus
+D (33563) spi_master: device0 release bus
+D (33564) spi_master: device0 locked the bus
+D (33565) spi_master: device0 release bus
+D (33566) spi_master: device0 locked the bus
+D (33568) spi_master: device0 release bus
+D (33573) spi_master: device0 locked the bus
+D (33574) spi_master: device0 release bus
+D (33575) spi_master: device0 locked the bus
+D (33576) spi_master: device0 release bus
+D (33577) spi_master: device0 locked the bus
+D (33579) spi_master: device0 release bus
+D (33584) spi_master: device0 locked the bus
+D (33585) spi_master: device0 release bus
+D (33586) spi_master: device0 locked the bus
+D (33587) spi_master: device0 release bus
+D (33587) spi_master: device0 locked the bus
+D (33590) spi_master: device0 release bus
+D (33595) spi_master: device0 locked the bus
+D (33596) spi_master: device0 release bus
+D (33597) spi_master: device0 locked the bus
+D (33598) spi_master: device0 release bus
+D (33599) spi_master: device0 locked the bus
+D (33601) spi_master: device0 release bus
+D (33606) spi_master: device0 locked the bus
+D (33607) spi_master: device0 release bus
+D (33608) spi_master: device0 locked the bus
+D (33609) spi_master: device0 release bus
+D (33609) spi_master: device0 locked the bus
+D (33612) spi_master: device0 release bus
+I (33612) prd.app: brightness step=50% percent=50 duty=891/4096 enabled=yes
+D (37616) spi_master: device0 locked the bus
+D (37617) spi_master: device0 release bus
+D (37618) spi_master: device0 locked the bus
+D (37619) spi_master: device0 release bus
+D (37620) spi_master: device0 locked the bus
+D (37622) spi_master: device0 release bus
+D (37627) spi_master: device0 locked the bus
+D (37628) spi_master: device0 release bus
+D (37629) spi_master: device0 locked the bus
+D (37630) spi_master: device0 release bus
+D (37631) spi_master: device0 locked the bus
+D (37633) spi_master: device0 release bus
+D (37638) spi_master: device0 locked the bus
+D (37639) spi_master: device0 release bus
+D (37640) spi_master: device0 locked the bus
+D (37641) spi_master: device0 release bus
+D (37642) spi_master: device0 locked the bus
+D (37644) spi_master: device0 release bus
+D (37649) spi_master: device0 locked the bus
+D (37650) spi_master: device0 release bus
+D (37651) spi_master: device0 locked the bus
+D (37652) spi_master: device0 release bus
+D (37653) spi_master: device0 locked the bus
+D (37655) spi_master: device0 release bus
+D (37660) spi_master: device0 locked the bus
+D (37661) spi_master: device0 release bus
+D (37662) spi_master: device0 locked the bus
+D (37663) spi_master: device0 release bus
+D (37664) spi_master: device0 locked the bus
+D (37666) spi_master: device0 release bus
+D (37671) spi_master: device0 locked the bus
+D (37672) spi_master: device0 release bus
+D (37673) spi_master: device0 locked the bus
+D (37674) spi_master: device0 release bus
+D (37674) spi_master: device0 locked the bus
+D (37676) spi_master: device0 release bus
+I (37677) prd.app: brightness step=75% percent=75 duty=2175/4096 enabled=yes
+D (40888) prd.app: heartbeat
+D (41681) spi_master: device0 locked the bus
+D (41682) spi_master: device0 release bus
+D (41683) spi_master: device0 locked the bus
+D (41684) spi_master: device0 release bus
+D (41685) spi_master: device0 locked the bus
+D (41687) spi_master: device0 release bus
+D (41692) spi_master: device0 locked the bus
+D (41693) spi_master: device0 release bus
+D (41694) spi_master: device0 locked the bus
+D (41695) spi_master: device0 release bus
+D (41696) spi_master: device0 locked the bus
+D (41698) spi_master: device0 release bus
+D (41703) spi_master: device0 locked the bus
+D (41704) spi_master: device0 release bus
+D (41705) spi_master: device0 locked the bus
+D (41706) spi_master: device0 release bus
+D (41707) spi_master: device0 locked the bus
+D (41709) spi_master: device0 release bus
+D (41714) spi_master: device0 locked the bus
+D (41715) spi_master: device0 release bus
+D (41716) spi_master: device0 locked the bus
+D (41717) spi_master: device0 release bus
+D (41718) spi_master: device0 locked the bus
+D (41720) spi_master: device0 release bus
+D (41725) spi_master: device0 locked the bus
+D (41726) spi_master: device0 release bus
+D (41727) spi_master: device0 locked the bus
+D (41728) spi_master: device0 release bus
+D (41729) spi_master: device0 locked the bus
+D (41731) spi_master: device0 release bus
+D (41736) spi_master: device0 locked the bus
+D (41737) spi_master: device0 release bus
+D (41738) spi_master: device0 locked the bus
+D (41739) spi_master: device0 release bus
+D (41740) spi_master: device0 locked the bus
+D (41742) spi_master: device0 release bus
+I (41742) prd.app: brightness step=100% percent=100 duty=4096/4096 enabled=yes
+I (45742) prd.app: brightness step=fade-up begin percent=0 duty=0/4096 enabled=yes
+I (48734) prd.app: brightness step=fade-up end percent=100 duty=4096/4096 enabled=yes
+D (50888) prd.app: heartbeat
+I (52734) prd.app: brightness step=fade-down begin percent=100 duty=4096/4096 enabled=yes
+I (55726) prd.app: brightness step=fade-down end percent=0 duty=0/4096 enabled=yes
+I (59726) prd.app: brightness pass=2 begin
+D (59730) spi_master: device0 locked the bus
+D (59732) spi_master: device0 release bus
+D (59732) spi_master: device0 locked the bus
+D (59733) spi_master: device0 release bus
+D (59734) spi_master: device0 locked the bus
+D (59736) spi_master: device0 release bus
+D (59741) spi_master: device0 locked the bus
+D (59743) spi_master: device0 release bus
+D (59743) spi_master: device0 locked the bus
+D (59744) spi_master: device0 release bus
+D (59745) spi_master: device0 locked the bus
+D (59747) spi_master: device0 release bus
+D (59752) spi_master: device0 locked the bus
+D (59754) spi_master: device0 release bus
+D (59754) spi_master: device0 locked the bus
+D (59755) spi_master: device0 release bus
+D (59756) spi_master: device0 locked the bus
+D (59758) spi_master: device0 release bus
+D (59763) spi_master: device0 locked the bus
+D (59765) spi_master: device0 release bus
+D (59765) spi_master: device0 locked the bus
+D (59766) spi_master: device0 release bus
+D (59767) spi_master: device0 locked the bus
+D (59769) spi_master: device0 release bus
+D (59774) spi_master: device0 locked the bus
+D (59776) spi_master: device0 release bus
+D (59776) spi_master: device0 locked the bus
+D (59777) spi_master: device0 release bus
+D (59778) spi_master: device0 locked the bus
+D (59780) spi_master: device0 release bus
+D (59785) spi_master: device0 locked the bus
+D (59787) spi_master: device0 release bus
+D (59787) spi_master: device0 locked the bus
+D (59788) spi_master: device0 release bus
+D (59789) spi_master: device0 locked the bus
+D (59791) spi_master: device0 release bus
+I (59791) prd.app: brightness step=off percent=0 duty=0/4096 enabled=yes
+D (60888) prd.app: heartbeat
+
+==============================================================================
+PART 2 - PWM frequency sweep
+flow: CONFIG_PRD_DISPLAY_BACKLIGHT_FREQ_SWEEP
+
+markers=N is the on-screen marker count identifying the frequency:
+1=200Hz 2=1kHz 3=2kHz 4=5kHz 5=10kHz 6=20kHz 7=40kHz
+==============================================================================
+10000 00002000
+I (28) boot:  3 phy_init         RF data          01 01 00012000 00001000
+I (28) boot:  4 factory_cfg      Unknown data     01 40 00013000 0000d000
+I (29) boot:  5 ota_0            OTA app          00 10 00020000 00680000
+I (29) boot:  6 ota_1            OTA app          00 11 006a0000 00680000
+I (30) boot:  7 coredump         Unknown data     01 03 00d20000 00100000
+I (30) boot:  8 assets           Unknown data     01 41 00e20000 001e0000
+I (30) boot: End of partition table
+I (31) esp_image: segment 0: paddr=00020020 vaddr=3c060020 size=17208h ( 94728) map
+I (45) esp_image: segment 1: paddr=00037230 vaddr=3fc97300 size=04534h ( 17716) load
+I (49) esp_image: segment 2: paddr=0003b76c vaddr=40374000 size=048ach ( 18604) load
+I (53) esp_image: segment 3: paddr=00040020 vaddr=42000020 size=54818h (346136) map
+I (104) esp_image: segment 4: paddr=00094840 vaddr=403788ac size=0ea40h ( 59968) load
+I (116) esp_image: segment 5: paddr=000a3288 vaddr=50000000 size=00020h (    32) load
+I (124) boot: Loaded app from partition at offset 0x20000
+I (124) boot: Disabling RNG early entropy source...
+D (125) octal_psram: exp_data: 0x5a6b7c8d
+D (125) octal_psram: ref_data: 0x5a6b7c8d
+I (126) octal_psram: vendor id    : 0x0d (AP)
+I (126) octal_psram: dev id       : 0x02 (generation 3)
+I (126) octal_psram: density      : 0x03 (64 Mbit)
+I (126) octal_psram: good-die     : 0x01 (Pass)
+I (127) octal_psram: Latency      : 0x01 (Fixed)
+I (127) octal_psram: VCC          : 0x01 (3V)
+I (127) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (127) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (128) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (128) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (128) octal_psram: DriveStrength: 0x00 (1/1)
+I (129) MSPI Timing: Enter psram timing tuning
+D MSPI Timing: test nums: 1, test result: [id][good/bad][good_times]:
+D MSPI Timing: [0][good][1]
+D MSPI Timing: [1][bad][0]
+D MSPI Timing: [2][bad][0]
+D MSPI Timing: [3][good][1]
+D MSPI Timing: [4][good][1]
+D MSPI Timing: [5][good][1]
+D MSPI Timing: [6][good][1]
+D MSPI Timing: [7][bad][0]
+D MSPI Timing: [8][bad][0]
+D MSPI Timing: [9][good][1]
+D MSPI Timing: [10][good][1]
+D MSPI Timing: [11][good][1]
+D MSPI Timing: [12][good][1]
+D MSPI Timing: [13][bad][0]
+D MSPI Timing: tuning success, best point is index 5
+D MSPI Timing: PSRAM timing tuning index: 5
+I (134) esp_psram: Found 8MB PSRAM device
+I (134) esp_psram: Speed: 80MHz
+I (135) cpu_start: Multicore app
+D (135) cpu_start: Pro cpu up
+D (135) cpu_start: Starting app cpu, entry point is 0x403755d4
+D (0) cpu_start: App cpu up
+I (569) esp_psram: SPI SRAM memory test OK
+D (577) clk: RTC_SLOW_CLK calibration value: 3764416
+D (577) cpu_start: calling init function: 0x42002a8c on core: 0
+D (578) cpu_start: calling init function: 0x420039c0 on core: 0
+I (578) cpu_start: Pro cpu start user code
+I (578) cpu_start: cpu freq: 160000000 Hz
+D (578) cpu_start: calling init function: 0x420029dc on core: 0
+I (579) app_init: Application information:
+I (579) app_init: Project name:     prusa_remote_display
+I (579) app_init: App version:      0.1.0-dev
+I (579) app_init: ELF file SHA256:  e0652886e5c3265c...
+I (579) app_init: ESP-IDF:          v5.5.4
+D (579) cpu_start: calling init function: 0x42002aa0 on core: 0
+I (580) efuse_init: Min chip rev:     v0.0
+I (580) efuse_init: Max chip rev:     v0.99
+I (580) efuse_init: Chip rev:         v0.2
+D (580) cpu_start: calling init function: 0x42005520 on core: 0
+D (581) memory_layout: Checking 7 reserved memory ranges:
+D (581) memory_layout: Reserved memory range 0x3c000000 - 0x3e000000
+D (581) memory_layout: Reserved memory range 0x3fc84000 - 0x3fc97300
+D (582) memory_layout: Reserved memory range 0x3fc97300 - 0x3fc9e180
+D (582) memory_layout: Reserved memory range 0x3fceee34 - 0x3fcf0000
+D (582) memory_layout: Reserved memory range 0x40374000 - 0x40387300
+D (583) memory_layout: Reserved memory range 0x600fe000 - 0x600fe000
+D (583) memory_layout: Reserved memory range 0x600fffe8 - 0x60100000
+D (583) memory_layout: Building list of available memory regions:
+D (585) memory_layout: Available memory region 0x3fc9e180 - 0x3fca0000
+D (586) memory_layout: Available memory region 0x3fca0000 - 0x3fcb0000
+D (586) memory_layout: Available memory region 0x3fcb0000 - 0x3fcc0000
+D (587) memory_layout: Available memory region 0x3fcc0000 - 0x3fcd0000
+D (588) memory_layout: Available memory region 0x3fcd0000 - 0x3fce0000
+D (588) memory_layout: Available memory region 0x3fce0000 - 0x3fce9710
+D (589) memory_layout: Available memory region 0x3fce9710 - 0x3fceee34
+D (590) memory_layout: Available memory region 0x3fcf0000 - 0x3fcf8000
+D (591) memory_layout: Available memory region 0x600fe000 - 0x600fffe8
+I (592) heap_init: Initializing. RAM available for dynamic allocation:
+D (593) heap_init: New heap initialised at 0x3fc9e180
+I (593) heap_init: At 3FC9E180 len 0004B590 (301 KiB): RAM
+I (593) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+D (593) heap_init: New heap initialised at 0x3fcf0000
+I (594) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+D (594) heap_init: New heap initialised at 0x600fe000
+I (594) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+D (594) cpu_start: calling init function: 0x420094e0 on core: 0
+D (595) cpu_start: calling init function: 0x42008920 on core: 0
+D (595) cpu_start: calling init function: 0x42009aa4 on core: 0
+I (844) esp_psram: Adding pool of 8192K of PSRAM memory to heap allocator
+D (844) cpu_start: calling init function: 0x42003a0c on core: 0
+D (845) intr_alloc: Connected src 39 to int 1 (cpu 0)
+D (845) cpu_start: calling init function: 0x42003a1c on core: 0
+D (845) cpu_start: calling init function: 0x4200a290 on core: 0
+D (845) cpu_start: calling init function: 0x4200b3fc on core: 0
+D (846) cpu_start: calling init function: 0x4200a4c8 on core: 0
+D (846) cpu_start: calling init function: 0x4200892c on core: 0
+D (846) cpu_start: calling init function: 0x42003a28 on core: 0
+
+
+
+
+D (847) spi_flash: trying chip: issi
+D (848) spi_flash: trying chip: gd
+D (848) spi_flash: trying chip: mxic
+D (848) spi_flash: trying chip: winbond
+D (848) spi_flash: trying chip: boya
+D (848) spi_flash: trying chip: th
+D (848) spi_flash: trying chip: mxic (opi)
+D (849) spi_flash: trying chip: generic
+I (849) spi_flash: detected chip: generic
+I (849) spi_flash: flash io: qio
+D (849) chip_generic: set_io_mode: status before 0x200
+D (850) cpu_start: calling init function: 0x42002b3c on core: 0
+D (850) C++ init: Setting C++ exception emergency pool to 0.
+D (851) cpu_start: calling init function: 0x4204e7dc on core: 0
+D (851) cpu_start: calling init function: 0x420066e8 on core: 0
+I (851) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (852) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+D (852) cpu_start: calling init function: 0x4200b408 on core: 0
+I (852) esp_core_dump_flash: Init core dump to flash
+I (854) esp_core_dump_flash: Found partition 'coredump' @ d20000 1048576 bytes
+D (869) esp_core_dump_crc: Total length of hashed data: 11744
+I (869) esp_core_dump_flash: Core dump data checksum is correct
+I (869) esp_core_dump_flash: Found core dump 11748 bytes in flash @ 0xd20000
+D (870) cpu_start: calling init function: 0x4200d768 on core: 0
+I (870) nvs_sec_provider: NVS Encryption - Registering HMAC-based scheme...
+D (870) cpu_start: calling init function: 0x42003a5c on core: 0
+D (870) cpu_start: calling init function: 0x42009b60 on core: 0
+D (871) cpu_start: calling init function: 0x42003a68 on core: 0
+D (872) intr_alloc: Connected src 79 to int 2 (cpu 0)
+D (872) app_start: Starting scheduler on CPU0
+D (872) intr_alloc: Connected src 57 to int 3 (cpu 0)
+
+D (873) intr_alloc: Connected src 80 to int 0 (cpu 1)
+D (873) app_start: Starting scheduler on CPU1
+D (874) intr_alloc: Connected src 58 to int 1 (cpu 1)
+D (874) heap_init: New heap initialised at 0x3fce9710
+I (874) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+D (874) esp_psram: Allocating block of size 32768 bytes
+D (876) intr_alloc: Connected src 52 to int 5 (cpu 0)
+I (876) main_task: Calling app_main()
+I (879) prd.app: Prusa Remote Display 0.1.0-dev
+I (879) prd.boot: version=0.1.0-dev git=55bfa891b3d5 dirty=true profile=hardware-validation idf=v5.5.4 board=waveshare_esp32_s3_lcd_2_8
+I (880) prd.boot: phase=initializing
+I (880) prd.board: target=waveshare_esp32_s3_lcd_2_8 validation=provisional
+I (880) prd.board: chip=ESP32-S3 rev=0.2 cores=2 reset=usb
+I (881) prd.board: flash_detected=16777216 expected=16777216 result=pass
+I (881) prd.board: psram_detected=8388608 expected=8388608 result=pass
+W (882) prd.board: usb_console=native_usb_serial_jtag result=unvalidated
+I (882) prd.boot: phase=ready
+D (883) ledc: Using clock source 4 (in slow mode), divisor: 0xc35
+D (883) ledc: In slow speed mode, global clk set: 11
+D (884) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+I (884) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=200 resolution_bits=14 max_duty=16384 active=high startup_percent=60 output=disabled duty=0
+D (886) spi: SPI2 use gpio matrix.
+D (887) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (887) spi_hal: eff: 40000, limit: 80000k(/0), 0 dummy, -1 delay
+D (888) spi_master: SPI2: New device added to CS0, effective clock: 40000000 Hz
+D (888) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (889) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (889) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (909) spi_master: device0 locked the bus
+D (909) spi_master: device0 release bus
+0 locked the bus
+D (1011) spi_master: device0 release bus
+D (1011) spi_master: device0 locked the bus
+D (1013) spi_master: device0 release bus
+D (1013) spi_master: device0 locked the bus
+D (1014) spi_master: device0 release bus
+I (1015) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (1015) spi_master: device0 locked the bus
+D (1017) spi_master: device0 release bus
+I (1017) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (1018) spi_master: device0 locked the bus
+D (1019) spi_master: device0 release bus
+I (1019) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (1020) spi_master: device0 locked the bus
+D (1021) spi_master: device0 release bus
+D (1021) spi_master: device0 locked the bus
+D (1022) spi_master: device0 release bus
+D (1023) spi_master: device0 locked the bus
+D (1024) spi_master: device0 release bus
+D (1025) spi_master: device0 locked the bus
+D (1025) spi_master: device0 release bus
+I (1026) prd.display: tuning=C-vendor-gamma-only active
+I (1026) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+D (1031) spi_master: device0 locked the bus
+D (1033) spi_master: device0 release bus
+D (1033) spi_master: device0 locked the bus
+D (1035) spi_master: device0 release bus
+D (1035) spi_master: device0 locked the bus
+D (1037) spi_master: device0 release bus
+D (1042) spi_master: device0 locked the bus
+D (1044) spi_master: device0 release bus
+D (1044) spi_master: device0 locked the bus
+D (1046) spi_master: device0 release bus
+D (1046) spi_master: device0 locked the bus
+D (1048) spi_master: device0 release bus
+D (1053) spi_master: device0 locked the bus
+D (1055) spi_master: device0 release bus
+D (1055) spi_master: device0 locked the bus
+D (1057) spi_master: device0 release bus
+D (1057) spi_master: device0 locked the bus
+D (1059) spi_master: device0 release bus
+D (1064) spi_master: device0 locked the bus
+D (1066) spi_master: device0 release bus
+D (1066) spi_master: device0 locked the bus
+D (1068) spi_master: device0 release bus
+D (1068) spi_master: device0 locked the bus
+D (1070) spi_master: device0 release bus
+D (1075) spi_master: device0 locked the bus
+D (1077) spi_master: device0 release bus
+D (1077) spi_master: device0 locked the bus
+D (1079) spi_master: device0 release bus
+D (1079) spi_master: device0 locked the bus
+D (1081) spi_master: device0 release bus
+D (1086) spi_master: device0 locked the bus
+D (1088) spi_master: device0 release bus
+D (1088) spi_master: device0 locked the bus
+D (1090) spi_master: device0 release bus
+D (1090) spi_master: device0 locked the bus
+D (1092) spi_master: device0 release bus
+D (1092) ledc: Using clock source 4 (in slow mode), divisor: 0xc35
+D (1093) ledc: In slow speed mode, global clk set: 11
+I (1094) prd.display: backlight freq_hz=200 resolution_bits=14 max_duty=16384 percent=60 duty=5325
+I (1094) prd.app: sweep=1 markers=1 freq_hz=200 resolution_bits=14 percent=25 duty=776/16384
+I (7095) prd.app: sweep=1 markers=1 freq_hz=200 resolution_bits=14 percent=5 duty=22/16384
+D (10889) prd.app: heartbeat
+D (13099) spi_master: device0 locked the bus
+D (13100) spi_master: device0 release bus
+D (13101) spi_master: device0 locked the bus
+D (13102) spi_master: device0 release bus
+D (13103) spi_master: device0 locked the bus
+D (13105) spi_master: device0 release bus
+D (13110) spi_master: device0 locked the bus
+D (13112) spi_master: device0 release bus
+D (13112) spi_master: device0 locked the bus
+D (13113) spi_master: device0 release bus
+D (13114) spi_master: device0 locked the bus
+D (13116) spi_master: device0 release bus
+D (13121) spi_master: device0 locked the bus
+D (13123) spi_master: device0 release bus
+D (13123) spi_master: device0 locked the bus
+D (13124) spi_master: device0 release bus
+D (13125) spi_master: device0 locked the bus
+D (13127) spi_master: device0 release bus
+D (13132) spi_master: device0 locked the bus
+D (13134) spi_master: device0 release bus
+D (13134) spi_master: device0 locked the bus
+D (13135) spi_master: device0 release bus
+D (13136) spi_master: device0 locked the bus
+D (13138) spi_master: device0 release bus
+D (13143) spi_master: device0 locked the bus
+D (13145) spi_master: device0 release bus
+D (13145) spi_master: device0 locked the bus
+D (13146) spi_master: device0 release bus
+D (13147) spi_master: device0 locked the bus
+D (13149) spi_master: device0 release bus
+D (13154) spi_master: device0 locked the bus
+D (13156) spi_master: device0 release bus
+D (13156) spi_master: device0 locked the bus
+D (13157) spi_master: device0 release bus
+D (13158) spi_master: device0 locked the bus
+D (13160) spi_master: device0 release bus
+D (13160) ledc: Using clock source 4 (in slow mode), divisor: 0x271
+D (13161) ledc: In slow speed mode, global clk set: 11
+I (13161) prd.display: backlight freq_hz=1000 resolution_bits=14 max_duty=16384 percent=5 duty=22
+I (13162) prd.app: sweep=1 markers=2 freq_hz=1000 resolution_bits=14 percent=25 duty=776/16384
+I (19162) prd.app: sweep=1 markers=2 freq_hz=1000 resolution_bits=14 percent=5 duty=22/16384
+D (20889) prd.app: heartbeat
+D (25166) spi_master: device0 locked the bus
+D (25167) spi_master: device0 release bus
+D (25168) spi_master: device0 locked the bus
+D (25169) spi_master: device0 release bus
+D (25170) spi_master: device0 locked the bus
+D (25172) spi_master: device0 release bus
+D (25177) spi_master: device0 locked the bus
+D (25178) spi_master: device0 release bus
+D (25179) spi_master: device0 locked the bus
+D (25180) spi_master: device0 release bus
+D (25181) spi_master: device0 locked the bus
+D (25183) spi_master: device0 release bus
+D (25188) spi_master: device0 locked the bus
+D (25189) spi_master: device0 release bus
+D (25190) spi_master: device0 locked the bus
+D (25191) spi_master: device0 release bus
+D (25192) spi_master: device0 locked the bus
+D (25194) spi_master: device0 release bus
+D (25199) spi_master: device0 locked the bus
+D (25200) spi_master: device0 release bus
+D (25201) spi_master: device0 locked the bus
+D (25202) spi_master: device0 release bus
+D (25203) spi_master: device0 locked the bus
+D (25205) spi_master: device0 release bus
+D (25210) spi_master: device0 locked the bus
+D (25211) spi_master: device0 release bus
+D (25212) spi_master: device0 locked the bus
+D (25213) spi_master: device0 release bus
+D (25214) spi_master: device0 locked the bus
+D (25216) spi_master: device0 release bus
+D (25221) spi_master: device0 locked the bus
+D (25222) spi_master: device0 release bus
+D (25223) spi_master: device0 locked the bus
+D (25224) spi_master: device0 release bus
+D (25225) spi_master: device0 locked the bus
+D (25227) spi_master: device0 release bus
+D (25227) ledc: Using clock source 4 (in slow mode), divisor: 0x139
+D (25227) ledc: In slow speed mode, global clk set: 11
+I (25228) prd.display: backlight freq_hz=2000 resolution_bits=14 max_duty=16384 percent=5 duty=22
+I (25229) prd.app: sweep=1 markers=3 freq_hz=2000 resolution_bits=14 percent=25 duty=776/16384
+D (30889) prd.app: heartbeat
+I (31229) prd.app: sweep=1 markers=3 freq_hz=2000 resolution_bits=14 percent=5 duty=22/16384
+D (37233) spi_master: device0 locked the bus
+D (37234) spi_master: device0 release bus
+D (37235) spi_master: device0 locked the bus
+D (37236) spi_master: device0 release bus
+D (37237) spi_master: device0 locked the bus
+D (37239) spi_master: device0 release bus
+D (37244) spi_master: device0 locked the bus
+D (37246) spi_master: device0 release bus
+D (37246) spi_master: device0 locked the bus
+D (37247) spi_master: device0 release bus
+D (37248) spi_master: device0 locked the bus
+D (37250) spi_master: device0 release bus
+D (37255) spi_master: device0 locked the bus
+D (37256) spi_master: device0 release bus
+D (37257) spi_master: device0 locked the bus
+D (37258) spi_master: device0 release bus
+D (37259) spi_master: device0 locked the bus
+D (37261) spi_master: device0 release bus
+D (37266) spi_master: device0 locked the bus
+D (37268) spi_master: device0 release bus
+D (37268) spi_master: device0 locked the bus
+D (37269) spi_master: device0 release bus
+D (37270) spi_master: device0 locked the bus
+D (37272) spi_master: device0 release bus
+D (37277) spi_master: device0 locked the bus
+D (37278) spi_master: device0 release bus
+D (37279) spi_master: device0 locked the bus
+D (37280) spi_master: device0 release bus
+D (37281) spi_master: device0 locked the bus
+D (37283) spi_master: device0 release bus
+D (37288) spi_master: device0 locked the bus
+D (37290) spi_master: device0 release bus
+D (37290) spi_master: device0 locked the bus
+D (37291) spi_master: device0 release bus
+D (37292) spi_master: device0 locked the bus
+D (37294) spi_master: device0 release bus
+D (37294) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (37294) ledc: In slow speed mode, global clk set: 11
+I (37295) prd.display: backlight freq_hz=5000 resolution_bits=12 max_duty=4096 percent=5 duty=6
+I (37296) prd.app: sweep=1 markers=4 freq_hz=5000 resolution_bits=12 percent=25 duty=194/4096
+D (40889) prd.app: heartbeat
+I (43296) prd.app: sweep=1 markers=4 freq_hz=5000 resolution_bits=12 percent=5 duty=6/4096
+D (49300) spi_master: device0 locked the bus
+D (49301) spi_master: device0 release bus
+D (49302) spi_master: device0 locked the bus
+D (49303) spi_master: device0 release bus
+D (49304) spi_master: device0 locked the bus
+D (49306) spi_master: device0 release bus
+D (49311) spi_master: device0 locked the bus
+D (49312) spi_master: device0 release bus
+D (49313) spi_master: device0 locked the bus
+D (49314) spi_master: device0 release bus
+D (49315) spi_master: device0 locked the bus
+D (49317) spi_master: device0 release bus
+D (49322) spi_master: device0 locked the bus
+D (49324) spi_master: device0 release bus
+D (49324) spi_master: device0 locked the bus
+D (49325) spi_master: device0 release bus
+D (49326) spi_master: device0 locked the bus
+D (49328) spi_master: device0 release bus
+D (49333) spi_master: device0 locked the bus
+D (49335) spi_master: device0 release bus
+D (49335) spi_master: device0 locked the bus
+D (49336) spi_master: device0 release bus
+D (49337) spi_master: device0 locked the bus
+D (49339) spi_master: device0 release bus
+D (49344) spi_master: device0 locked the bus
+D (49346) spi_master: device0 release bus
+D (49346) spi_master: device0 locked the bus
+D (49347) spi_master: device0 release bus
+D (49348) spi_master: device0 locked the bus
+D (49350) spi_master: device0 release bus
+D (49355) spi_master: device0 locked the bus
+D (49357) spi_master: device0 release bus
+D (49357) spi_master: device0 locked the bus
+D (49358) spi_master: device0 release bus
+D (49359) spi_master: device0 locked the bus
+D (49361) spi_master: device0 release bus
+D (49361) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (49362) ledc: In slow speed mode, global clk set: 11
+I (49362) prd.display: backlight freq_hz=10000 resolution_bits=11 max_duty=2048 percent=5 duty=3
+I (49363) prd.app: sweep=1 markers=5 freq_hz=10000 resolution_bits=11 percent=25 duty=97/2048
+D (50889) prd.app: heartbeat
+I (55363) prd.app: sweep=1 markers=5 freq_hz=10000 resolution_bits=11 percent=5 duty=3/2048
+D (60889) prd.app: heartbeat
+ter: device0 locked the bus
+D (61368) spi_master: device0 release bus
+D (61369) spi_master: device0 locked the bus
+D (61370) spi_master: device0 release bus
+D (61371) spi_master: device0 locked the bus
+D (61373) spi_master: device0 release bus
+D (61378) spi_master: device0 locked the bus
+D (61379) spi_master: device0 release bus
+D (61380) spi_master: device0 locked the bus
+D (61381) spi_master: device0 release bus
+D (61382) spi_master: device0 locked the bus
+D (61384) spi_master: device0 release bus
+D (61389) spi_master: device0 locked the bus
+D (61390) spi_master: device0 release bus
+D (61391) spi_master: device0 locked the bus
+D (61392) spi_master: device0 release bus
+D (61393) spi_master: device0 locked the bus
+D (61395) spi_master: device0 release bus
+D (61400) spi_master: device0 locked the bus
+D (61401) spi_master: device0 release bus
+D (61402) spi_master: device0 locked the bus
+D (61403) spi_master: device0 release bus
+D (61404) spi_master: device0 locked the bus
+D (61406) spi_master: device0 release bus
+D (61411) spi_master: device0 locked the bus
+D (61412) spi_master: device0 release bus
+D (61413) spi_master: device0 locked the bus
+D (61414) spi_master: device0 release bus
+D (61415) spi_master: device0 locked the bus
+D (61417) spi_master: device0 release bus
+D (61422) spi_master: device0 locked the bus
+D (61423) spi_master: device0 release bus
+D (61424) spi_master: device0 locked the bus
+D (61425) spi_master: device0 release bus
+D (61426) spi_master: device0 locked the bus
+D (61428) spi_master: device0 release bus
+D (61428) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (61428) ledc: In slow speed mode, global clk set: 11
+I (61429) prd.display: backlight freq_hz=20000 resolution_bits=10 max_duty=1024 percent=5 duty=1
+I (61430) prd.app: sweep=1 markers=6 freq_hz=20000 resolution_bits=10 percent=25 duty=49/1024
+I (67430) prd.app: sweep=1 markers=6 freq_hz=20000 resolution_bits=10 percent=5 duty=1/1024
+D (70889) prd.app: heartbeat
+D (73434) spi_master: device0 locked the bus
+D (73435) spi_master: device0 release bus
+D (73436) spi_master: device0 locked the bus
+D (73437) spi_master: device0 release bus
+D (73438) spi_master: device0 locked the bus
+D (73440) spi_master: device0 release bus
+D (73445) spi_master: device0 locked the bus
+D (73446) spi_master: device0 release bus
+D (73447) spi_master: device0 locked the bus
+D (73448) spi_master: device0 release bus
+D (73449) spi_master: device0 locked the bus
+D (73451) spi_master: device0 release bus
+D (73456) spi_master: device0 locked the bus
+D (73457) spi_master: device0 release bus
+D (73458) spi_master: device0 locked the bus
+D (73459) spi_master: device0 release bus
+D (73460) spi_master: device0 locked the bus
+D (73462) spi_master: device0 release bus
+D (73467) spi_master: device0 locked the bus
+D (73468) spi_master: device0 release bus
+D (73469) spi_master: device0 locked the bus
+D (73470) spi_master: device0 release bus
+D (73471) spi_master: device0 locked the bus
+D (73473) spi_master: device0 release bus
+D (73478) spi_master: device0 locked the bus
+D (73479) spi_master: device0 release bus
+D (73480) spi_master: device0 locked the bus
+D (73481) spi_master: device0 release bus
+D (73482) spi_master: device0 locked the bus
+D (73484) spi_master: device0 release bus
+D (73489) spi_master: device0 locked the bus
+D (73490) spi_master: device0 release bus
+D (73491) spi_master: device0 locked the bus
+D (73492) spi_master: device0 release bus
+D (73493) spi_master: device0 locked the bus
+D (73495) spi_master: device0 release bus
+D (73495) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (73495) ledc: In slow speed mode, global clk set: 11
+I (73496) prd.display: backlight freq_hz=40000 resolution_bits=9 max_duty=512 percent=5 duty=1
+I (73497) prd.app: sweep=1 markers=7 freq_hz=40000 resolution_bits=9 percent=25 duty=24/512
+I (79497) prd.app: sweep=1 markers=7 freq_hz=40000 resolution_bits=9 percent=5 duty=1/512
+D (80889) prd.app: heartbeat
+D (85501) spi_master: device0 locked the bus
+D (85502) spi_master: device0 release bus
+D (85503) spi_master: device0 locked the bus
+D (85504) spi_master: device0 release bus
+D (85505) spi_master: device0 locked the bus
+D (85507) spi_master: device0 release bus
+D (85512) spi_master: device0 locked the bus
+D (85514) spi_master: device0 release bus
+D (85514) spi_master: device0 locked the bus
+D (85515) spi_master: device0 release bus
+D (85516) spi_master: device0 locked the bus
+D (85518) spi_master: device0 release bus
+D (85523) spi_master: device0 locked the bus
+D (85525) spi_master: device0 release bus
+D (85525) spi_master: device0 locked the bus
+D (85526) spi_master: device0 release bus
+D (85527) spi_master: device0 locked the bus
+D (85529) spi_master: device0 release bus
+D (85534) spi_master: device0 locked the bus
+D (85536) spi_master: device0 release bus
+D (85536) spi_master: device0 locked the bus
+D (85537) spi_master: device0 release bus
+D (85538) spi_master: device0 locked the bus
+D (85540) spi_master: device0 release bus
+D (85545) spi_master: device0 locked the bus
+D (85547) spi_master: device0 release bus
+D (85547) spi_master: device0 locked the bus
+D (85548) spi_master: device0 release bus
+D (85549) spi_master: device0 locked the bus
+D (85551) spi_master: device0 release bus
+D (85556) spi_master: device0 locked the bus
+D (85558) spi_master: device0 release bus
+D (85558) spi_master: device0 locked the bus
+D (85559) spi_master: device0 release bus
+D (85560) spi_master: device0 locked the bus
+D (85562) spi_master: device0 release bus
+D (85562) ledc: Using clock source 4 (in slow mode), divisor: 0xc35
+D (85563) ledc: In slow speed mode, global clk set: 11
+I (85563) prd.display: backlight freq_hz=200 resolution_bits=14 max_duty=16384 percent=5 duty=22
+I (85564) prd.app: sweep=2 markers=1 freq_hz=200 resolution_bits=14 percent=25 duty=776/16384
+D (90889) prd.app: heartbeat
+I (91564) prd.app: sweep=2 markers=1 freq_hz=200 resolution_bits=14 percent=5 duty=22/16384
+
+==============================================================================
+PART 3 - repeated init/deinit with the LEDC teardown in place
+flow: CONFIG_PRD_DISPLAY_CLOCK_SWEEP
+
+display::deinit() now also releases the LEDC channel and timer, so the Phase C
+repeated-initialisation path was re-run to confirm the backlight comes back up
+cleanly every time. Each clock step is a full init/deinit cycle.
+Also confirms startup_percent=50 is the effective default after selection.
+==============================================================================
+10000 00002000
+I (28) boot:  3 phy_init         RF data          01 01 00012000 00001000
+I (28) boot:  4 factory_cfg      Unknown data     01 40 00013000 0000d000
+I (29) boot:  5 ota_0            OTA app          00 10 00020000 00680000
+I (29) boot:  6 ota_1            OTA app          00 11 006a0000 00680000
+I (30) boot:  7 coredump         Unknown data     01 03 00d20000 00100000
+I (30) boot:  8 assets           Unknown data     01 41 00e20000 001e0000
+I (30) boot: End of partition table
+I (31) esp_image: segment 0: paddr=00020020 vaddr=3c060020 size=17288h ( 94856) map
+I (45) esp_image: segment 1: paddr=000372b0 vaddr=3fc97300 size=04534h ( 17716) load
+I (49) esp_image: segment 2: paddr=0003b7ec vaddr=40374000 size=0482ch ( 18476) load
+I (53) esp_image: segment 3: paddr=00040020 vaddr=42000020 size=54730h (345904) map
+I (104) esp_image: segment 4: paddr=00094758 vaddr=4037882c size=0eac0h ( 60096) load
+I (116) esp_image: segment 5: paddr=000a3220 vaddr=50000000 size=00020h (    32) load
+I (124) boot: Loaded app from partition at offset 0x20000
+I (124) boot: Disabling RNG early entropy source...
+D (125) octal_psram: exp_data: 0x5a6b7c8d
+D (126) octal_psram: ref_data: 0x5a6b7c8d
+I (126) octal_psram: vendor id    : 0x0d (AP)
+I (126) octal_psram: dev id       : 0x02 (generation 3)
+I (126) octal_psram: density      : 0x03 (64 Mbit)
+I (127) octal_psram: good-die     : 0x01 (Pass)
+I (127) octal_psram: Latency      : 0x01 (Fixed)
+I (127) octal_psram: VCC          : 0x01 (3V)
+I (127) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (128) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (128) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (128) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (129) octal_psram: DriveStrength: 0x00 (1/1)
+I (129) MSPI Timing: Enter psram timing tuning
+D MSPI Timing: test nums: 1, test result: [id][good/bad][good_times]:
+D MSPI Timing: [0][good][1]
+D MSPI Timing: [1][bad][0]
+D MSPI Timing: [2][bad][0]
+D MSPI Timing: [3][good][1]
+D MSPI Timing: [4][good][1]
+D MSPI Timing: [5][good][1]
+D MSPI Timing: [6][good][1]
+D MSPI Timing: [7][bad][0]
+D MSPI Timing: [8][bad][0]
+D MSPI Timing: [9][good][1]
+D MSPI Timing: [10][good][1]
+D MSPI Timing: [11][good][1]
+D MSPI Timing: [12][good][1]
+D MSPI Timing: [13][bad][0]
+D MSPI Timing: tuning success, best point is index 5
+D MSPI Timing: PSRAM timing tuning index: 5
+I (134) esp_psram: Found 8MB PSRAM device
+I (134) esp_psram: Speed: 80MHz
+I (135) cpu_start: Multicore app
+D (135) cpu_start: Pro cpu up
+D (136) cpu_start: Starting app cpu, entry point is 0x403755d4
+D (0) cpu_start: App cpu up
+I (569) esp_psram: SPI SRAM memory test OK
+D (577) clk: RTC_SLOW_CLK calibration value: 3757786
+D (578) cpu_start: calling init function: 0x42002ab0 on core: 0
+D (578) cpu_start: calling init function: 0x420039e4 on core: 0
+I (578) cpu_start: Pro cpu start user code
+I (578) cpu_start: cpu freq: 160000000 Hz
+D (578) cpu_start: calling init function: 0x42002a00 on core: 0
+I (579) app_init: Application information:
+I (579) app_init: Project name:     prusa_remote_display
+I (579) app_init: App version:      0.1.0-dev
+I (579) app_init: ELF file SHA256:  7a4083f7c81fa584...
+I (580) app_init: ESP-IDF:          v5.5.4
+D (580) cpu_start: calling init function: 0x42002ac4 on core: 0
+I (580) efuse_init: Min chip rev:     v0.0
+I (580) efuse_init: Max chip rev:     v0.99
+I (580) efuse_init: Chip rev:         v0.2
+D (580) cpu_start: calling init function: 0x42005544 on core: 0
+D (581) memory_layout: Checking 7 reserved memory ranges:
+D (581) memory_layout: Reserved memory range 0x3c000000 - 0x3e000000
+D (582) memory_layout: Reserved memory range 0x3fc84000 - 0x3fc97300
+D (582) memory_layout: Reserved memory range 0x3fc97300 - 0x3fc9e180
+D (582) memory_layout: Reserved memory range 0x3fceee34 - 0x3fcf0000
+D (583) memory_layout: Reserved memory range 0x40374000 - 0x40387300
+D (583) memory_layout: Reserved memory range 0x600fe000 - 0x600fe000
+D (583) memory_layout: Reserved memory range 0x600fffe8 - 0x60100000
+D (584) memory_layout: Building list of available memory regions:
+D (585) memory_layout: Available memory region 0x3fc9e180 - 0x3fca0000
+D (586) memory_layout: Available memory region 0x3fca0000 - 0x3fcb0000
+D (587) memory_layout: Available memory region 0x3fcb0000 - 0x3fcc0000
+D (587) memory_layout: Available memory region 0x3fcc0000 - 0x3fcd0000
+D (588) memory_layout: Available memory region 0x3fcd0000 - 0x3fce0000
+D (589) memory_layout: Available memory region 0x3fce0000 - 0x3fce9710
+D (590) memory_layout: Available memory region 0x3fce9710 - 0x3fceee34
+D (590) memory_layout: Available memory region 0x3fcf0000 - 0x3fcf8000
+D (592) memory_layout: Available memory region 0x600fe000 - 0x600fffe8
+I (592) heap_init: Initializing. RAM available for dynamic allocation:
+D (593) heap_init: New heap initialised at 0x3fc9e180
+I (593) heap_init: At 3FC9E180 len 0004B590 (301 KiB): RAM
+I (594) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+D (594) heap_init: New heap initialised at 0x3fcf0000
+I (594) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+D (594) heap_init: New heap initialised at 0x600fe000
+I (594) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+D (595) cpu_start: calling init function: 0x42009504 on core: 0
+D (595) cpu_start: calling init function: 0x42008944 on core: 0
+D (595) cpu_start: calling init function: 0x42009ac8 on core: 0
+I (844) esp_psram: Adding pool of 8192K of PSRAM memory to heap allocator
+D (844) cpu_start: calling init function: 0x42003a30 on core: 0
+D (845) intr_alloc: Connected src 39 to int 1 (cpu 0)
+D (845) cpu_start: calling init function: 0x42003a40 on core: 0
+D (846) cpu_start: calling init function: 0x4200a2b4 on core: 0
+D (846) cpu_start: calling init function: 0x4200b420 on core: 0
+D (846) cpu_start: calling init function: 0x4200a4ec on core: 0
+D (846) cpu_start: calling init function: 0x42008950 on core: 0
+D (847) cpu_start: calling init function: 0x42003a4c on core: 0
+
+
+
+
+D (848) spi_flash: trying chip: issi
+D (848) spi_flash: trying chip: gd
+D (848) spi_flash: trying chip: mxic
+D (848) spi_flash: trying chip: winbond
+D (848) spi_flash: trying chip: boya
+D (849) spi_flash: trying chip: th
+D (849) spi_flash: trying chip: mxic (opi)
+D (849) spi_flash: trying chip: generic
+I (849) spi_flash: detected chip: generic
+I (849) spi_flash: flash io: qio
+D (850) chip_generic: set_io_mode: status before 0x200
+D (850) cpu_start: calling init function: 0x42002b60 on core: 0
+D (851) C++ init: Setting C++ exception emergency pool to 0.
+D (851) cpu_start: calling init function: 0x4204e6f4 on core: 0
+D (851) cpu_start: calling init function: 0x4200670c on core: 0
+I (852) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (852) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+D (853) cpu_start: calling init function: 0x4200b42c on core: 0
+I (853) esp_core_dump_flash: Init core dump to flash
+I (854) esp_core_dump_flash: Found partition 'coredump' @ d20000 1048576 bytes
+D (869) esp_core_dump_crc: Total length of hashed data: 11744
+I (870) esp_core_dump_flash: Core dump data checksum is correct
+I (870) esp_core_dump_flash: Found core dump 11748 bytes in flash @ 0xd20000
+D (870) cpu_start: calling init function: 0x4200d78c on core: 0
+I (870) nvs_sec_provider: NVS Encryption - Registering HMAC-based scheme...
+D (871) cpu_start: calling init function: 0x42003a80 on core: 0
+D (871) cpu_start: calling init function: 0x42009b84 on core: 0
+D (871) cpu_start: calling init function: 0x42003a8c on core: 0
+D (872) intr_alloc: Connected src 79 to int 2 (cpu 0)
+D (872) app_start: Starting scheduler on CPU0
+D (873) intr_alloc: Connected src 57 to int 3 (cpu 0)
+[0m
+D (874) intr_alloc: Connected src 80 to int 0 (cpu 1)
+D (874) app_start: Starting scheduler on CPU1
+D (875) intr_alloc: Connected src 58 to int 1 (cpu 1)
+D (875) heap_init: New heap initialised at 0x3fce9710
+I (875) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+D (875) esp_psram: Allocating block of size 32768 bytes
+D (877) intr_alloc: Connected src 52 to int 5 (cpu 0)
+I (877) main_task: Calling app_main()
+I (879) prd.app: Prusa Remote Display 0.1.0-dev
+I (880) prd.boot: version=0.1.0-dev git=55bfa891b3d5 dirty=true profile=hardware-validation idf=v5.5.4 board=waveshare_esp32_s3_lcd_2_8
+I (880) prd.boot: phase=initializing
+I (881) prd.board: target=waveshare_esp32_s3_lcd_2_8 validation=provisional
+I (881) prd.board: chip=ESP32-S3 rev=0.2 cores=2 reset=usb
+I (882) prd.board: flash_detected=16777216 expected=16777216 result=pass
+I (882) prd.board: psram_detected=8388608 expected=8388608 result=pass
+W (882) prd.board: usb_console=native_usb_serial_jtag result=unvalidated
+I (883) prd.boot: phase=ready
+D (883) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (884) ledc: In slow speed mode, global clk set: 11
+D (884) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+I (885) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (887) spi: SPI2 use gpio matrix.
+D (888) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (888) spi_hal: eff: 10000, limit: 80000k(/0), 0 dummy, -1 delay
+D (888) spi_master: SPI2: New device added to CS0, effective clock: 10000000 Hz
+D (889) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (889) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (889) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (910) spi_master: device0 locked the bus
+D (910) spi_master: device0 release bus
+D (1011) spi_master: device0 locked the bus
+D (1012) spi_master: device0 release bus
+D (1012) spi_master: device0 locked the bus
+D (1014) spi_master: device0 release bus
+D (1014) spi_master: device0 locked the bus
+D (1015) spi_master: device0 release bus
+I (1016) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (1016) spi_master: device0 locked the bus
+D (1018) spi_master: device0 release bus
+I (1018) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (1019) spi_master: device0 locked the bus
+D (1020) spi_master: device0 release bus
+I (1020) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (1021) spi_master: device0 locked the bus
+D (1022) spi_master: device0 release bus
+D (1022) spi_master: device0 locked the bus
+D (1023) spi_master: device0 release bus
+D (1024) spi_master: device0 locked the bus
+D (1025) spi_master: device0 release bus
+D (1026) spi_master: device0 locked the bus
+D (1026) spi_master: device0 release bus
+I (1027) prd.display: tuning=C-vendor-gamma-only active
+I (1027) prd.display: init ok host=SPI2 clock_hz=10000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (1028) prd.app: sweep=1 clock_hz=10000000 init_ok attempts=1 failures=0
+D (1033) spi_master: device0 locked the bus
+D (1035) spi_master: device0 release bus
+D (1035) spi_master: device0 locked the bus
+D (1036) spi_master: device0 release bus
+D (1037) spi_master: device0 locked the bus
+D (1039) spi_master: device0 release bus
+D (1060) spi_master: device0 locked the bus
+D (1061) spi_master: device0 release bus
+D (1061) spi_master: device0 locked the bus
+D (1063) spi_master: device0 release bus
+D (1063) spi_master: device0 locked the bus
+D (1065) spi_master: device0 release bus
+D (1086) spi_master: device0 locked the bus
+D (1087) spi_master: device0 release bus
+D (1088) spi_master: device0 locked the bus
+D (1089) spi_master: device0 release bus
+D (1089) spi_master: device0 locked the bus
+D (1091) spi_master: device0 release bus
+D (1112) spi_master: device0 locked the bus
+D (1113) spi_master: device0 release bus
+D (1114) spi_master: device0 locked the bus
+D (1115) spi_master: device0 release bus
+D (1116) spi_master: device0 locked the bus
+D (1118) spi_master: device0 release bus
+D (1138) spi_master: device0 locked the bus
+D (1140) spi_master: device0 release bus
+D (1140) spi_master: device0 locked the bus
+D (1142) spi_master: device0 release bus
+D (1142) spi_master: device0 locked the bus
+D (1144) spi_master: device0 release bus
+D (1165) spi_master: device0 locked the bus
+D (1166) spi_master: device0 release bus
+D (1167) spi_master: device0 locked the bus
+D (1168) spi_master: device0 release bus
+D (1168) spi_master: device0 locked the bus
+D (1170) spi_master: device0 release bus
+D (5177) spi_master: device0 locked the bus
+D (5178) spi_master: device0 release bus
+D (5179) spi_master: device0 locked the bus
+D (5180) spi_master: device0 release bus
+D (5181) spi_master: device0 locked the bus
+D (5183) spi_master: device0 release bus
+D (5203) spi_master: device0 locked the bus
+D (5205) spi_master: device0 release bus
+D (5205) spi_master: device0 locked the bus
+D (5207) spi_master: device0 release bus
+D (5207) spi_master: device0 locked the bus
+D (5209) spi_master: device0 release bus
+D (5230) spi_master: device0 locked the bus
+D (5231) spi_master: device0 release bus
+D (5231) spi_master: device0 locked the bus
+D (5233) spi_master: device0 release bus
+D (5233) spi_master: device0 locked the bus
+D (5235) spi_master: device0 release bus
+D (5256) spi_master: device0 locked the bus
+D (5258) spi_master: device0 release bus
+D (5258) spi_master: device0 locked the bus
+D (5259) spi_master: device0 release bus
+D (5260) spi_master: device0 locked the bus
+D (5262) spi_master: device0 release bus
+D (5282) spi_master: device0 locked the bus
+D (5284) spi_master: device0 release bus
+D (5284) spi_master: device0 locked the bus
+D (5286) spi_master: device0 release bus
+D (5286) spi_master: device0 locked the bus
+D (5288) spi_master: device0 release bus
+D (5309) spi_master: device0 locked the bus
+D (5310) spi_master: device0 release bus
+D (5311) spi_master: device0 locked the bus
+D (5312) spi_master: device0 release bus
+D (5312) spi_master: device0 locked the bus
+D (5314) spi_master: device0 release bus
+D (9323) spi_master: device0 locked the bus
+D (9324) spi_master: device0 release bus
+D (9324) spi_master: device0 locked the bus
+D (9326) spi_master: device0 release bus
+D (9326) spi_master: device0 locked the bus
+D (9328) spi_master: device0 release bus
+D (9349) spi_master: device0 locked the bus
+D (9350) spi_master: device0 release bus
+D (9351) spi_master: device0 locked the bus
+D (9352) spi_master: device0 release bus
+D (9352) spi_master: device0 locked the bus
+D (9354) spi_master: device0 release bus
+D (9375) spi_master: device0 locked the bus
+D (9377) spi_master: device0 release bus
+D (9377) spi_master: device0 locked the bus
+D (9378) spi_master: device0 release bus
+D (9379) spi_master: device0 locked the bus
+D (9381) spi_master: device0 release bus
+D (9402) spi_master: device0 locked the bus
+D (9403) spi_master: device0 release bus
+D (9403) spi_master: device0 locked the bus
+D (9405) spi_master: device0 release bus
+D (9405) spi_master: device0 locked the bus
+D (9407) spi_master: device0 release bus
+D (9428) spi_master: device0 locked the bus
+D (9429) spi_master: device0 release bus
+D (9430) spi_master: device0 locked the bus
+D (9431) spi_master: device0 release bus
+D (9431) spi_master: device0 locked the bus
+D (9433) spi_master: device0 release bus
+D (9454) spi_master: device0 locked the bus
+D (9456) spi_master: device0 release bus
+D (9456) spi_master: device0 locked the bus
+D (9457) spi_master: device0 release bus
+D (9458) spi_master: device0 locked the bus
+D (9460) spi_master: device0 release bus
+D (10890) prd.app: heartbeat
+D (13460) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (13460) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (14061) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (14061) ledc: In slow speed mode, global clk set: 11
+D (14062) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (14062) ledc: GPIO 5 is not usable, maybe conflict with others
+I (14063) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (14064) spi: SPI2 use gpio matrix.
+D (14065) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (14066) spi_hal: eff: 20000, limit: 80000k(/0), 0 dummy, -1 delay
+D (14066) spi_master: SPI2: New device added to CS0, effective clock: 20000000 Hz
+D (14066) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (14067) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (14067) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (14087) spi_master: device0 locked the bus
+D (14088) spi_master: device0 release bus
+D (14188) spi_master: device0 locked the bus
+D (14189) spi_master: device0 release bus
+D (14189) spi_master: device0 locked the bus
+D (14191) spi_master: device0 release bus
+D (14191) spi_master: device0 locked the bus
+D (14193) spi_master: device0 release bus
+I (14193) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (14193) spi_master: device0 locked the bus
+D (14195) spi_master: device0 release bus
+I (14195) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (14196) spi_master: device0 locked the bus
+D (14197) spi_master: device0 release bus
+I (14198) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (14198) spi_master: device0 locked the bus
+D (14199) spi_master: device0 release bus
+D (14199) spi_master: device0 locked the bus
+D (14201) spi_master: device0 release bus
+D (14201) spi_master: device0 locked the bus
+D (14202) spi_master: device0 release bus
+D (14203) spi_master: device0 locked the bus
+D (14204) spi_master: device0 release bus
+I (14204) prd.display: tuning=C-vendor-gamma-only active
+I (14204) prd.display: init ok host=SPI2 clock_hz=20000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (14205) prd.app: sweep=1 clock_hz=20000000 init_ok attempts=2 failures=0
+D (14210) spi_master: device0 locked the bus
+D (14212) spi_master: device0 release bus
+D (14212) spi_master: device0 locked the bus
+D (14213) spi_master: device0 release bus
+D (14214) spi_master: device0 locked the bus
+D (14216) spi_master: device0 release bus
+D (14226) spi_master: device0 locked the bus
+D (14228) spi_master: device0 release bus
+D (14228) spi_master: device0 locked the bus
+D (14230) spi_master: device0 release bus
+D (14230) spi_master: device0 locked the bus
+D (14232) spi_master: device0 release bus
+D (14243) spi_master: device0 locked the bus
+D (14244) spi_master: device0 release bus
+D (14244) spi_master: device0 locked the bus
+D (14246) spi_master: device0 release bus
+D (14246) spi_master: device0 locked the bus
+D (14248) spi_master: device0 release bus
+D (14259) spi_master: device0 locked the bus
+D (14260) spi_master: device0 release bus
+D (14260) spi_master: device0 locked the bus
+D (14262) spi_master: device0 release bus
+D (14262) spi_master: device0 locked the bus
+D (14264) spi_master: device0 release bus
+D (14275) spi_master: device0 locked the bus
+D (14276) spi_master: device0 release bus
+D (14277) spi_master: device0 locked the bus
+D (14278) spi_master: device0 release bus
+D (14278) spi_master: device0 locked the bus
+D (14281) spi_master: device0 release bus
+D (14291) spi_master: device0 locked the bus
+D (14292) spi_master: device0 release bus
+D (14293) spi_master: device0 locked the bus
+D (14294) spi_master: device0 release bus
+D (14295) spi_master: device0 locked the bus
+D (14297) spi_master: device0 release bus
+D (18303) spi_master: device0 locked the bus
+D (18304) spi_master: device0 release bus
+D (18305) spi_master: device0 locked the bus
+D (18306) spi_master: device0 release bus
+D (18307) spi_master: device0 locked the bus
+D (18309) spi_master: device0 release bus
+D (18319) spi_master: device0 locked the bus
+D (18320) spi_master: device0 release bus
+D (18321) spi_master: device0 locked the bus
+D (18322) spi_master: device0 release bus
+D (18323) spi_master: device0 locked the bus
+D (18325) spi_master: device0 release bus
+D (18335) spi_master: device0 locked the bus
+D (18337) spi_master: device0 release bus
+D (18337) spi_master: device0 locked the bus
+D (18338) spi_master: device0 release bus
+D (18339) spi_master: device0 locked the bus
+D (18341) spi_master: device0 release bus
+D (18351) spi_master: device0 locked the bus
+D (18353) spi_master: device0 release bus
+D (18353) spi_master: device0 locked the bus
+D (18355) spi_master: device0 release bus
+D (18355) spi_master: device0 locked the bus
+D (18357) spi_master: device0 release bus
+D (18368) spi_master: device0 locked the bus
+D (18369) spi_master: device0 release bus
+D (18369) spi_master: device0 locked the bus
+D (18371) spi_master: device0 release bus
+D (18371) spi_master: device0 locked the bus
+D (18373) spi_master: device0 release bus
+D (18384) spi_master: device0 locked the bus
+D (18385) spi_master: device0 release bus
+D (18386) spi_master: device0 locked the bus
+D (18387) spi_master: device0 release bus
+D (18387) spi_master: device0 locked the bus
+D (18389) spi_master: device0 release bus
+D (20890) prd.app: heartbeat
+D (22398) spi_master: device0 locked the bus
+D (22399) spi_master: device0 release bus
+D (22399) spi_master: device0 locked the bus
+D (22401) spi_master: device0 release bus
+D (22401) spi_master: device0 locked the bus
+D (22403) spi_master: device0 release bus
+D (22414) spi_master: device0 locked the bus
+D (22415) spi_master: device0 release bus
+D (22415) spi_master: device0 locked the bus
+D (22417) spi_master: device0 release bus
+D (22417) spi_master: device0 locked the bus
+D (22419) spi_master: device0 release bus
+D (22430) spi_master: device0 locked the bus
+D (22431) spi_master: device0 release bus
+D (22432) spi_master: device0 locked the bus
+D (22433) spi_master: device0 release bus
+D (22433) spi_master: device0 locked the bus
+D (22436) spi_master: device0 release bus
+D (22446) spi_master: device0 locked the bus
+D (22447) spi_master: device0 release bus
+D (22448) spi_master: device0 locked the bus
+D (22449) spi_master: device0 release bus
+D (22450) spi_master: device0 locked the bus
+D (22452) spi_master: device0 release bus
+D (22462) spi_master: device0 locked the bus
+D (22463) spi_master: device0 release bus
+D (22464) spi_master: device0 locked the bus
+D (22465) spi_master: device0 release bus
+D (22466) spi_master: device0 locked the bus
+D (22468) spi_master: device0 release bus
+D (22478) spi_master: device0 locked the bus
+D (22480) spi_master: device0 release bus
+D (22480) spi_master: device0 locked the bus
+D (22481) spi_master: device0 release bus
+D (22482) spi_master: device0 locked the bus
+D (22484) spi_master: device0 release bus
+D (26484) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (26484) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (27085) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (27085) ledc: In slow speed mode, global clk set: 11
+D (27086) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (27086) ledc: GPIO 5 is not usable, maybe conflict with others
+I (27087) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (27088) spi: SPI2 use gpio matrix.
+D (27089) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (27090) spi_hal: eff: 40000, limit: 80000k(/0), 0 dummy, -1 delay
+D (27090) spi_master: SPI2: New device added to CS0, effective clock: 40000000 Hz
+D (27090) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (27091) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (27091) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (27111) spi_master: device0 locked the bus
+D (27112) spi_master: device0 release bus
+D (27212) spi_master: device0 locked the bus
+D (27213) spi_master: device0 release bus
+D (27213) spi_master: device0 locked the bus
+D (27215) spi_master: device0 release bus
+D (27215) spi_master: device0 locked the bus
+D (27217) spi_master: device0 release bus
+I (27217) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (27217) spi_master: device0 locked the bus
+D (27219) spi_master: device0 release bus
+I (27219) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (27220) spi_master: device0 locked the bus
+D (27221) spi_master: device0 release bus
+I (27221) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (27222) spi_master: device0 locked the bus
+D (27223) spi_master: device0 release bus
+D (27223) spi_master: device0 locked the bus
+D (27224) spi_master: device0 release bus
+D (27225) spi_master: device0 locked the bus
+D (27226) spi_master: device0 release bus
+D (27227) spi_master: device0 locked the bus
+D (27227) spi_master: device0 release bus
+I (27228) prd.display: tuning=C-vendor-gamma-only active
+I (27228) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (27229) prd.app: sweep=1 clock_hz=40000000 init_ok attempts=3 failures=0
+D (27234) spi_master: device0 locked the bus
+D (27235) spi_master: device0 release bus
+D (27236) spi_master: device0 locked the bus
+D (27237) spi_master: device0 release bus
+D (27238) spi_master: device0 locked the bus
+D (27240) spi_master: device0 release bus
+D (27245) spi_master: device0 locked the bus
+D (27247) spi_master: device0 release bus
+D (27247) spi_master: device0 locked the bus
+D (27248) spi_master: device0 release bus
+D (27249) spi_master: device0 locked the bus
+D (27251) spi_master: device0 release bus
+D (27256) spi_master: device0 locked the bus
+D (27258) spi_master: device0 release bus
+D (27258) spi_master: device0 locked the bus
+D (27259) spi_master: device0 release bus
+D (27260) spi_master: device0 locked the bus
+D (27262) spi_master: device0 release bus
+D (27267) spi_master: device0 locked the bus
+D (27269) spi_master: device0 release bus
+D (27269) spi_master: device0 locked the bus
+D (27270) spi_master: device0 release bus
+D (27271) spi_master: device0 locked the bus
+D (27273) spi_master: device0 release bus
+D (27278) spi_master: device0 locked the bus
+D (27280) spi_master: device0 release bus
+D (27280) spi_master: device0 locked the bus
+D (27281) spi_master: device0 release bus
+D (27282) spi_master: device0 locked the bus
+D (27284) spi_master: device0 release bus
+D (27289) spi_master: device0 locked the bus
+D (27291) spi_master: device0 release bus
+D (27291) spi_master: device0 locked the bus
+D (27292) spi_master: device0 release bus
+D (27293) spi_master: device0 locked the bus
+D (27295) spi_master: device0 release bus
+D (30890) prd.app: heartbeat
+D (31301) spi_master: device0 locked the bus
+D (31302) spi_master: device0 release bus
+D (31303) spi_master: device0 locked the bus
+D (31304) spi_master: device0 release bus
+D (31305) spi_master: device0 locked the bus
+D (31307) spi_master: device0 release bus
+D (31312) spi_master: device0 locked the bus
+D (31314) spi_master: device0 release bus
+D (31314) spi_master: device0 locked the bus
+D (31315) spi_master: device0 release bus
+D (31316) spi_master: device0 locked the bus
+D (31318) spi_master: device0 release bus
+D (31323) spi_master: device0 locked the bus
+D (31325) spi_master: device0 release bus
+D (31325) spi_master: device0 locked the bus
+D (31327) spi_master: device0 release bus
+D (31327) spi_master: device0 locked the bus
+D (31329) spi_master: device0 release bus
+D (31335) spi_master: device0 locked the bus
+D (31336) spi_master: device0 release bus
+D (31336) spi_master: device0 locked the bus
+D (31338) spi_master: device0 release bus
+D (31338) spi_master: device0 locked the bus
+D (31340) spi_master: device0 release bus
+D (31346) spi_master: device0 locked the bus
+D (31347) spi_master: device0 release bus
+D (31348) spi_master: device0 locked the bus
+D (31349) spi_master: device0 release bus
+D (31349) spi_master: device0 locked the bus
+D (31351) spi_master: device0 release bus
+D (31357) spi_master: device0 locked the bus
+D (31358) spi_master: device0 release bus
+D (31359) spi_master: device0 locked the bus
+D (31360) spi_master: device0 release bus
+D (31360) spi_master: device0 locked the bus
+D (31363) spi_master: device0 release bus
+D (35371) spi_master: device0 locked the bus
+D (35372) spi_master: device0 release bus
+D (35372) spi_master: device0 locked the bus
+D (35374) spi_master: device0 release bus
+D (35374) spi_master: device0 locked the bus
+D (35376) spi_master: device0 release bus
+D (35384) spi_master: device0 locked the bus
+D (35385) spi_master: device0 release bus
+D (35385) spi_master: device0 locked the bus
+D (35387) spi_master: device0 release bus
+D (35387) spi_master: device0 locked the bus
+D (35389) spi_master: device0 release bus
+D (35397) spi_master: device0 locked the bus
+D (35398) spi_master: device0 release bus
+D (35398) spi_master: device0 locked the bus
+D (35400) spi_master: device0 release bus
+D (35400) spi_master: device0 locked the bus
+D (35402) spi_master: device0 release bus
+D (35410) spi_master: device0 locked the bus
+D (35411) spi_master: device0 release bus
+D (35411) spi_master: device0 locked the bus
+D (35413) spi_master: device0 release bus
+D (35413) spi_master: device0 locked the bus
+D (35415) spi_master: device0 release bus
+D (35423) spi_master: device0 locked the bus
+D (35424) spi_master: device0 release bus
+D (35424) spi_master: device0 locked the bus
+D (35426) spi_master: device0 release bus
+D (35426) spi_master: device0 locked the bus
+D (35428) spi_master: device0 release bus
+D (35435) spi_master: device0 locked the bus
+D (35437) spi_master: device0 release bus
+D (35437) spi_master: device0 locked the bus
+D (35439) spi_master: device0 release bus
+D (35439) spi_master: device0 locked the bus
+D (35441) spi_master: device0 release bus
+D (39441) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (39441) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (40042) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (40042) ledc: In slow speed mode, global clk set: 11
+D (40043) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (40043) ledc: GPIO 5 is not usable, maybe conflict with others
+I (40044) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (40045) spi: SPI2 use gpio matrix.
+D (40046) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (40047) spi_hal: eff: 80000, limit: 80000k(/0), 0 dummy, -1 delay
+D (40047) spi_master: SPI2: New device added to CS0, effective clock: 80000000 Hz
+D (40047) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (40048) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (40048) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (40068) spi_master: device0 locked the bus
+D (40069) spi_master: device0 release bus
+D (40169) spi_master: device0 locked the bus
+D (40170) spi_master: device0 release bus
+D (40170) spi_master: device0 locked the bus
+D (40172) spi_master: device0 release bus
+D (40172) spi_master: device0 locked the bus
+D (40174) spi_master: device0 release bus
+I (40174) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (40174) spi_master: device0 locked the bus
+D (40176) spi_master: device0 release bus
+I (40176) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (40177) spi_master: device0 locked the bus
+D (40178) spi_master: device0 release bus
+I (40179) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (40179) spi_master: device0 locked the bus
+D (40180) spi_master: device0 release bus
+D (40180) spi_master: device0 locked the bus
+D (40181) spi_master: device0 release bus
+D (40182) spi_master: device0 locked the bus
+D (40183) spi_master: device0 release bus
+D (40184) spi_master: device0 locked the bus
+D (40184) spi_master: device0 release bus
+I (40185) prd.display: tuning=C-vendor-gamma-only active
+I (40185) prd.display: init ok host=SPI2 clock_hz=80000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (40186) prd.app: sweep=1 clock_hz=80000000 init_ok attempts=4 failures=0
+D (40191) spi_master: device0 locked the bus
+D (40193) spi_master: device0 release bus
+D (40193) spi_master: device0 locked the bus
+D (40194) spi_master: device0 release bus
+D (40195) spi_master: device0 locked the bus
+D (40197) spi_master: device0 release bus
+D (40201) spi_master: device0 locked the bus
+D (40202) spi_master: device0 release bus
+D (40203) spi_master: device0 locked the bus
+D (40204) spi_master: device0 release bus
+D (40204) spi_master: device0 locked the bus
+D (40206) spi_master: device0 release bus
+D (40210) spi_master: device0 locked the bus
+D (40212) spi_master: device0 release bus
+D (40212) spi_master: device0 locked the bus
+D (40214) spi_master: device0 release bus
+D (40214) spi_master: device0 locked the bus
+D (40216) spi_master: device0 release bus
+D (40220) spi_master: device0 locked the bus
+D (40221) spi_master: device0 release bus
+D (40222) spi_master: device0 locked the bus
+D (40223) spi_master: device0 release bus
+D (40224) spi_master: device0 locked the bus
+D (40226) spi_master: device0 release bus
+D (40230) spi_master: device0 locked the bus
+D (40231) spi_master: device0 release bus
+D (40231) spi_master: device0 locked the bus
+D (40233) spi_master: device0 release bus
+D (40233) spi_master: device0 locked the bus
+D (40235) spi_master: device0 release bus
+D (40239) spi_master: device0 locked the bus
+D (40241) spi_master: device0 release bus
+D (40241) spi_master: device0 locked the bus
+D (40242) spi_master: device0 release bus
+D (40243) spi_master: device0 locked the bus
+D (40245) spi_master: device0 release bus
+D (40890) prd.app: heartbeat
+D (44251) spi_master: device0 locked the bus
+D (44252) spi_master: device0 release bus
+D (44253) spi_master: device0 locked the bus
+D (44254) spi_master: device0 release bus
+D (44255) spi_master: device0 locked the bus
+D (44257) spi_master: device0 release bus
+D (44262) spi_master: device0 locked the bus
+D (44264) spi_master: device0 release bus
+D (44264) spi_master: device0 locked the bus
+D (44265) spi_master: device0 release bus
+D (44266) spi_master: device0 locked the bus
+D (44268) spi_master: device0 release bus
+D (44273) spi_master: device0 locked the bus
+D (44275) spi_master: device0 release bus
+D (44275) spi_master: device0 locked the bus
+D (44277) spi_master: device0 release bus
+D (44277) spi_master: device0 locked the bus
+D (44279) spi_master: device0 release bus
+D (44285) spi_master: device0 locked the bus
+D (44286) spi_master: device0 release bus
+D (44286) spi_master: device0 locked the bus
+D (44288) spi_master: device0 release bus
+D (44288) spi_master: device0 locked the bus
+D (44290) spi_master: device0 release bus
+D (44296) spi_master: device0 locked the bus
+D (44297) spi_master: device0 release bus
+D (44298) spi_master: device0 locked the bus
+D (44299) spi_master: device0 release bus
+D (44299) spi_master: device0 locked the bus
+D (44301) spi_master: device0 release bus
+D (44307) spi_master: device0 locked the bus
+D (44308) spi_master: device0 release bus
+D (44309) spi_master: device0 locked the bus
+D (44310) spi_master: device0 release bus
+D (44311) spi_master: device0 locked the bus
+D (44313) spi_master: device0 release bus
+D (48321) spi_master: device0 locked the bus
+D (48322) spi_master: device0 release bus
+D (48322) spi_master: device0 locked the bus
+D (48324) spi_master: device0 release bus
+D (48324) spi_master: device0 locked the bus
+D (48326) spi_master: device0 release bus
+D (48334) spi_master: device0 locked the bus
+D (48335) spi_master: device0 release bus
+D (48335) spi_master: device0 locked the bus
+D (48337) spi_master: device0 release bus
+D (48337) spi_master: device0 locked the bus
+D (48339) spi_master: device0 release bus
+D (48347) spi_master: device0 locked the bus
+D (48348) spi_master: device0 release bus
+D (48348) spi_master: device0 locked the bus
+D (48350) spi_master: device0 release bus
+D (48350) spi_master: device0 locked the bus
+D (48352) spi_master: device0 release bus
+D (48360) spi_master: device0 locked the bus
+D (48361) spi_master: device0 release bus
+D (48361) spi_master: device0 locked the bus
+D (48363) spi_master: device0 release bus
+D (48363) spi_master: device0 locked the bus
+D (48365) spi_master: device0 release bus
+D (48372) spi_master: device0 locked the bus
+D (48374) spi_master: device0 release bus
+D (48374) spi_master: device0 locked the bus
+D (48376) spi_master: device0 release bus
+D (48376) spi_master: device0 locked the bus
+D (48378) spi_master: device0 release bus
+D (48385) spi_master: device0 locked the bus
+D (48387) spi_master: device0 release bus
+D (48387) spi_master: device0 locked the bus
+D (48389) spi_master: device0 release bus
+D (48389) spi_master: device0 locked the bus
+D (48391) spi_master: device0 release bus
+D (50890) prd.app: heartbeat
+D (52391) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (52391) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (52992) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (52992) ledc: In slow speed mode, global clk set: 11
+D (52993) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (52993) ledc: GPIO 5 is not usable, maybe conflict with others
+I (52994) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (52995) spi: SPI2 use gpio matrix.
+D (52996) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (52997) spi_hal: eff: 10000, limit: 80000k(/0), 0 dummy, -1 delay
+D (52997) spi_master: SPI2: New device added to CS0, effective clock: 10000000 Hz
+D (52997) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (52998) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (52998) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (53018) spi_master: device0 locked the bus
+D (53019) spi_master: device0 release bus
+D (53119) spi_master: device0 locked the bus
+D (53120) spi_master: device0 release bus
+D (53120) spi_master: device0 locked the bus
+D (53122) spi_master: device0 release bus
+D (53122) spi_master: device0 locked the bus
+D (53124) spi_master: device0 release bus
+I (53124) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (53124) spi_master: device0 locked the bus
+D (53126) spi_master: device0 release bus
+I (53126) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (53127) spi_master: device0 locked the bus
+D (53128) spi_master: device0 release bus
+I (53129) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (53129) spi_master: device0 locked the bus
+D (53130) spi_master: device0 release bus
+D (53130) spi_master: device0 locked the bus
+D (53132) spi_master: device0 release bus
+D (53132) spi_master: device0 locked the bus
+D (53133) spi_master: device0 release bus
+D (53134) spi_master: device0 locked the bus
+D (53135) spi_master: device0 release bus
+I (53135) prd.display: tuning=C-vendor-gamma-only active
+I (53135) prd.display: init ok host=SPI2 clock_hz=10000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (53136) prd.app: sweep=2 clock_hz=10000000 init_ok attempts=5 failures=0
+D (53141) spi_master: device0 locked the bus
+D (53143) spi_master: device0 release bus
+D (53143) spi_master: device0 locked the bus
+D (53145) spi_master: device0 release bus
+D (53145) spi_master: device0 locked the bus
+D (53147) spi_master: device0 release bus
+D (53168) spi_master: device0 locked the bus
+D (53169) spi_master: device0 release bus
+D (53170) spi_master: device0 locked the bus
+D (53171) spi_master: device0 release bus
+D (53171) spi_master: device0 locked the bus
+D (53173) spi_master: device0 release bus
+D (53194) spi_master: device0 locked the bus
+D (53195) spi_master: device0 release bus
+D (53196) spi_master: device0 locked the bus
+D (53197) spi_master: device0 release bus
+D (53198) spi_master: device0 locked the bus
+D (53200) spi_master: device0 release bus
+D (53220) spi_master: device0 locked the bus
+D (53222) spi_master: device0 release bus
+D (53222) spi_master: device0 locked the bus
+D (53224) spi_master: device0 release bus
+D (53224) spi_master: device0 locked the bus
+D (53226) spi_master: device0 release bus
+D (53247) spi_master: device0 locked the bus
+D (53248) spi_master: device0 release bus
+D (53249) spi_master: device0 locked the bus
+D (53250) spi_master: device0 release bus
+D (53250) spi_master: device0 locked the bus
+D (53253) spi_master: device0 release bus
+D (53273) spi_master: device0 locked the bus
+D (53275) spi_master: device0 release bus
+D (53275) spi_master: device0 locked the bus
+D (53276) spi_master: device0 release bus
+D (53277) spi_master: device0 locked the bus
+D (53279) spi_master: device0 release bus
+D (57285) spi_master: device0 locked the bus
+D (57286) spi_master: device0 release bus
+D (57287) spi_master: device0 locked the bus
+D (57288) spi_master: device0 release bus
+D (57289) spi_master: device0 locked the bus
+D (57291) spi_master: device0 release bus
+D (57311) spi_master: device0 locked the bus
+D (57313) spi_master: device0 release bus
+D (57313) spi_master: device0 locked the bus
+D (57314) spi_master: device0 release bus
+D (57315) spi_master: device0 locked the bus
+D (57317) spi_master: device0 release bus
+D (57338) spi_master: device0 locked the bus
+D (57339) spi_master: device0 release bus
+D (57339) spi_master: device0 locked the bus
+D (57341) spi_master: device0 release bus
+D (57341) spi_master: device0 locked the bus
+D (57343) spi_master: device0 release bus
+D (57364) spi_master: device0 locked the bus
+D (57365) spi_master: device0 release bus
+D (57366) spi_master: device0 locked the bus
+D (57367) spi_master: device0 release bus
+D (57368) spi_master: device0 locked the bus
+D (57370) spi_master: device0 release bus
+D (57390) spi_master: device0 locked the bus
+D (57392) spi_master: device0 release bus
+D (57392) spi_master: device0 locked the bus
+D (57393) spi_master: device0 release bus
+D (57394) spi_master: device0 locked the bus
+D (57396) spi_master: device0 release bus
+D (57417) spi_master: device0 locked the bus
+D (57418) spi_master: device0 release bus
+D (57418) spi_master: device0 locked the bus
+D (57420) spi_master: device0 release bus
+D (57420) spi_master: device0 locked the bus
+D (57422) spi_master: device0 release bus
+D (60890) prd.app: heartbeat
+D (61431) spi_master: device0 locked the bus
+D (61432) spi_master: device0 release bus
+D (61432) spi_master: device0 locked the bus
+D (61434) spi_master: device0 release bus
+D (61434) spi_master: device0 locked the bus
+D (61436) spi_master: device0 release bus
+D (61457) spi_master: device0 locked the bus
+D (61458) spi_master: device0 release bus
+D (61459) spi_master: device0 locked the bus
+D (61460) spi_master: device0 release bus
+D (61461) spi_master: device0 locked the bus
+D (61463) spi_master: device0 release bus
+D (61483) spi_master: device0 locked the bus
+D (61485) spi_master: device0 release bus
+D (61485) spi_master: device0 locked the bus
+D (61486) spi_master: device0 release bus
+D (61487) spi_master: device0 locked the bus
+D (61489) spi_master: device0 release bus
+D (61510) spi_master: device0 locked the bus
+D (61511) spi_master: device0 release bus
+D (61511) spi_master: device0 locked the bus
+D (61513) spi_master: device0 release bus
+D (61513) spi_master: device0 locked the bus
+D (61515) spi_master: device0 release bus
+D (61536) spi_master: device0 locked the bus
+D (61537) spi_master: device0 release bus
+D (61538) spi_master: device0 locked the bus
+D (61539) spi_master: device0 release bus
+D (61540) spi_master: device0 locked the bus
+D (61542) spi_master: device0 release bus
+D (61562) spi_master: device0 locked the bus
+D (61564) spi_master: device0 release bus
+D (61564) spi_master: device0 locked the bus
+D (61565) spi_master: device0 release bus
+D (61566) spi_master: device0 locked the bus
+D (61568) spi_master: device0 release bus
+D (65568) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (65568) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (66169) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (66169) ledc: In slow speed mode, global clk set: 11
+D (66170) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (66170) ledc: GPIO 5 is not usable, maybe conflict with others
+I (66171) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (66172) spi: SPI2 use gpio matrix.
+D (66173) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (66174) spi_hal: eff: 20000, limit: 80000k(/0), 0 dummy, -1 delay
+D (66174) spi_master: SPI2: New device added to CS0, effective clock: 20000000 Hz
+D (66174) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (66175) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (66175) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (66195) spi_master: device0 locked the bus
+D (66196) spi_master: device0 release bus
+D (66296) spi_master: device0 locked the bus
+D (66297) spi_master: device0 release bus
+D (66297) spi_master: device0 locked the bus
+D (66299) spi_master: device0 release bus
+D (66299) spi_master: device0 locked the bus
+D (66301) spi_master: device0 release bus
+I (66301) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (66301) spi_master: device0 locked the bus
+D (66303) spi_master: device0 release bus
+I (66303) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (66304) spi_master: device0 locked the bus
+D (66305) spi_master: device0 release bus
+I (66305) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (66306) spi_master: device0 locked the bus
+D (66307) spi_master: device0 release bus
+D (66307) spi_master: device0 locked the bus
+D (66308) spi_master: device0 release bus
+D (66309) spi_master: device0 locked the bus
+D (66310) spi_master: device0 release bus
+D (66311) spi_master: device0 locked the bus
+D (66311) spi_master: device0 release bus
+I (66312) prd.display: tuning=C-vendor-gamma-only active
+I (66312) prd.display: init ok host=SPI2 clock_hz=20000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (66313) prd.app: sweep=2 clock_hz=20000000 init_ok attempts=6 failures=0
+D (66318) spi_master: device0 locked the bus
+D (66319) spi_master: device0 release bus
+D (66320) spi_master: device0 locked the bus
+D (66321) spi_master: device0 release bus
+D (66322) spi_master: device0 locked the bus
+D (66324) spi_master: device0 release bus
+D (66334) spi_master: device0 locked the bus
+D (66336) spi_master: device0 release bus
+D (66336) spi_master: device0 locked the bus
+D (66337) spi_master: device0 release bus
+D (66338) spi_master: device0 locked the bus
+D (66340) spi_master: device0 release bus
+D (66350) spi_master: device0 locked the bus
+D (66352) spi_master: device0 release bus
+D (66352) spi_master: device0 locked the bus
+D (66354) spi_master: device0 release bus
+D (66354) spi_master: device0 locked the bus
+D (66356) spi_master: device0 release bus
+D (66366) spi_master: device0 locked the bus
+D (66368) spi_master: device0 release bus
+D (66368) spi_master: device0 locked the bus
+D (66370) spi_master: device0 release bus
+D (66370) spi_master: device0 locked the bus
+D (66372) spi_master: device0 release bus
+D (66383) spi_master: device0 locked the bus
+D (66384) spi_master: device0 release bus
+D (66384) spi_master: device0 locked the bus
+D (66386) spi_master: device0 release bus
+D (66386) spi_master: device0 locked the bus
+D (66388) spi_master: device0 release bus
+D (66399) spi_master: device0 locked the bus
+D (66400) spi_master: device0 release bus
+D (66401) spi_master: device0 locked the bus
+D (66402) spi_master: device0 release bus
+D (66402) spi_master: device0 locked the bus
+D (66405) spi_master: device0 release bus
+D (70411) spi_master: device0 locked the bus
+D (70412) spi_master: device0 release bus
+D (70413) spi_master: device0 locked the bus
+D (70414) spi_master: device0 release bus
+D (70415) spi_master: device0 locked the bus
+D (70417) spi_master: device0 release bus
+D (70427) spi_master: device0 locked the bus
+D (70429) spi_master: device0 release bus
+D (70429) spi_master: device0 locked the bus
+D (70430) spi_master: device0 release bus
+D (70431) spi_master: device0 locked the bus
+D (70433) spi_master: device0 release bus
+D (70443) spi_master: device0 locked the bus
+D (70445) spi_master: device0 release bus
+D (70445) spi_master: device0 locked the bus
+D (70447) spi_master: device0 release bus
+D (70447) spi_master: device0 locked the bus
+D (70449) spi_master: device0 release bus
+D (70459) spi_master: device0 locked the bus
+D (70461) spi_master: device0 release bus
+D (70461) spi_master: device0 locked the bus
+D (70463) spi_master: device0 release bus
+D (70463) spi_master: device0 locked the bus
+D (70465) spi_master: device0 release bus
+D (70476) spi_master: device0 locked the bus
+D (70477) spi_master: device0 release bus
+D (70477) spi_master: device0 locked the bus
+D (70479) spi_master: device0 release bus
+D (70479) spi_master: device0 locked the bus
+D (70481) spi_master: device0 release bus
+D (70492) spi_master: device0 locked the bus
+D (70493) spi_master: device0 release bus
+D (70494) spi_master: device0 locked the bus
+D (70495) spi_master: device0 release bus
+D (70495) spi_master: device0 locked the bus
+D (70498) spi_master: device0 release bus
+D (70890) prd.app: heartbeat
+D (74506) spi_master: device0 locked the bus
+D (74507) spi_master: device0 release bus
+D (74508) spi_master: device0 locked the bus
+D (74509) spi_master: device0 release bus
+D (74509) spi_master: device0 locked the bus
+D (74511) spi_master: device0 release bus
+D (74522) spi_master: device0 locked the bus
+D (74523) spi_master: device0 release bus
+D (74524) spi_master: device0 locked the bus
+D (74525) spi_master: device0 release bus
+D (74526) spi_master: device0 locked the bus
+D (74528) spi_master: device0 release bus
+D (74538) spi_master: device0 locked the bus
+D (74539) spi_master: device0 release bus
+D (74540) spi_master: device0 locked the bus
+D (74541) spi_master: device0 release bus
+D (74542) spi_master: device0 locked the bus
+D (74544) spi_master: device0 release bus
+D (74554) spi_master: device0 locked the bus
+D (74556) spi_master: device0 release bus
+D (74556) spi_master: device0 locked the bus
+D (74557) spi_master: device0 release bus
+D (74558) spi_master: device0 locked the bus
+D (74560) spi_master: device0 release bus
+D (74570) spi_master: device0 locked the bus
+D (74572) spi_master: device0 release bus
+D (74572) spi_master: device0 locked the bus
+D (74574) spi_master: device0 release bus
+D (74574) spi_master: device0 locked the bus
+D (74576) spi_master: device0 release bus
+D (74587) spi_master: device0 locked the bus
+D (74588) spi_master: device0 release bus
+D (74588) spi_master: device0 locked the bus
+D (74590) spi_master: device0 release bus
+D (74590) spi_master: device0 locked the bus
+D (74592) spi_master: device0 release bus
+D (78593) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (78593) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (79194) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (79194) ledc: In slow speed mode, global clk set: 11
+D (79195) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (79195) ledc: GPIO 5 is not usable, maybe conflict with others
+I (79196) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (79197) spi: SPI2 use gpio matrix.
+D (79198) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (79199) spi_hal: eff: 40000, limit: 80000k(/0), 0 dummy, -1 delay
+D (79199) spi_master: SPI2: New device added to CS0, effective clock: 40000000 Hz
+D (79199) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (79200) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (79200) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (79220) spi_master: device0 locked the bus
+D (79221) spi_master: device0 release bus
+D (79321) spi_master: device0 locked the bus
+D (79322) spi_master: device0 release bus
+D (79322) spi_master: device0 locked the bus
+D (79324) spi_master: device0 release bus
+D (79324) spi_master: device0 locked the bus
+D (79326) spi_master: device0 release bus
+I (79326) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (79326) spi_master: device0 locked the bus
+D (79328) spi_master: device0 release bus
+I (79328) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (79329) spi_master: device0 locked the bus
+D (79330) spi_master: device0 release bus
+I (79331) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (79331) spi_master: device0 locked the bus
+D (79332) spi_master: device0 release bus
+D (79332) spi_master: device0 locked the bus
+D (79334) spi_master: device0 release bus
+D (79334) spi_master: device0 locked the bus
+D (79335) spi_master: device0 release bus
+D (79336) spi_master: device0 locked the bus
+D (79337) spi_master: device0 release bus
+I (79337) prd.display: tuning=C-vendor-gamma-only active
+I (79337) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (79338) prd.app: sweep=2 clock_hz=40000000 init_ok attempts=7 failures=0
+D (79343) spi_master: device0 locked the bus
+D (79345) spi_master: device0 release bus
+D (79345) spi_master: device0 locked the bus
+D (79346) spi_master: device0 release bus
+D (79347) spi_master: device0 locked the bus
+D (79349) spi_master: device0 release bus
+D (79354) spi_master: device0 locked the bus
+D (79355) spi_master: device0 release bus
+D (79356) spi_master: device0 locked the bus
+D (79357) spi_master: device0 release bus
+D (79358) spi_master: device0 locked the bus
+D (79360) spi_master: device0 release bus
+D (79365) spi_master: device0 locked the bus
+D (79366) spi_master: device0 release bus
+D (79367) spi_master: device0 locked the bus
+D (79368) spi_master: device0 release bus
+D (79369) spi_master: device0 locked the bus
+D (79371) spi_master: device0 release bus
+D (79376) spi_master: device0 locked the bus
+D (79377) spi_master: device0 release bus
+D (79378) spi_master: device0 locked the bus
+D (79379) spi_master: device0 release bus
+D (79380) spi_master: device0 locked the bus
+D (79382) spi_master: device0 release bus
+D (79387) spi_master: device0 locked the bus
+D (79388) spi_master: device0 release bus
+D (79389) spi_master: device0 locked the bus
+D (79390) spi_master: device0 release bus
+D (79391) spi_master: device0 locked the bus
+D (79393) spi_master: device0 release bus
+D (79398) spi_master: device0 locked the bus
+D (79399) spi_master: device0 release bus
+D (79400) spi_master: device0 locked the bus
+D (79401) spi_master: device0 release bus
+D (79402) spi_master: device0 locked the bus
+D (79404) spi_master: device0 release bus
+D (80890) prd.app: heartbeat
+D (83410) spi_master: device0 locked the bus
+D (83411) spi_master: device0 release bus
+D (83412) spi_master: device0 locked the bus
+D (83413) spi_master: device0 release bus
+D (83414) spi_master: device0 locked the bus
+D (83416) spi_master: device0 release bus
+D (83421) spi_master: device0 locked the bus
+D (83423) spi_master: device0 release bus
+D (83423) spi_master: device0 locked the bus
+D (83424) spi_master: device0 release bus
+D (83425) spi_master: device0 locked the bus
+D (83427) spi_master: device0 release bus
+D (83432) spi_master: device0 locked the bus
+D (83434) spi_master: device0 release bus
+D (83434) spi_master: device0 locked the bus
+D (83435) spi_master: device0 release bus
+D (83436) spi_master: device0 locked the bus
+D (83438) spi_master: device0 release bus
+D (83444) spi_master: device0 locked the bus
+D (83445) spi_master: device0 release bus
+D (83445) spi_master: device0 locked the bus
+D (83447) spi_master: device0 release bus
+D (83447) spi_master: device0 locked the bus
+D (83449) spi_master: device0 release bus
+D (83455) spi_master: device0 locked the bus
+D (83456) spi_master: device0 release bus
+D (83457) spi_master: device0 locked the bus
+D (83458) spi_master: device0 release bus
+D (83458) spi_master: device0 locked the bus
+D (83460) spi_master: device0 release bus
+D (83466) spi_master: device0 locked the bus
+D (83467) spi_master: device0 release bus
+D (83468) spi_master: device0 locked the bus
+D (83469) spi_master: device0 release bus
+D (83470) spi_master: device0 locked the bus
+D (83472) spi_master: device0 release bus
+D (87480) spi_master: device0 locked the bus
+D (87481) spi_master: device0 release bus
+D (87481) spi_master: device0 locked the bus
+D (87483) spi_master: device0 release bus
+D (87483) spi_master: device0 locked the bus
+D (87485) spi_master: device0 release bus
+D (87492) spi_master: device0 locked the bus
+D (87494) spi_master: device0 release bus
+D (87494) spi_master: device0 locked the bus
+D (87496) spi_master: device0 release bus
+D (87496) spi_master: device0 locked the bus
+D (87498) spi_master: device0 release bus
+D (87505) spi_master: device0 locked the bus
+D (87507) spi_master: device0 release bus
+D (87507) spi_master: device0 locked the bus
+D (87509) spi_master: device0 release bus
+D (87509) spi_master: device0 locked the bus
+D (87511) spi_master: device0 release bus
+D (87518) spi_master: device0 locked the bus
+D (87520) spi_master: device0 release bus
+D (87520) spi_master: device0 locked the bus
+D (87522) spi_master: device0 release bus
+D (87522) spi_master: device0 locked the bus
+D (87524) spi_master: device0 release bus
+D (87531) spi_master: device0 locked the bus
+D (87533) spi_master: device0 release bus
+D (87533) spi_master: device0 locked the bus
+D (87534) spi_master: device0 release bus
+D (87535) spi_master: device0 locked the bus
+D (87537) spi_master: device0 release bus
+D (87544) spi_master: device0 locked the bus
+D (87546) spi_master: device0 release bus
+D (87546) spi_master: device0 locked the bus
+D (87547) spi_master: device0 release bus
+D (87548) spi_master: device0 locked the bus
+D (87550) spi_master: device0 release bus
+D (90890) prd.app: heartbeat
+D (91550) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (91550) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (92151) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (92151) ledc: In slow speed mode, global clk set: 11
+D (92152) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (92152) ledc: GPIO 5 is not usable, maybe conflict with others
+I (92153) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (92154) spi: SPI2 use gpio matrix.
+D (92155) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (92156) spi_hal: eff: 80000, limit: 80000k(/0), 0 dummy, -1 delay
+D (92156) spi_master: SPI2: New device added to CS0, effective clock: 80000000 Hz
+D (92156) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (92157) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (92157) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (92177) spi_master: device0 locked the bus
+D (92178) spi_master: device0 release bus
+D (92278) spi_master: device0 locked the bus
+D (92279) spi_master: device0 release bus
+D (92279) spi_master: device0 locked the bus
+D (92281) spi_master: device0 release bus
+D (92281) spi_master: device0 locked the bus
+D (92283) spi_master: device0 release bus
+I (92283) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (92283) spi_master: device0 locked the bus
+D (92285) spi_master: device0 release bus
+I (92285) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (92286) spi_master: device0 locked the bus
+D (92287) spi_master: device0 release bus
+I (92288) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (92288) spi_master: device0 locked the bus
+D (92289) spi_master: device0 release bus
+D (92289) spi_master: device0 locked the bus
+D (92290) spi_master: device0 release bus
+D (92291) spi_master: device0 locked the bus
+D (92292) spi_master: device0 release bus
+D (92293) spi_master: device0 locked the bus
+D (92293) spi_master: device0 release bus
+I (92294) prd.display: tuning=C-vendor-gamma-only active
+I (92294) prd.display: init ok host=SPI2 clock_hz=80000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (92295) prd.app: sweep=2 clock_hz=80000000 init_ok attempts=8 failures=0
+D (92300) spi_master: device0 locked the bus
+D (92302) spi_master: device0 release bus
+D (92302) spi_master: device0 locked the bus
+D (92303) spi_master: device0 release bus
+D (92304) spi_master: device0 locked the bus
+D (92306) spi_master: device0 release bus
+D (92310) spi_master: device0 locked the bus
+D (92311) spi_master: device0 release bus
+D (92312) spi_master: device0 locked the bus
+D (92313) spi_master: device0 release bus
+D (92314) spi_master: device0 locked the bus
+D (92316) spi_master: device0 release bus
+D (92320) spi_master: device0 locked the bus
+D (92321) spi_master: device0 release bus
+D (92321) spi_master: device0 locked the bus
+D (92323) spi_master: device0 release bus
+D (92323) spi_master: device0 locked the bus
+D (92325) spi_master: device0 release bus
+D (92329) spi_master: device0 locked the bus
+D (92330) spi_master: device0 release bus
+D (92331) spi_master: device0 locked the bus
+D (92332) spi_master: device0 release bus
+D (92333) spi_master: device0 locked the bus
+D (92335) spi_master: device0 release bus
+D (92339) spi_master: device0 locked the bus
+D (92340) spi_master: device0 release bus
+D (92341) spi_master: device0 locked the bus
+D (92342) spi_master: device0 release bus
+D (92342) spi_master: device0 locked the bus
+D (92344) spi_master: device0 release bus
+D (92348) spi_master: device0 locked the bus
+D (92350) spi_master: device0 release bus
+D (92350) spi_master: device0 locked the bus
+D (92351) spi_master: device0 release bus
+D (92352) spi_master: device0 locked the bus
+D (92354) spi_master: device0 release bus
+D (96360) spi_master: device0 locked the bus
+D (96361) spi_master: device0 release bus
+D (96362) spi_master: device0 locked the bus
+D (96363) spi_master: device0 release bus
+D (96364) spi_master: device0 locked the bus
+D (96366) spi_master: device0 release bus
+D (96371) spi_master: device0 locked the bus
+D (96372) spi_master: device0 release bus
+D (96373) spi_master: device0 locked the bus
+D (96374) spi_master: device0 release bus
+D (96375) spi_master: device0 locked the bus
+D (96377) spi_master: device0 release bus
+D (96382) spi_master: device0 locked the bus
+D (96384) spi_master: device0 release bus
+D (96384) spi_master: device0 locked the bus
+D (96385) spi_master: device0 release bus
+D (96386) spi_master: device0 locked the bus
+D (96388) spi_master: device0 release bus
+D (96393) spi_master: device0 locked the bus
+D (96395) spi_master: device0 release bus
+D (96395) spi_master: device0 locked the bus
+D (96397) spi_master: device0 release bus
+D (96397) spi_master: device0 locked the bus
+D (96399) spi_master: device0 release bus
+D (96405) spi_master: device0 locked the bus
+D (96406) spi_master: device0 release bus
+D (96407) spi_master: device0 locked the bus
+D (96408) spi_master: device0 release bus
+D (96408) spi_master: device0 locked the bus
+D (96410) spi_master: device0 release bus
+D (96416) spi_master: device0 locked the bus
+D (96417) spi_master: device0 release bus
+D (96418) spi_master: device0 locked the bus
+D (96419) spi_master: device0 release bus
+D (96419) spi_master: device0 locked the bus
+D (96422) spi_master: device0 release bus
+D (100430) spi_master: device0 locked the bus
+D (100431) spi_master: device0 release bus
+D (100431) spi_master: device0 locked the bus
+D (100433) spi_master: device0 release bus
+D (100433) spi_master: device0 locked the bus
+D (100435) spi_master: device0 release bus
+D (100443) spi_master: device0 locked the bus
+D (100444) spi_master: device0 release bus
+D (100444) spi_master: device0 locked the bus
+D (100446) spi_master: device0 release bus
+D (100446) spi_master: device0 locked the bus
+D (100448) spi_master: device0 release bus
+D (100456) spi_master: device0 locked the bus
+D (100457) spi_master: device0 release bus
+D (100457) spi_master: device0 locked the bus
+D (100459) spi_master: device0 release bus
+D (100459) spi_master: device0 locked the bus
+D (100461) spi_master: device0 release bus
+D (100469) spi_master: device0 locked the bus
+D (100470) spi_master: device0 release bus
+D (100470) spi_master: device0 locked the bus
+D (100472) spi_master: device0 release bus
+D (100472) spi_master: device0 locked the bus
+D (100474) spi_master: device0 release bus
+D (100482) spi_master: device0 locked the bus
+D (100483) spi_master: device0 release bus
+D (100483) spi_master: device0 locked the bus
+D (100485) spi_master: device0 release bus
+D (100485) spi_master: device0 locked the bus
+D (100487) spi_master: device0 release bus
+D (100495) spi_master: device0 locked the bus
+D (100496) spi_master: device0 release bus
+D (100496) spi_master: device0 locked the bus
+D (100498) spi_master: device0 release bus
+D (100498) spi_master: device0 locked the bus
+D (100500) spi_master: device0 release bus
+D (100890) prd.app: heartbeat
+D (104501) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (104501) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (105102) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (105102) ledc: In slow speed mode, global clk set: 11
+D (105103) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (105103) ledc: GPIO 5 is not usable, maybe conflict with others
+I (105104) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (105105) spi: SPI2 use gpio matrix.
+D (105106) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (105107) spi_hal: eff: 10000, limit: 80000k(/0), 0 dummy, -1 delay
+D (105107) spi_master: SPI2: New device added to CS0, effective clock: 10000000 Hz
+D (105108) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (105108) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (105108) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (105128) spi_master: device0 locked the bus
+D (105129) spi_master: device0 release bus
+D (105229) spi_master: device0 locked the bus
+D (105230) spi_master: device0 release bus
+D (105230) spi_master: device0 locked the bus
+D (105232) spi_master: device0 release bus
+D (105232) spi_master: device0 locked the bus
+D (105234) spi_master: device0 release bus
+I (105234) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (105234) spi_master: device0 locked the bus
+D (105236) spi_master: device0 release bus
+I (105236) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (105237) spi_master: device0 locked the bus
+D (105238) spi_master: device0 release bus
+I (105239) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (105239) spi_master: device0 locked the bus
+D (105240) spi_master: device0 release bus
+D (105240) spi_master: device0 locked the bus
+D (105242) spi_master: device0 release bus
+D (105242) spi_master: device0 locked the bus
+D (105244) spi_master: device0 release bus
+D (105244) spi_master: device0 locked the bus
+D (105245) spi_master: device0 release bus
+I (105245) prd.display: tuning=C-vendor-gamma-only active
+I (105246) prd.display: init ok host=SPI2 clock_hz=10000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (105246) prd.app: sweep=3 clock_hz=10000000 init_ok attempts=9 failures=0
+D (105251) spi_master: device0 locked the bus
+D (105253) spi_master: device0 release bus
+D (105253) spi_master: device0 locked the bus
+D (105255) spi_master: device0 release bus
+D (105255) spi_master: device0 locked the bus
+D (105257) spi_master: device0 release bus
+D (105278) spi_master: device0 locked the bus
+D (105279) spi_master: device0 release bus
+D (105280) spi_master: device0 locked the bus
+D (105281) spi_master: device0 release bus
+D (105282) spi_master: device0 locked the bus
+D (105284) spi_master: device0 release bus
+D (105304) spi_master: device0 locked the bus
+D (105306) spi_master: device0 release bus
+D (105306) spi_master: device0 locked the bus
+D (105308) spi_master: device0 release bus
+D (105308) spi_master: device0 locked the bus
+D (105310) spi_master: device0 release bus
+D (105331) spi_master: device0 locked the bus
+D (105332) spi_master: device0 release bus
+D (105333) spi_master: device0 locked the bus
+D (105334) spi_master: device0 release bus
+D (105334) spi_master: device0 locked the bus
+D (105337) spi_master: device0 release bus
+D (105357) spi_master: device0 locked the bus
+D (105359) spi_master: device0 release bus
+D (105359) spi_master: device0 locked the bus
+D (105361) spi_master: device0 release bus
+D (105361) spi_master: device0 locked the bus
+D (105363) spi_master: device0 release bus
+D (105384) spi_master: device0 locked the bus
+D (105385) spi_master: device0 release bus
+D (105386) spi_master: device0 locked the bus
+D (105387) spi_master: device0 release bus
+D (105387) spi_master: device0 locked the bus
+D (105390) spi_master: device0 release bus
+D (109396) spi_master: device0 locked the bus
+D (109397) spi_master: device0 release bus
+D (109398) spi_master: device0 locked the bus
+D (109399) spi_master: device0 release bus
+D (109400) spi_master: device0 locked the bus
+D (109402) spi_master: device0 release bus
+D (109422) spi_master: device0 locked the bus
+D (109424) spi_master: device0 release bus
+D (109424) spi_master: device0 locked the bus
+D (109426) spi_master: device0 release bus
+D (109426) spi_master: device0 locked the bus
+D (109428) spi_master: device0 release bus
+D (109449) spi_master: device0 locked the bus
+D (109450) spi_master: device0 release bus
+D (109451) spi_master: device0 locked the bus
+D (109452) spi_master: device0 release bus
+D (109452) spi_master: device0 locked the bus
+D (109455) spi_master: device0 release bus
+D (109475) spi_master: device0 locked the bus
+D (109477) spi_master: device0 release bus
+D (109477) spi_master: device0 locked the bus
+D (109478) spi_master: device0 release bus
+D (109479) spi_master: device0 locked the bus
+D (109481) spi_master: device0 release bus
+D (109502) spi_master: device0 locked the bus
+D (109503) spi_master: device0 release bus
+D (109503) spi_master: device0 locked the bus
+D (109505) spi_master: device0 release bus
+D (109505) spi_master: device0 locked the bus
+D (109507) spi_master: device0 release bus
+D (109528) spi_master: device0 locked the bus
+D (109529) spi_master: device0 release bus
+D (109530) spi_master: device0 locked the bus
+D (109531) spi_master: device0 release bus
+D (109532) spi_master: device0 locked the bus
+D (109534) spi_master: device0 release bus
+D (110890) prd.app: heartbeat
+D (113542) spi_master: device0 locked the bus
+D (113543) spi_master: device0 release bus
+D (113543) spi_master: device0 locked the bus
+D (113545) spi_master: device0 release bus
+D (113545) spi_master: device0 locked the bus
+D (113547) spi_master: device0 release bus
+D (113568) spi_master: device0 locked the bus
+D (113569) spi_master: device0 release bus
+D (113570) spi_master: device0 locked the bus
+D (113571) spi_master: device0 release bus
+D (113572) spi_master: device0 locked the bus
+D (113574) spi_master: device0 release bus
+D (113594) spi_master: device0 locked the bus
+D (113596) spi_master: device0 release bus
+D (113596) spi_master: device0 locked the bus
+D (113598) spi_master: device0 release bus
+D (113598) spi_master: device0 locked the bus
+D (113600) spi_master: device0 release bus
+D (113621) spi_master: device0 locked the bus
+D (113622) spi_master: device0 release bus
+D (113623) spi_master: device0 locked the bus
+D (113624) spi_master: device0 release bus
+D (113624) spi_master: device0 locked the bus
+D (113627) spi_master: device0 release bus
+D (113647) spi_master: device0 locked the bus
+D (113649) spi_master: device0 release bus
+D (113649) spi_master: device0 locked the bus
+D (113650) spi_master: device0 release bus
+D (113651) spi_master: device0 locked the bus
+D (113653) spi_master: device0 release bus
+D (113674) spi_master: device0 locked the bus
+D (113675) spi_master: device0 release bus
+D (113675) spi_master: device0 locked the bus
+D (113677) spi_master: device0 release bus
+D (113677) spi_master: device0 locked the bus
+D (113679) spi_master: device0 release bus
+D (117680) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (117680) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (118281) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (118281) ledc: In slow speed mode, global clk set: 11
+D (118282) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (118282) ledc: GPIO 5 is not usable, maybe conflict with others
+I (118283) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (118284) spi: SPI2 use gpio matrix.
+D (118285) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (118286) spi_hal: eff: 20000, limit: 80000k(/0), 0 dummy, -1 delay
+D (118286) spi_master: SPI2: New device added to CS0, effective clock: 20000000 Hz
+D (118286) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (118287) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (118287) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (118307) spi_master: device0 locked the bus
+D (118308) spi_master: device0 release bus
+D (118408) spi_master: device0 locked the bus
+D (118409) spi_master: device0 release bus
+D (118409) spi_master: device0 locked the bus
+D (118411) spi_master: device0 release bus
+D (118411) spi_master: device0 locked the bus
+D (118413) spi_master: device0 release bus
+I (118413) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (118413) spi_master: device0 locked the bus
+D (118415) spi_master: device0 release bus
+I (118415) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (118416) spi_master: device0 locked the bus
+D (118417) spi_master: device0 release bus
+I (118418) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (118418) spi_master: device0 locked the bus
+D (118419) spi_master: device0 release bus
+D (118419) spi_master: device0 locked the bus
+D (118421) spi_master: device0 release bus
+D (118421) spi_master: device0 locked the bus
+D (118423) spi_master: device0 release bus
+D (118423) spi_master: device0 locked the bus
+D (118424) spi_master: device0 release bus
+I (118424) prd.display: tuning=C-vendor-gamma-only active
+I (118425) prd.display: init ok host=SPI2 clock_hz=20000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (118425) prd.app: sweep=3 clock_hz=20000000 init_ok attempts=10 failures=0
+D (118430) spi_master: device0 locked the bus
+D (118432) spi_master: device0 release bus
+D (118432) spi_master: device0 locked the bus
+D (118434) spi_master: device0 release bus
+D (118434) spi_master: device0 locked the bus
+D (118436) spi_master: device0 release bus
+D (118447) spi_master: device0 locked the bus
+D (118448) spi_master: device0 release bus
+D (118448) spi_master: device0 locked the bus
+D (118450) spi_master: device0 release bus
+D (118450) spi_master: device0 locked the bus
+D (118452) spi_master: device0 release bus
+D (118463) spi_master: device0 locked the bus
+D (118464) spi_master: device0 release bus
+D (118465) spi_master: device0 locked the bus
+D (118466) spi_master: device0 release bus
+D (118466) spi_master: device0 locked the bus
+D (118469) spi_master: device0 release bus
+D (118479) spi_master: device0 locked the bus
+D (118480) spi_master: device0 release bus
+D (118481) spi_master: device0 locked the bus
+D (118482) spi_master: device0 release bus
+D (118483) spi_master: device0 locked the bus
+D (118485) spi_master: device0 release bus
+D (118495) spi_master: device0 locked the bus
+D (118496) spi_master: device0 release bus
+D (118497) spi_master: device0 locked the bus
+D (118498) spi_master: device0 release bus
+D (118499) spi_master: device0 locked the bus
+D (118501) spi_master: device0 release bus
+D (118511) spi_master: device0 locked the bus
+D (118513) spi_master: device0 release bus
+D (118513) spi_master: device0 locked the bus
+D (118514) spi_master: device0 release bus
+D (118515) spi_master: device0 locked the bus
+D (118517) spi_master: device0 release bus
+D (120890) prd.app: heartbeat
+D (122523) spi_master: device0 locked the bus
+D (122524) spi_master: device0 release bus
+D (122525) spi_master: device0 locked the bus
+D (122526) spi_master: device0 release bus
+D (122527) spi_master: device0 locked the bus
+D (122529) spi_master: device0 release bus
+D (122539) spi_master: device0 locked the bus
+D (122541) spi_master: device0 release bus
+D (122541) spi_master: device0 locked the bus
+D (122542) spi_master: device0 release bus
+D (122543) spi_master: device0 locked the bus
+D (122545) spi_master: device0 release bus
+D (122555) spi_master: device0 locked the bus
+D (122557) spi_master: device0 release bus
+D (122557) spi_master: device0 locked the bus
+D (122559) spi_master: device0 release bus
+D (122559) spi_master: device0 locked the bus
+D (122561) spi_master: device0 release bus
+D (122571) spi_master: device0 locked the bus
+D (122573) spi_master: device0 release bus
+D (122573) spi_master: device0 locked the bus
+D (122575) spi_master: device0 release bus
+D (122575) spi_master: device0 locked the bus
+D (122577) spi_master: device0 release bus
+D (122588) spi_master: device0 locked the bus
+D (122589) spi_master: device0 release bus
+D (122589) spi_master: device0 locked the bus
+D (122591) spi_master: device0 release bus
+D (122591) spi_master: device0 locked the bus
+D (122593) spi_master: device0 release bus
+D (122604) spi_master: device0 locked the bus
+D (122605) spi_master: device0 release bus
+D (122606) spi_master: device0 locked the bus
+D (122607) spi_master: device0 release bus
+D (122607) spi_master: device0 locked the bus
+D (122609) spi_master: device0 release bus
+D (126618) spi_master: device0 locked the bus
+D (126619) spi_master: device0 release bus
+D (126619) spi_master: device0 locked the bus
+D (126621) spi_master: device0 release bus
+D (126621) spi_master: device0 locked the bus
+D (126623) spi_master: device0 release bus
+D (126634) spi_master: device0 locked the bus
+D (126635) spi_master: device0 release bus
+D (126636) spi_master: device0 locked the bus
+D (126637) spi_master: device0 release bus
+D (126637) spi_master: device0 locked the bus
+D (126639) spi_master: device0 release bus
+D (126650) spi_master: device0 locked the bus
+D (126651) spi_master: device0 release bus
+D (126652) spi_master: device0 locked the bus
+D (126653) spi_master: device0 release bus
+D (126654) spi_master: device0 locked the bus
+D (126656) spi_master: device0 release bus
+D (126666) spi_master: device0 locked the bus
+D (126668) spi_master: device0 release bus
+D (126668) spi_master: device0 locked the bus
+D (126669) spi_master: device0 release bus
+D (126670) spi_master: device0 locked the bus
+D (126672) spi_master: device0 release bus
+D (126682) spi_master: device0 locked the bus
+D (126684) spi_master: device0 release bus
+D (126684) spi_master: device0 locked the bus
+D (126686) spi_master: device0 release bus
+D (126686) spi_master: device0 locked the bus
+D (126688) spi_master: device0 release bus
+D (126698) spi_master: device0 locked the bus
+D (126700) spi_master: device0 release bus
+D (126700) spi_master: device0 locked the bus
+D (126702) spi_master: device0 release bus
+D (126702) spi_master: device0 locked the bus
+D (126704) spi_master: device0 release bus
+D (130704) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (130704) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (130890) prd.app: heartbeat
+D (131305) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (131305) ledc: In slow speed mode, global clk set: 11
+D (131306) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (131306) ledc: GPIO 5 is not usable, maybe conflict with others
+I (131307) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (131308) spi: SPI2 use gpio matrix.
+D (131309) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (131310) spi_hal: eff: 40000, limit: 80000k(/0), 0 dummy, -1 delay
+D (131310) spi_master: SPI2: New device added to CS0, effective clock: 40000000 Hz
+D (131310) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (131311) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (131311) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (131331) spi_master: device0 locked the bus
+D (131332) spi_master: device0 release bus
+D (131432) spi_master: device0 locked the bus
+D (131433) spi_master: device0 release bus
+D (131433) spi_master: device0 locked the bus
+D (131435) spi_master: device0 release bus
+D (131435) spi_master: device0 locked the bus
+D (131437) spi_master: device0 release bus
+I (131437) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (131437) spi_master: device0 locked the bus
+D (131439) spi_master: device0 release bus
+I (131439) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (131440) spi_master: device0 locked the bus
+D (131441) spi_master: device0 release bus
+I (131442) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (131442) spi_master: device0 locked the bus
+D (131443) spi_master: device0 release bus
+D (131443) spi_master: device0 locked the bus
+D (131445) spi_master: device0 release bus
+D (131445) spi_master: device0 locked the bus
+D (131447) spi_master: device0 release bus
+D (131447) spi_master: device0 locked the bus
+D (131448) spi_master: device0 release bus
+I (131448) prd.display: tuning=C-vendor-gamma-only active
+I (131449) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (131449) prd.app: sweep=3 clock_hz=40000000 init_ok attempts=11 failures=0
+D (131454) spi_master: device0 locked the bus
+D (131456) spi_master: device0 release bus
+D (131456) spi_master: device0 locked the bus
+D (131458) spi_master: device0 release bus
+D (131458) spi_master: device0 locked the bus
+D (131460) spi_master: device0 release bus
+D (131466) spi_master: device0 locked the bus
+D (131467) spi_master: device0 release bus
+D (131467) spi_master: device0 locked the bus
+D (131469) spi_master: device0 release bus
+D (131469) spi_master: device0 locked the bus
+D (131471) spi_master: device0 release bus
+D (131477) spi_master: device0 locked the bus
+D (131478) spi_master: device0 release bus
+D (131479) spi_master: device0 locked the bus
+D (131480) spi_master: device0 release bus
+D (131480) spi_master: device0 locked the bus
+D (131482) spi_master: device0 release bus
+D (131488) spi_master: device0 locked the bus
+D (131489) spi_master: device0 release bus
+D (131490) spi_master: device0 locked the bus
+D (131491) spi_master: device0 release bus
+D (131491) spi_master: device0 locked the bus
+D (131494) spi_master: device0 release bus
+D (131499) spi_master: device0 locked the bus
+D (131500) spi_master: device0 release bus
+D (131501) spi_master: device0 locked the bus
+D (131502) spi_master: device0 release bus
+D (131502) spi_master: device0 locked the bus
+D (131505) spi_master: device0 release bus
+D (131510) spi_master: device0 locked the bus
+D (131511) spi_master: device0 release bus
+D (131512) spi_master: device0 locked the bus
+D (131513) spi_master: device0 release bus
+D (131513) spi_master: device0 locked the bus
+D (131516) spi_master: device0 release bus
+D (135522) spi_master: device0 locked the bus
+D (135523) spi_master: device0 release bus
+D (135524) spi_master: device0 locked the bus
+D (135525) spi_master: device0 release bus
+D (135526) spi_master: device0 locked the bus
+D (135528) spi_master: device0 release bus
+D (135533) spi_master: device0 locked the bus
+D (135535) spi_master: device0 release bus
+D (135535) spi_master: device0 locked the bus
+D (135537) spi_master: device0 release bus
+D (135537) spi_master: device0 locked the bus
+D (135539) spi_master: device0 release bus
+D (135545) spi_master: device0 locked the bus
+D (135546) spi_master: device0 release bus
+D (135546) spi_master: device0 locked the bus
+D (135548) spi_master: device0 release bus
+D (135548) spi_master: device0 locked the bus
+D (135550) spi_master: device0 release bus
+D (135556) spi_master: device0 locked the bus
+D (135557) spi_master: device0 release bus
+D (135558) spi_master: device0 locked the bus
+D (135559) spi_master: device0 release bus
+D (135559) spi_master: device0 locked the bus
+D (135562) spi_master: device0 release bus
+D (135567) spi_master: device0 locked the bus
+D (135568) spi_master: device0 release bus
+D (135569) spi_master: device0 locked the bus
+D (135570) spi_master: device0 release bus
+D (135571) spi_master: device0 locked the bus
+D (135573) spi_master: device0 release bus
+D (135578) spi_master: device0 locked the bus
+D (135580) spi_master: device0 release bus
+D (135580) spi_master: device0 locked the bus
+D (135582) spi_master: device0 release bus
+D (135582) spi_master: device0 locked the bus
+D (135584) spi_master: device0 release bus
+D (139592) spi_master: device0 locked the bus
+D (139593) spi_master: device0 release bus
+D (139593) spi_master: device0 locked the bus
+D (139595) spi_master: device0 release bus
+D (139595) spi_master: device0 locked the bus
+D (139597) spi_master: device0 release bus
+D (139605) spi_master: device0 locked the bus
+D (139606) spi_master: device0 release bus
+D (139606) spi_master: device0 locked the bus
+D (139608) spi_master: device0 release bus
+D (139608) spi_master: device0 locked the bus
+D (139610) spi_master: device0 release bus
+D (139618) spi_master: device0 locked the bus
+D (139619) spi_master: device0 release bus
+D (139619) spi_master: device0 locked the bus
+D (139621) spi_master: device0 release bus
+D (139621) spi_master: device0 locked the bus
+D (139623) spi_master: device0 release bus
+D (139631) spi_master: device0 locked the bus
+D (139632) spi_master: device0 release bus
+D (139632) spi_master: device0 locked the bus
+D (139634) spi_master: device0 release bus
+D (139634) spi_master: device0 locked the bus
+D (139636) spi_master: device0 release bus
+D (139644) spi_master: device0 locked the bus
+D (139645) spi_master: device0 release bus
+D (139645) spi_master: device0 locked the bus
+D (139647) spi_master: device0 release bus
+D (139647) spi_master: device0 locked the bus
+D (139649) spi_master: device0 release bus
+D (139657) spi_master: device0 locked the bus
+D (139658) spi_master: device0 release bus
+D (139658) spi_master: device0 locked the bus
+D (139660) spi_master: device0 release bus
+D (139660) spi_master: device0 locked the bus
+D (139662) spi_master: device0 release bus
+D (140890) prd.app: heartbeat
+D (143663) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (143663) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (144264) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (144264) ledc: In slow speed mode, global clk set: 11
+D (144265) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (144265) ledc: GPIO 5 is not usable, maybe conflict with others
+I (144266) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (144267) spi: SPI2 use gpio matrix.
+D (144268) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (144269) spi_hal: eff: 80000, limit: 80000k(/0), 0 dummy, -1 delay
+D (144269) spi_master: SPI2: New device added to CS0, effective clock: 80000000 Hz
+D (144269) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (144270) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (144270) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (144290) spi_master: device0 locked the bus
+D (144291) spi_master: device0 release bus
+D (144391) spi_master: device0 locked the bus
+D (144392) spi_master: device0 release bus
+D (144392) spi_master: device0 locked the bus
+D (144394) spi_master: device0 release bus
+D (144394) spi_master: device0 locked the bus
+D (144396) spi_master: device0 release bus
+I (144396) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (144397) spi_master: device0 locked the bus
+D (144398) spi_master: device0 release bus
+I (144398) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (144399) spi_master: device0 locked the bus
+D (144400) spi_master: device0 release bus
+I (144401) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (144401) spi_master: device0 locked the bus
+D (144402) spi_master: device0 release bus
+D (144402) spi_master: device0 locked the bus
+D (144404) spi_master: device0 release bus
+D (144404) spi_master: device0 locked the bus
+D (144406) spi_master: device0 release bus
+D (144406) spi_master: device0 locked the bus
+D (144407) spi_master: device0 release bus
+I (144407) prd.display: tuning=C-vendor-gamma-only active
+I (144408) prd.display: init ok host=SPI2 clock_hz=80000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (144408) prd.app: sweep=3 clock_hz=80000000 init_ok attempts=12 failures=0
+D (144414) spi_master: device0 locked the bus
+D (144415) spi_master: device0 release bus
+D (144415) spi_master: device0 locked the bus
+D (144417) spi_master: device0 release bus
+D (144417) spi_master: device0 locked the bus
+D (144419) spi_master: device0 release bus
+D (144423) spi_master: device0 locked the bus
+D (144425) spi_master: device0 release bus
+D (144425) spi_master: device0 locked the bus
+D (144427) spi_master: device0 release bus
+D (144427) spi_master: device0 locked the bus
+D (144429) spi_master: device0 release bus
+D (144433) spi_master: device0 locked the bus
+D (144435) spi_master: device0 release bus
+D (144435) spi_master: device0 locked the bus
+D (144436) spi_master: device0 release bus
+D (144437) spi_master: device0 locked the bus
+D (144439) spi_master: device0 release bus
+D (144443) spi_master: device0 locked the bus
+D (144444) spi_master: device0 release bus
+D (144445) spi_master: device0 locked the bus
+D (144446) spi_master: device0 release bus
+D (144447) spi_master: device0 locked the bus
+D (144449) spi_master: device0 release bus
+D (144453) spi_master: device0 locked the bus
+D (144454) spi_master: device0 release bus
+D (144454) spi_master: device0 locked the bus
+D (144456) spi_master: device0 release bus
+D (144456) spi_master: device0 locked the bus
+D (144458) spi_master: device0 release bus
+D (144462) spi_master: device0 locked the bus
+D (144464) spi_master: device0 release bus
+D (144464) spi_master: device0 locked the bus
+D (144466) spi_master: device0 release bus
+D (144466) spi_master: device0 locked the bus
+D (144468) spi_master: device0 release bus
+D (148474) spi_master: device0 locked the bus
+D (148475) spi_master: device0 release bus
+D (148476) spi_master: device0 locked the bus
+D (148477) spi_master: device0 release bus
+D (148478) spi_master: device0 locked the bus
+D (148480) spi_master: device0 release bus
+D (148485) spi_master: device0 locked the bus
+D (148487) spi_master: device0 release bus
+D (148487) spi_master: device0 locked the bus
+D (148488) spi_master: device0 release bus
+D (148489) spi_master: device0 locked the bus
+D (148491) spi_master: device0 release bus
+D (148496) spi_master: device0 locked the bus
+D (148498) spi_master: device0 release bus
+D (148498) spi_master: device0 locked the bus
+D (148500) spi_master: device0 release bus
+D (148500) spi_master: device0 locked the bus
+D (148502) spi_master: device0 release bus
+D (148508) spi_master: device0 locked the bus
+D (148509) spi_master: device0 release bus
+D (148510) spi_master: device0 locked the bus
+D (148511) spi_master: device0 release bus
+D (148511) spi_master: device0 locked the bus
+D (148513) spi_master: device0 release bus
+D (148519) spi_master: device0 locked the bus
+D (148520) spi_master: device0 release bus
+D (148521) spi_master: device0 locked the bus
+D (148522) spi_master: device0 release bus
+D (148523) spi_master: device0 locked the bus
+D (148525) spi_master: device0 release bus
+D (148530) spi_master: device0 locked the bus
+D (148532) spi_master: device0 release bus
+D (148532) spi_master: device0 locked the bus
+D (148533) spi_master: device0 release bus
+D (148534) spi_master: device0 locked the bus
+D (148536) spi_master: device0 release bus
+D (150890) prd.app: heartbeat
+D (152544) spi_master: device0 locked the bus
+D (152545) spi_master: device0 release bus
+D (152545) spi_master: device0 locked the bus
+D (152547) spi_master: device0 release bus
+D (152547) spi_master: device0 locked the bus
+D (152549) spi_master: device0 release bus
+D (152557) spi_master: device0 locked the bus
+D (152558) spi_master: device0 release bus
+D (152558) spi_master: device0 locked the bus
+D (152560) spi_master: device0 release bus
+D (152560) spi_master: device0 locked the bus
+D (152562) spi_master: device0 release bus
+D (152570) spi_master: device0 locked the bus
+D (152571) spi_master: device0 release bus
+D (152571) spi_master: device0 locked the bus
+D (152573) spi_master: device0 release bus
+D (152573) spi_master: device0 locked the bus
+D (152575) spi_master: device0 release bus
+D (152583) spi_master: device0 locked the bus
+D (152584) spi_master: device0 release bus
+D (152584) spi_master: device0 locked the bus
+D (152586) spi_master: device0 release bus
+D (152586) spi_master: device0 locked the bus
+D (152588) spi_master: device0 release bus
+D (152596) spi_master: device0 locked the bus
+D (152597) spi_master: device0 release bus
+D (152597) spi_master: device0 locked the bus
+D (152599) spi_master: device0 release bus
+D (152599) spi_master: device0 locked the bus
+D (152601) spi_master: device0 release bus
+D (152609) spi_master: device0 locked the bus
+D (152610) spi_master: device0 release bus
+D (152610) spi_master: device0 locked the bus
+D (152612) spi_master: device0 release bus
+D (152612) spi_master: device0 locked the bus
+D (152614) spi_master: device0 release bus
+D (156615) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (156615) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (157216) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (157216) ledc: In slow speed mode, global clk set: 11
+D (157217) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (157217) ledc: GPIO 5 is not usable, maybe conflict with others
+I (157218) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (157219) spi: SPI2 use gpio matrix.
+D (157220) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (157221) spi_hal: eff: 10000, limit: 80000k(/0), 0 dummy, -1 delay
+D (157221) spi_master: SPI2: New device added to CS0, effective clock: 10000000 Hz
+D (157221) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (157222) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (157222) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (157242) spi_master: device0 locked the bus
+D (157243) spi_master: device0 release bus
+D (157343) spi_master: device0 locked the bus
+D (157344) spi_master: device0 release bus
+D (157344) spi_master: device0 locked the bus
+D (157346) spi_master: device0 release bus
+D (157346) spi_master: device0 locked the bus
+D (157348) spi_master: device0 release bus
+I (157348) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (157348) spi_master: device0 locked the bus
+D (157351) spi_master: device0 release bus
+I (157352) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (157352) spi_master: device0 locked the bus
+D (157353) spi_master: device0 release bus
+D (157353) spi_master: device0 locked the bus
+D (157355) spi_master: device0 release bus
+D (157355) spi_master: device0 locked the bus
+D (157357) spi_master: device0 release bus
+D (157357) spi_master: device0 locked the bus
+D (157358) spi_master: device0 release bus
+I (157358) prd.display: tuning=C-vendor-gamma-only active
+I (157359) prd.display: init ok host=SPI2 clock_hz=10000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (157359) prd.app: sweep=4 clock_hz=10000000 init_ok attempts=13 failures=0
+D (157365) spi_master: device0 locked the bus
+D (157366) spi_master: device0 release bus
+D (157366) spi_master: device0 locked the bus
+D (157368) spi_master: device0 release bus
+D (157368) spi_master: device0 locked the bus
+D (157371) spi_master: device0 release bus
+D (157391) spi_master: device0 locked the bus
+D (157394) spi_master: device0 release bus
+D (157394) spi_master: device0 locked the bus
+D (157396) spi_master: device0 release bus
+D (157417) spi_master: device0 locked the bus
+D (157418) spi_master: device0 release bus
+D (157419) spi_master: device0 locked the bus
+D (157420) spi_master: device0 release bus
+D (157420) spi_master: device0 locked the bus
+D (157422) spi_master: device0 release bus
+D (157443) spi_master: device0 locked the bus
+D (157445) spi_master: device0 release bus
+D (157445) spi_master: device0 locked the bus
+D (157446) spi_master: device0 release bus
+D (157447) spi_master: device0 locked the bus
+D (157449) spi_master: device0 release bus
+D (157470) spi_master: device0 locked the bus
+D (157471) spi_master: device0 release bus
+D (157471) spi_master: device0 locked the bus
+D (157473) spi_master: device0 release bus
+D (157473) spi_master: device0 locked the bus
+D (157475) spi_master: device0 release bus
+D (157496) spi_master: device0 locked the bus
+D (157498) spi_master: device0 release bus
+D (157498) spi_master: device0 locked the bus
+D (157499) spi_master: device0 release bus
+D (157500) spi_master: device0 locked the bus
+D (157502) spi_master: device0 release bus
+D (160890) prd.app: heartbeat
+D (161508) spi_master: device0 locked the bus
+D (161509) spi_master: device0 release bus
+D (161510) spi_master: device0 locked the bus
+D (161511) spi_master: device0 release bus
+D (161512) spi_master: device0 locked the bus
+D (161514) spi_master: device0 release bus
+D (161534) spi_master: device0 locked the bus
+D (161536) spi_master: device0 release bus
+D (161536) spi_master: device0 locked the bus
+D (161538) spi_master: device0 release bus
+D (161538) spi_master: device0 locked the bus
+D (161540) spi_master: device0 release bus
+D (161561) spi_master: device0 locked the bus
+D (161562) spi_master: device0 release bus
+D (161563) spi_master: device0 locked the bus
+D (161564) spi_master: device0 release bus
+D (161564) spi_master: device0 locked the bus
+D (161566) spi_master: device0 release bus
+D (161587) spi_master: device0 locked the bus
+D (161589) spi_master: device0 release bus
+D (161589) spi_master: device0 locked the bus
+D (161590) spi_master: device0 release bus
+D (161591) spi_master: device0 locked the bus
+D (161593) spi_master: device0 release bus
+D (161614) spi_master: device0 locked the bus
+D (161615) spi_master: device0 release bus
+D (161615) spi_master: device0 locked the bus
+D (161617) spi_master: device0 release bus
+D (161617) spi_master: device0 locked the bus
+D (161619) spi_master: device0 release bus
+D (161640) spi_master: device0 locked the bus
+D (161641) spi_master: device0 release bus
+D (161642) spi_master: device0 locked the bus
+D (161643) spi_master: device0 release bus
+D (161644) spi_master: device0 locked the bus
+D (161646) spi_master: device0 release bus
+D (165654) spi_master: device0 locked the bus
+D (165655) spi_master: device0 release bus
+D (165655) spi_master: device0 locked the bus
+D (165657) spi_master: device0 release bus
+D (165657) spi_master: device0 locked the bus
+D (165659) spi_master: device0 release bus
+D (165680) spi_master: device0 locked the bus
+D (165681) spi_master: device0 release bus
+D (165682) spi_master: device0 locked the bus
+D (165683) spi_master: device0 release bus
+D (165684) spi_master: device0 locked the bus
+D (165686) spi_master: device0 release bus
+D (165706) spi_master: device0 locked the bus
+D (165708) spi_master: device0 release bus
+D (165708) spi_master: device0 locked the bus
+D (165710) spi_master: device0 release bus
+D (165710) spi_master: device0 locked the bus
+D (165712) spi_master: device0 release bus
+D (165733) spi_master: device0 locked the bus
+D (165734) spi_master: device0 release bus
+D (165735) spi_master: device0 locked the bus
+D (165736) spi_master: device0 release bus
+D (165736) spi_master: device0 locked the bus
+D (165739) spi_master: device0 release bus
+D (165759) spi_master: device0 locked the bus
+D (165761) spi_master: device0 release bus
+D (165761) spi_master: device0 locked the bus
+D (165762) spi_master: device0 release bus
+D (165763) spi_master: device0 locked the bus
+D (165765) spi_master: device0 release bus
+D (165786) spi_master: device0 locked the bus
+D (165787) spi_master: device0 release bus
+D (165787) spi_master: device0 locked the bus
+D (165789) spi_master: device0 release bus
+D (165789) spi_master: device0 locked the bus
+D (165791) spi_master: device0 release bus
+D (169792) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (169792) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (170393) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (170393) ledc: In slow speed mode, global clk set: 11
+D (170394) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (170394) ledc: GPIO 5 is not usable, maybe conflict with others
+I (170395) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (170396) spi: SPI2 use gpio matrix.
+D (170397) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (170398) spi_hal: eff: 20000, limit: 80000k(/0), 0 dummy, -1 delay
+D (170398) spi_master: SPI2: New device added to CS0, effective clock: 20000000 Hz
+D (170398) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (170399) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (170399) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (170419) spi_master: device0 locked the bus
+D (170420) spi_master: device0 release bus
+ked the bus
+D (170521) spi_master: device0 release bus
+D (170521) spi_master: device0 locked the bus
+D (170523) spi_master: device0 release bus
+D (170523) spi_master: device0 locked the bus
+D (170525) spi_master: device0 release bus
+I (170525) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (170525) spi_master: device0 locked the bus
+D (170527) spi_master: device0 release bus
+I (170527) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (170528) spi_master: device0 locked the bus
+D (170529) spi_master: device0 release bus
+I (170530) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (170530) spi_master: device0 locked the bus
+D (170531) spi_master: device0 release bus
+D (170531) spi_master: device0 locked the bus
+D (170533) spi_master: device0 release bus
+D (170533) spi_master: device0 locked the bus
+D (170534) spi_master: device0 release bus
+D (170535) spi_master: device0 locked the bus
+D (170536) spi_master: device0 release bus
+I (170536) prd.display: tuning=C-vendor-gamma-only active
+I (170536) prd.display: init ok host=SPI2 clock_hz=20000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (170537) prd.app: sweep=4 clock_hz=20000000 init_ok attempts=14 failures=0
+D (170542) spi_master: device0 locked the bus
+D (170544) spi_master: device0 release bus
+D (170544) spi_master: device0 locked the bus
+D (170546) spi_master: device0 release bus
+D (170546) spi_master: device0 locked the bus
+D (170548) spi_master: device0 release bus
+D (170559) spi_master: device0 locked the bus
+D (170560) spi_master: device0 release bus
+D (170560) spi_master: device0 locked the bus
+D (170562) spi_master: device0 release bus
+D (170562) spi_master: device0 locked the bus
+D (170564) spi_master: device0 release bus
+D (170575) spi_master: device0 locked the bus
+D (170576) spi_master: device0 release bus
+D (170577) spi_master: device0 locked the bus
+D (170578) spi_master: device0 release bus
+D (170579) spi_master: device0 locked the bus
+D (170581) spi_master: device0 release bus
+D (170591) spi_master: device0 locked the bus
+D (170592) spi_master: device0 release bus
+D (170593) spi_master: device0 locked the bus
+D (170594) spi_master: device0 release bus
+D (170595) spi_master: device0 locked the bus
+D (170597) spi_master: device0 release bus
+D (170607) spi_master: device0 locked the bus
+D (170609) spi_master: device0 release bus
+D (170609) spi_master: device0 locked the bus
+D (170610) spi_master: device0 release bus
+D (170611) spi_master: device0 locked the bus
+D (170613) spi_master: device0 release bus
+D (170623) spi_master: device0 locked the bus
+D (170625) spi_master: device0 release bus
+D (170625) spi_master: device0 locked the bus
+D (170627) spi_master: device0 release bus
+D (170627) spi_master: device0 locked the bus
+D (170629) spi_master: device0 release bus
+D (170890) prd.app: heartbeat
+D (174636) spi_master: device0 locked the bus
+D (174637) spi_master: device0 release bus
+D (174638) spi_master: device0 locked the bus
+D (174639) spi_master: device0 release bus
+D (174640) spi_master: device0 locked the bus
+D (174642) spi_master: device0 release bus
+D (174652) spi_master: device0 locked the bus
+D (174654) spi_master: device0 release bus
+D (174654) spi_master: device0 locked the bus
+D (174655) spi_master: device0 release bus
+D (174656) spi_master: device0 locked the bus
+D (174658) spi_master: device0 release bus
+D (174668) spi_master: device0 locked the bus
+D (174670) spi_master: device0 release bus
+D (174670) spi_master: device0 locked the bus
+D (174672) spi_master: device0 release bus
+D (174672) spi_master: device0 locked the bus
+D (174674) spi_master: device0 release bus
+D (174685) spi_master: device0 locked the bus
+D (174686) spi_master: device0 release bus
+D (174686) spi_master: device0 locked the bus
+D (174688) spi_master: device0 release bus
+D (174688) spi_master: device0 locked the bus
+D (174690) spi_master: device0 release bus
+D (174701) spi_master: device0 locked the bus
+D (174702) spi_master: device0 release bus
+D (174703) spi_master: device0 locked the bus
+D (174704) spi_master: device0 release bus
+D (174705) spi_master: device0 locked the bus
+D (174707) spi_master: device0 release bus
+D (174717) spi_master: device0 locked the bus
+D (174718) spi_master: device0 release bus
+D (174719) spi_master: device0 locked the bus
+D (174720) spi_master: device0 release bus
+D (174721) spi_master: device0 locked the bus
+D (174723) spi_master: device0 release bus
+ster: device0 locked the bus
+D (178732) spi_master: device0 release bus
+D (178732) spi_master: device0 locked the bus
+D (178734) spi_master: device0 release bus
+D (178734) spi_master: device0 locked the bus
+D (178736) spi_master: device0 release bus
+D (178747) spi_master: device0 locked the bus
+D (178748) spi_master: device0 release bus
+D (178749) spi_master: device0 locked the bus
+D (178750) spi_master: device0 release bus
+D (178751) spi_master: device0 locked the bus
+D (178753) spi_master: device0 release bus
+D (178763) spi_master: device0 locked the bus
+D (178764) spi_master: device0 release bus
+D (178765) spi_master: device0 locked the bus
+D (178766) spi_master: device0 release bus
+D (178767) spi_master: device0 locked the bus
+D (178769) spi_master: device0 release bus
+D (178779) spi_master: device0 locked the bus
+D (178781) spi_master: device0 release bus
+D (178781) spi_master: device0 locked the bus
+D (178782) spi_master: device0 release bus
+D (178783) spi_master: device0 locked the bus
+D (178785) spi_master: device0 release bus
+D (178795) spi_master: device0 locked the bus
+D (178797) spi_master: device0 release bus
+D (178797) spi_master: device0 locked the bus
+D (178799) spi_master: device0 release bus
+D (178799) spi_master: device0 locked the bus
+D (178801) spi_master: device0 release bus
+D (178812) spi_master: device0 locked the bus
+D (178813) spi_master: device0 release bus
+D (178813) spi_master: device0 locked the bus
+D (178815) spi_master: device0 release bus
+D (178815) spi_master: device0 locked the bus
+D (178817) spi_master: device0 release bus
+D (180890) prd.app: heartbeat
+D (182818) lcd_panel.st7789: del st7789 panel @0x3fceca08
+D (182818) lcd_panel.io.spi: del lcd panel io spi @0x3fcec344
+D (183419) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (183419) ledc: In slow speed mode, global clk set: 11
+D (183420) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+W (183420) ledc: GPIO 5 is not usable, maybe conflict with others
+I (183421) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (183422) spi: SPI2 use gpio matrix.
+D (183423) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (183424) spi_hal: eff: 40000, limit: 80000k(/0), 0 dummy, -1 delay
+D (183424) spi_master: SPI2: New device added to CS0, effective clock: 40000000 Hz
+D (183424) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (183425) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (183425) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (183445) spi_master: device0 locked the bus
+D (183446) spi_master: device0 release bus
+D (183546) spi_master: device0 locked the bus
+D (183547) spi_master: device0 release bus
+D (183547) spi_master: device0 locked the bus
+D (183549) spi_master: device0 release bus
+D (183549) spi_master: device0 locked the bus
+D (183551) spi_master: device0 release bus
+I (183551) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (183551) spi_master: device0 locked the bus
+D (183553) spi_master: device0 release bus
+I (183553) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (183554) spi_master: device0 locked the bus
+D (183555) spi_master: device0 release bus
+I (183556) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (183556) spi_master: device0 locked the bus
+D (183557) spi_master: device0 release bus
+D (183557) spi_master: device0 locked the bus
+D (183559) spi_master: device0 release bus
+D (183559) spi_master: device0 locked the bus
+D (183561) spi_master: device0 release bus
+D (183561) spi_master: device0 locked the bus
+D (183562) spi_master: device0 release bus
+I (183562) prd.display: tuning=C-vendor-gamma-only active
+I (183562) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (183563) prd.app: sweep=4 clock_hz=40000000 init_ok attempts=15 failures=0
+D (183568) spi_master: device0 locked the bus
+D (183570) spi_master: device0 release bus
+D (183570) spi_master: device0 locked the bus
+D (183572) spi_master: device0 release bus
+D (183572) spi_master: device0 locked the bus
+D (183574) spi_master: device0 release bus
+D (183580) spi_master: device0 locked the bus
+D (183581) spi_master: device0 release bus
+D (183581) spi_master: device0 locked the bus
+D (183583) spi_master: device0 release bus
+D (183583) spi_master: device0 locked the bus
+D (183585) spi_master: device0 release bus
+D (183591) spi_master: device0 locked the bus
+D (183592) spi_master: device0 release bus
+D (183592) spi_master: device0 locked the bus
+D (183594) spi_master: device0 release bus
+D (183594) spi_master: device0 locked the bus
+D (183596) spi_master: device0 release bus
+D (183602) spi_master: device0 locked the bus
+D (183603) spi_master: device0 release bus
+D (183603) spi_master: device0 locked the bus
+D (183605) spi_master: device0 release bus
+D (183605) spi_master: device0 locked the bus
+D (183607) spi_master: device0 release bus
+D (183613) spi_master: device0 locked the bus
+D (183614) spi_master: device0 release bus
+D (183614) spi_master: device0 locked the bus
+D (183616) spi_master: device0 release bus
+D (183616) spi_master: device0 locked the bus
+D (183618) spi_master: device0 release bus
+D (183624) spi_master: device0 locked the bus
+D (183625) spi_master: device0 release bus
+D (183625) spi_master: device0 locked the bus
+D (183627) spi_master: device0 release bus
+D (183627) spi_master: device0 locked the bus
+D (183629) spi_master: device0 release bus
+D (187636) spi_master: device0 locked the bus
+D (187637) spi_master: device0 release bus
+D (187638) spi_master: device0 locked the bus
+D (187639) spi_master: device0 release bus
+D (187640) spi_master: device0 locked the bus
+D (187642) spi_master: device0 release bus
+D (187647) spi_master: device0 locked the bus
+D (187649) spi_master: device0 release bus
+D (187649) spi_master: device0 locked the bus
+D (187650) spi_master: device0 release bus
+D (187651) spi_master: device0 locked the bus
+D (187653) spi_master: device0 release bus
+D (187658) spi_master: device0 locked the bus
+D (187660) spi_master: device0 release bus
+D (187660) spi_master: device0 locked the bus
+D (187662) spi_master: device0 release bus
+D (187662) spi_master: device0 locked the bus
+D (187664) spi_master: device0 release bus
+D (187670) spi_master: device0 locked the bus
+D (187671) spi_master: device0 release bus
+D (187672) spi_master: device0 locked the bus
+D (187673) spi_master: device0 release bus
+D (187673) spi_master: device0 locked the bus
+D (187675) spi_master: device0 release bus
+D (187681) spi_master: device0 locked the bus
+D (187682) spi_master: device0 release bus
+D (187683) spi_master: device0 locked the bus
+D (187684) spi_master: device0 release bus
+D (187685) spi_master: device0 locked the bus
+D (187687) spi_master: device0 release bus
+D (187692) spi_master: device0 locked the bus
+D (187694) spi_master: device0 release bus
+D (187694) spi_master: device0 locked the bus
+D (187696) spi_master: device0 release bus
+D (187696) spi_master: device0 locked the bus
+D (187698) spi_master: device0 release bus

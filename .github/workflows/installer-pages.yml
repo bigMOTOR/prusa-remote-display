@@ -1,0 +1,94 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+name: Publish browser installer
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Reviewed immutable public release ID
+        required: true
+        type: string
+      tag:
+        description: Exact stable tag (v1.0.0)
+        required: true
+        type: string
+      commit:
+        description: Reviewed full 40-character firmware commit
+        required: true
+        type: string
+      site_sha256:
+        description: Reviewed installer-site.zip SHA-256
+        required: true
+        type: string
+permissions: {}
+concurrency:
+  group: installer-pages
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main' && github.repository == 'bigMOTOR/prusa-remote-display'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Require owner approval and main-only environment before preparing publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/bigMOTOR/prusa-remote-display/environments/github-pages > "$RUNNER_TEMP/pages-environment.json"
+          gh api repos/bigMOTOR/prusa-remote-display/environments/github-pages/deployment-branch-policies > "$RUNNER_TEMP/pages-branches.json"
+          python3 -B - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          environment = json.loads((root / 'pages-environment.json').read_text())
+          assert environment.get('can_admins_bypass') is False, 'Administrator bypass must be disabled'
+          rules = environment.get('protection_rules', [])
+          reviewers = [r.get('reviewers', []) for r in rules if r.get('type') == 'required_reviewers']
+          assert len(reviewers) == 1 and len(reviewers[0]) == 1, 'Exactly one owner reviewer required'
+          owner = reviewers[0][0]
+          assert owner.get('type') == 'User' and owner.get('reviewer', {}).get('login') == 'bigMOTOR', 'Owner approval required'
+          policy = environment.get('deployment_branch_policy') or {}
+          assert policy.get('custom_branch_policies') is True, 'Explicit main-only policy required'
+          branches = json.loads((root / 'pages-branches.json').read_text())['branch_policies']
+          assert len(branches) == 1 and branches[0]['name'] == 'main' and branches[0]['type'] == 'branch'
+          PY
+      - name: Verify exact public immutable release and application bytes
+        env:
+          RELEASE_ID: ${{ inputs.release_id }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_COMMIT: ${{ inputs.commit }}
+          SITE_SHA256: ${{ inputs.site_sha256 }}
+        run: |
+          python3 -B -c 'import os,re; assert re.fullmatch(r"[a-f0-9]{40}", os.environ["RELEASE_COMMIT"]), "Full source commit required"'
+          git fetch --no-tags --depth=1 origin "$RELEASE_COMMIT"
+          python3 -B installer/publication.py --release-id "$RELEASE_ID" --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" --site-sha256 "$SITE_SHA256" --output "$RUNNER_TEMP/site"
+      - name: Preserve exact deployment binding
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: installer-deployment-receipt
+          path: ${{ runner.temp }}/deployment-receipt.json
+          if-no-files-found: error
+      - name: Package verified static files
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ runner.temp }}/site
+  deploy:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish approved artifact
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

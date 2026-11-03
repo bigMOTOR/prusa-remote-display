@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+# Dedicated diagnostic source. Never merge this overlay into a product profile.
+CONFIG_PRD_VALIDATION_PRINTING_TIMELINE=y
+CONFIG_PRD_VALIDATION_ACCESS_REVIEW=y
+# CONFIG_PRD_VALIDATION_PRINTING_LOSS_REVIEW is not set
+# CONFIG_PRD_VALIDATION_SCENARIOS is not set
+# CONFIG_PRD_VALIDATION_OPERATIONAL_WALK is not set
+# CONFIG_PRD_UI_DIAGNOSTIC_SCENE is not set

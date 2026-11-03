@@ -1,0 +1,878 @@
+Milestone 1 Phase E - button bring-up and event classification
+Waveshare ESP32-S3-LCD-2.8 (SKU 30223, non-touch) - 2026-08-03
+
+Captured from the native USB Serial/JTAG console at 115200 baud.
+Firmware: hardware-validation profile, git 425ad5a12650, dirty=true
+(Phase E work uncommitted at capture time).
+
+Normalisation applied to this file, and nothing else:
+  - ANSI colour escapes removed
+  - CR removed and trailing whitespace stripped, so the file is LF-only
+  - ESP-IDF Verbose-level lines (prefix 'V') dropped: SPI bus-lock and
+    polling-transaction plumbing from the concurrently running display
+    pattern cycle, which repeats hundreds of times per minute and is
+    unrelated to the button. Debug, Info, Warning and Error kept in full.
+
+No device MAC address, serial number, host path or username appears in this
+file (Bootstrap Spec 16.8). The esptool output used to prove download-mode
+entry is summarised below rather than pasted, because esptool prints the MAC.
+
+==============================================================================
+PART 1 - clean boot, button untouched
+
+Shows the accepted ordering: the boot report and phase=ready complete BEFORE
+the button GPIO is configured, and 20 s of an untouched line classify nothing.
+==============================================================================
+10000 00002000
+I (28) boot:  3 phy_init         RF data          01 01 00012000 00001000
+I (28) boot:  4 factory_cfg      Unknown data     01 40 00013000 0000d000
+I (29) boot:  5 ota_0            OTA app          00 10 00020000 00680000
+I (29) boot:  6 ota_1            OTA app          00 11 006a0000 00680000
+I (30) boot:  7 coredump         Unknown data     01 03 00d20000 00100000
+I (30) boot:  8 assets           Unknown data     01 41 00e20000 001e0000
+I (30) boot: End of partition table
+I (31) esp_image: segment 0: paddr=00020020 vaddr=3c060020 size=176e8h ( 95976) map
+I (45) esp_image: segment 1: paddr=00037710 vaddr=3fc97500 size=04544h ( 17732) load
+I (49) esp_image: segment 2: paddr=0003bc5c vaddr=40374000 size=043bch ( 17340) load
+I (53) esp_image: segment 3: paddr=00040020 vaddr=42000020 size=55da4h (351652) map
+I (105) esp_image: segment 4: paddr=00095dcc vaddr=403783bc size=0f0fch ( 61692) load
+I (117) esp_image: segment 5: paddr=000a4ed0 vaddr=50000000 size=00020h (    32) load
+I (125) boot: Loaded app from partition at offset 0x20000
+I (125) boot: Disabling RNG early entropy source...
+D (126) octal_psram: exp_data: 0x5a6b7c8d
+D (127) octal_psram: ref_data: 0x5a6b7c8d
+I (127) octal_psram: vendor id    : 0x0d (AP)
+I (127) octal_psram: dev id       : 0x02 (generation 3)
+I (127) octal_psram: density      : 0x03 (64 Mbit)
+I (128) octal_psram: good-die     : 0x01 (Pass)
+I (128) octal_psram: Latency      : 0x01 (Fixed)
+I (128) octal_psram: VCC          : 0x01 (3V)
+I (128) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (129) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (129) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (129) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (129) octal_psram: DriveStrength: 0x00 (1/1)
+I (130) MSPI Timing: Enter psram timing tuning
+D MSPI Timing: test nums: 1, test result: [id][good/bad][good_times]:
+D MSPI Timing: [0][good][1]
+D MSPI Timing: [1][bad][0]
+D MSPI Timing: [2][bad][0]
+D MSPI Timing: [3][good][1]
+D MSPI Timing: [4][good][1]
+D MSPI Timing: [5][good][1]
+D MSPI Timing: [6][good][1]
+D MSPI Timing: [7][bad][0]
+D MSPI Timing: [8][bad][0]
+D MSPI Timing: [9][good][1]
+D MSPI Timing: [10][good][1]
+D MSPI Timing: [11][good][1]
+D MSPI Timing: [12][good][1]
+D MSPI Timing: [13][bad][0]
+D MSPI Timing: tuning success, best point is index 5
+D MSPI Timing: PSRAM timing tuning index: 5
+I (135) esp_psram: Found 8MB PSRAM device
+I (135) esp_psram: Speed: 80MHz
+I (136) cpu_start: Multicore app
+D (137) cpu_start: Pro cpu up
+D (137) cpu_start: Starting app cpu, entry point is 0x403755d8
+D (0) cpu_start: App cpu up
+I (570) esp_psram: SPI SRAM memory test OK
+D (578) clk: RTC_SLOW_CLK calibration value: 3758989
+D (579) cpu_start: calling init function: 0x42002bf0 on core: 0
+D (579) cpu_start: calling init function: 0x42003b24 on core: 0
+I (579) cpu_start: Pro cpu start user code
+I (579) cpu_start: cpu freq: 160000000 Hz
+D (580) cpu_start: calling init function: 0x42002b40 on core: 0
+I (580) app_init: Application information:
+I (580) app_init: Project name:     prusa_remote_display
+I (580) app_init: App version:      0.1.0-dev
+I (580) app_init: ELF file SHA256:  49abc9562ba2b908...
+I (581) app_init: ESP-IDF:          v5.5.4
+D (581) cpu_start: calling init function: 0x42002c04 on core: 0
+I (581) efuse_init: Min chip rev:     v0.0
+I (581) efuse_init: Max chip rev:     v0.99
+I (581) efuse_init: Chip rev:         v0.2
+D (582) cpu_start: calling init function: 0x42005684 on core: 0
+D (582) memory_layout: Checking 7 reserved memory ranges:
+D (582) memory_layout: Reserved memory range 0x3c000000 - 0x3e000000
+D (583) memory_layout: Reserved memory range 0x3fc84000 - 0x3fc97500
+D (583) memory_layout: Reserved memory range 0x3fc97500 - 0x3fc9e3f0
+D (583) memory_layout: Reserved memory range 0x3fceee34 - 0x3fcf0000
+D (583) memory_layout: Reserved memory range 0x40374000 - 0x40387500
+D (584) memory_layout: Reserved memory range 0x600fe000 - 0x600fe000
+D (584) memory_layout: Reserved memory range 0x600fffe8 - 0x60100000
+D (584) memory_layout: Building list of available memory regions:
+D (586) memory_layout: Available memory region 0x3fc9e3f0 - 0x3fca0000
+D (587) memory_layout: Available memory region 0x3fca0000 - 0x3fcb0000
+D (587) memory_layout: Available memory region 0x3fcb0000 - 0x3fcc0000
+D (588) memory_layout: Available memory region 0x3fcc0000 - 0x3fcd0000
+D (589) memory_layout: Available memory region 0x3fcd0000 - 0x3fce0000
+D (589) memory_layout: Available memory region 0x3fce0000 - 0x3fce9710
+D (590) memory_layout: Available memory region 0x3fce9710 - 0x3fceee34
+D (591) memory_layout: Available memory region 0x3fcf0000 - 0x3fcf8000
+D (593) memory_layout: Available memory region 0x600fe000 - 0x600fffe8
+I (593) heap_init: Initializing. RAM available for dynamic allocation:
+D (594) heap_init: New heap initialised at 0x3fc9e3f0
+I (594) heap_init: At 3FC9E3F0 len 0004B320 (300 KiB): RAM
+I (594) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+D (595) heap_init: New heap initialised at 0x3fcf0000
+I (595) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+D (595) heap_init: New heap initialised at 0x600fe000
+I (595) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+D (595) cpu_start: calling init function: 0x42009644 on core: 0
+D (596) cpu_start: calling init function: 0x42008a84 on core: 0
+D (596) cpu_start: calling init function: 0x42009c08 on core: 0
+I (845) esp_psram: Adding pool of 8192K of PSRAM memory to heap allocator
+D (845) cpu_start: calling init function: 0x42003b70 on core: 0
+D (846) intr_alloc: Connected src 39 to int 1 (cpu 0)
+D (846) cpu_start: calling init function: 0x42003b80 on core: 0
+D (846) cpu_start: calling init function: 0x4200a3f4 on core: 0
+D (847) cpu_start: calling init function: 0x4200b560 on core: 0
+D (847) cpu_start: calling init function: 0x4200a62c on core: 0
+D (847) cpu_start: calling init function: 0x42008a90 on core: 0
+D (848) cpu_start: calling init function: 0x42003b8c on core: 0
+
+
+
+
+D (849) spi_flash: trying chip: issi
+D (849) spi_flash: trying chip: gd
+D (849) spi_flash: trying chip: mxic
+D (849) spi_flash: trying chip: winbond
+D (849) spi_flash: trying chip: boya
+D (849) spi_flash: trying chip: th
+D (850) spi_flash: trying chip: mxic (opi)
+D (850) spi_flash: trying chip: generic
+I (850) spi_flash: detected chip: generic
+I (850) spi_flash: flash io: qio
+D (850) chip_generic: set_io_mode: status before 0x200
+D (851) cpu_start: calling init function: 0x42002ca0 on core: 0
+D (852) C++ init: Setting C++ exception emergency pool to 0.
+D (852) cpu_start: calling init function: 0x4204fc9c on core: 0
+D (852) cpu_start: calling init function: 0x4200684c on core: 0
+I (853) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (853) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+D (853) cpu_start: calling init function: 0x4200b56c on core: 0
+I (854) esp_core_dump_flash: Init core dump to flash
+I (855) esp_core_dump_flash: Found partition 'coredump' @ d20000 1048576 bytes
+D (870) esp_core_dump_crc: Total length of hashed data: 11744
+I (870) esp_core_dump_flash: Core dump data checksum is correct
+I (871) esp_core_dump_flash: Found core dump 11748 bytes in flash @ 0xd20000
+D (871) cpu_start: calling init function: 0x4200d8cc on core: 0
+I (871) nvs_sec_provider: NVS Encryption - Registering HMAC-based scheme...
+D (871) cpu_start: calling init function: 0x42003bc0 on core: 0
+D (872) cpu_start: calling init function: 0x42009cc4 on core: 0
+D (872) cpu_start: calling init function: 0x42003bcc on core: 0
+D (873) intr_alloc: Connected src 79 to int 2 (cpu 0)
+D (873) app_start: Starting scheduler on CPU0
+D (873) intr_alloc: Connected src 57 to int 3 (cpu 0)
+args
+D (874) intr_alloc: Connected src 80 to int 0 (cpu 1)
+D (874) app_start: Starting scheduler on CPU1
+D (875) intr_alloc: Connected src 58 to int 1 (cpu 1)
+D (875) heap_init: New heap initialised at 0x3fce9710
+I (875) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+D (875) esp_psram: Allocating block of size 32768 bytes
+D (877) intr_alloc: Connected src 52 to int 5 (cpu 0)
+I (877) main_task: Calling app_main()
+I (879) prd.app: Prusa Remote Display 0.1.0-dev
+I (880) prd.boot: version=0.1.0-dev git=425ad5a12650 dirty=true profile=hardware-validation idf=v5.5.4 board=waveshare_esp32_s3_lcd_2_8
+I (880) prd.boot: phase=initializing
+I (881) prd.board: target=waveshare_esp32_s3_lcd_2_8 validation=provisional
+I (881) prd.board: chip=ESP32-S3 rev=0.2 cores=2 reset=usb
+I (882) prd.board: flash_detected=16777216 expected=16777216 result=pass
+I (882) prd.board: psram_detected=8388608 expected=8388608 result=pass
+W (882) prd.board: usb_console=native_usb_serial_jtag result=unvalidated
+I (883) prd.boot: phase=ready
+D (883) ledc: Using clock source 4 (in slow mode), divisor: 0x1f4
+D (884) ledc: In slow speed mode, global clk set: 11
+D (884) ledc: LEDC_PWM CHANNEL 0|GPIO 05|Duty 0000|Time 0
+I (885) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+D (887) spi: SPI2 use gpio matrix.
+D (888) intr_alloc: Connected src 21 to int 8 (cpu 0)
+D (888) spi_hal: eff: 40000, limit: 80000k(/0), 0 dummy, -1 delay
+D (888) spi_master: SPI2: New device added to CS0, effective clock: 40000000 Hz
+D (889) lcd_panel.io.spi: new spi lcd panel io @0x3fcec344, max_trans_bytes: 28644
+D (889) gpio: GPIO[39]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0
+D (889) lcd_panel.st7789: new st7789 panel @0x3fceca08
+D (890) gpio: GPIO[0]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:3
+D (891) intr_alloc: Connected src 16 to int 9 (cpu 0)
+I (892) prd.button: button ready gpio=0 active=low pull_up=external hw_debounce=no debounce_ms=25 long_ms=1500 very_long_ms=8000 level=released
+I (892) prd.app: button validation active — press to classify
+D (910) spi_master: device0 locked the bus
+D (911) spi_master: device0 release bus
+D (1011) spi_master: device0 locked the bus
+D (1012) spi_master: device0 release bus
+D (1012) spi_master: device0 locked the bus
+D (1014) spi_master: device0 release bus
+D (1014) spi_master: device0 locked the bus
+D (1016) spi_master: device0 release bus
+I (1016) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+D (1016) spi_master: device0 locked the bus
+D (1018) spi_master: device0 release bus
+I (1018) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+D (1018) spi_master: device0 locked the bus
+D (1020) spi_master: device0 release bus
+I (1020) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+D (1021) spi_master: device0 locked the bus
+D (1022) spi_master: device0 release bus
+D (1022) spi_master: device0 locked the bus
+D (1023) spi_master: device0 release bus
+D (1024) spi_master: device0 locked the bus
+D (1025) spi_master: device0 release bus
+D (1026) spi_master: device0 locked the bus
+D (1026) spi_master: device0 release bus
+I (1027) prd.display: tuning=C-vendor-gamma-only active
+I (1027) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (1028) prd.app: display validation active 320x240 cycling patterns every 6 s
+D (1036) spi_master: device0 locked the bus
+D (1038) spi_master: device0 release bus
+D (1038) spi_master: device0 locked the bus
+D (1040) spi_master: device0 release bus
+D (1040) spi_master: device0 locked the bus
+D (1042) spi_master: device0 release bus
+D (1049) spi_master: device0 locked the bus
+D (1051) spi_master: device0 release bus
+D (1051) spi_master: device0 locked the bus
+D (1052) spi_master: device0 release bus
+D (1053) spi_master: device0 locked the bus
+D (1055) spi_master: device0 release bus
+D (1062) spi_master: device0 locked the bus
+D (1064) spi_master: device0 release bus
+D (1064) spi_master: device0 locked the bus
+D (1065) spi_master: device0 release bus
+D (1066) spi_master: device0 locked the bus
+D (1068) spi_master: device0 release bus
+D (1075) spi_master: device0 locked the bus
+D (1076) spi_master: device0 release bus
+D (1077) spi_master: device0 locked the bus
+D (1078) spi_master: device0 release bus
+D (1079) spi_master: device0 locked the bus
+D (1081) spi_master: device0 release bus
+D (1088) spi_master: device0 locked the bus
+D (1089) spi_master: device0 release bus
+D (1090) spi_master: device0 locked the bus
+D (1091) spi_master: device0 release bus
+D (1091) spi_master: device0 locked the bus
+D (1093) spi_master: device0 release bus
+D (1101) spi_master: device0 locked the bus
+D (1102) spi_master: device0 release bus
+D (1102) spi_master: device0 locked the bus
+D (1104) spi_master: device0 release bus
+D (1104) spi_master: device0 locked the bus
+D (1106) spi_master: device0 release bus
+I (1107) prd.app: pattern=corner-markers drawn
+D (7113) spi_master: device0 locked the bus
+D (7114) spi_master: device0 release bus
+D (7115) spi_master: device0 locked the bus
+D (7116) spi_master: device0 release bus
+D (7116) spi_master: device0 locked the bus
+D (7119) spi_master: device0 release bus
+D (7124) spi_master: device0 locked the bus
+D (7126) spi_master: device0 release bus
+D (7126) spi_master: device0 locked the bus
+D (7127) spi_master: device0 release bus
+D (7128) spi_master: device0 locked the bus
+D (7130) spi_master: device0 release bus
+D (7135) spi_master: device0 locked the bus
+D (7137) spi_master: device0 release bus
+D (7137) spi_master: device0 locked the bus
+D (7138) spi_master: device0 release bus
+D (7139) spi_master: device0 locked the bus
+D (7141) spi_master: device0 release bus
+D (7146) spi_master: device0 locked the bus
+D (7148) spi_master: device0 release bus
+D (7148) spi_master: device0 locked the bus
+D (7150) spi_master: device0 release bus
+D (7150) spi_master: device0 locked the bus
+D (7152) spi_master: device0 release bus
+D (7158) spi_master: device0 locked the bus
+D (7159) spi_master: device0 release bus
+D (7159) spi_master: device0 locked the bus
+D (7161) spi_master: device0 release bus
+D (7161) spi_master: device0 locked the bus
+D (7163) spi_master: device0 release bus
+D (7169) spi_master: device0 locked the bus
+D (7170) spi_master: device0 release bus
+D (7170) spi_master: device0 locked the bus
+D (7172) spi_master: device0 release bus
+D (7172) spi_master: device0 locked the bus
+D (7174) spi_master: device0 release bus
+I (7175) prd.app: pattern=colour-bars drawn
+D (10891) prd.app: heartbeat
+I (10892) prd.app: button idle level=released total=0
+I (10892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (13179) spi_master: device0 locked the bus
+D (13181) spi_master: device0 release bus
+D (13181) spi_master: device0 locked the bus
+D (13183) spi_master: device0 release bus
+D (13183) spi_master: device0 locked the bus
+D (13185) spi_master: device0 release bus
+D (13190) spi_master: device0 locked the bus
+D (13192) spi_master: device0 release bus
+D (13192) spi_master: device0 locked the bus
+D (13194) spi_master: device0 release bus
+D (13194) spi_master: device0 locked the bus
+D (13196) spi_master: device0 release bus
+D (13201) spi_master: device0 locked the bus
+D (13203) spi_master: device0 release bus
+D (13203) spi_master: device0 locked the bus
+D (13205) spi_master: device0 release bus
+D (13205) spi_master: device0 locked the bus
+D (13207) spi_master: device0 release bus
+D (13212) spi_master: device0 locked the bus
+D (13214) spi_master: device0 release bus
+D (13214) spi_master: device0 locked the bus
+D (13216) spi_master: device0 release bus
+D (13216) spi_master: device0 locked the bus
+D (13218) spi_master: device0 release bus
+D (13223) spi_master: device0 locked the bus
+D (13225) spi_master: device0 release bus
+D (13225) spi_master: device0 locked the bus
+D (13227) spi_master: device0 release bus
+D (13227) spi_master: device0 locked the bus
+D (13229) spi_master: device0 release bus
+D (13234) spi_master: device0 locked the bus
+D (13236) spi_master: device0 release bus
+D (13236) spi_master: device0 locked the bus
+D (13238) spi_master: device0 release bus
+D (13238) spi_master: device0 locked the bus
+D (13240) spi_master: device0 release bus
+I (13241) prd.app: pattern=checkerboard-1px drawn
+D (19248) spi_master: device0 locked the bus
+D (19249) spi_master: device0 release bus
+D (19249) spi_master: device0 locked the bus
+D (19251) spi_master: device0 release bus
+D (19251) spi_master: device0 locked the bus
+D (19253) spi_master: device0 release bus
+D (19259) spi_master: device0 locked the bus
+D (19261) spi_master: device0 release bus
+D (19261) spi_master: device0 locked the bus
+D (19263) spi_master: device0 release bus
+D (19263) spi_master: device0 locked the bus
+D (19265) spi_master: device0 release bus
+D (19271) spi_master: device0 locked the bus
+D (19273) spi_master: device0 release bus
+D (19273) spi_master: device0 locked the bus
+D (19275) spi_master: device0 release bus
+D (19275) spi_master: device0 locked the bus
+D (19277) spi_master: device0 release bus
+D (19283) spi_master: device0 locked the bus
+D (19285) spi_master: device0 release bus
+D (19285) spi_master: device0 locked the bus
+D (19286) spi_master: device0 release bus
+D (19287) spi_master: device0 locked the bus
+D (19289) spi_master: device0 release bus
+D (19295) spi_master: device0 locked the bus
+D (19296) spi_master: device0 release bus
+D (19297) spi_master: device0 locked the bus
+D (19298) spi_master: device0 release bus
+D (19298) spi_master: device0 locked the bus
+D (19301) spi_master: device0 release bus
+D (19307) spi_master: device0 locked the bus
+D (19308) spi_master: device0 release bus
+D (19308) spi_master: device0 locked the bus
+D (19310) spi_master: device0 release bus
+D (19310) spi_master: device0 locked the bus
+D (19312) spi_master: device0 release bus
+I (19313) prd.app: pattern=gradient drawn
+D (20891) prd.app: heartbeat
+I (20892) prd.app: button idle level=released total=0
+I (20892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+
+==============================================================================
+PART 2 - gesture classification
+
+Stage 1: 1 press to identify the button electrically (edge opposite USB-C).
+Stage 2: 10 short taps  -> short=11 cumulative
+Stage 3: 10 long holds  -> long=10
+Stage 4: 6 very-long holds + 1 stray tap -> very_long=6, short=12
+
+raw_edges advances by exactly 2 per press throughout: no contact bounce was
+captured on this switch. events advances by exactly 1 per press, which is what
+proves VeryLongPress is not also emitted on release.
+==============================================================================
+I (879) prd.app: Prusa Remote Display 0.1.0-dev
+I (880) prd.boot: version=0.1.0-dev git=425ad5a12650 dirty=true profile=hardware-validation idf=v5.5.4 board=waveshare_esp32_s3_lcd_2_8
+I (880) prd.boot: phase=initializing
+I (883) prd.boot: phase=ready
+I (892) prd.button: button ready gpio=0 active=low pull_up=external hw_debounce=no debounce_ms=25 long_ms=1500 very_long_ms=8000 level=released
+I (892) prd.app: button validation active — press to classify
+I (1028) prd.app: display validation active 320x240 cycling patterns every 6 s
+I (1107) prd.app: pattern=corner-markers drawn
+I (7174) prd.app: pattern=colour-bars drawn
+D (10891) prd.app: heartbeat
+I (10892) prd.app: button idle level=released total=0
+I (10892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (13241) prd.app: pattern=checkerboard-1px drawn
+I (19313) prd.app: pattern=gradient drawn
+D (20891) prd.app: heartbeat
+I (20892) prd.app: button idle level=released total=0
+I (20892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (25379) prd.app: pattern=black drawn
+D (30891) prd.app: heartbeat
+I (30892) prd.app: button idle level=released total=0
+I (30892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (31444) prd.app: pattern=white drawn
+I (37510) prd.app: pattern=near-black-111315 drawn
+D (40891) prd.app: heartbeat
+I (40892) prd.app: button idle level=released total=0
+I (40892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (43576) prd.app: pattern=orange-f77f2f drawn
+I (49644) prd.app: pattern=comparison-chart drawn
+D (50891) prd.app: heartbeat
+I (50892) prd.app: button idle level=released total=0
+I (50892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (55722) prd.app: pattern=corner-markers drawn
+D (60891) prd.app: heartbeat
+I (60892) prd.app: button idle level=released total=0
+I (60892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (61790) prd.app: pattern=colour-bars drawn
+I (67855) prd.app: pattern=checkerboard-1px drawn
+D (70891) prd.app: heartbeat
+I (70892) prd.app: button idle level=released total=0
+I (70892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (73928) prd.app: pattern=gradient drawn
+I (79994) prd.app: pattern=black drawn
+D (80891) prd.app: heartbeat
+I (80892) prd.app: button idle level=released total=0
+I (80892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (86059) prd.app: pattern=white drawn
+D (90891) prd.app: heartbeat
+I (90892) prd.app: button idle level=released total=0
+I (90892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (92125) prd.app: pattern=near-black-111315 drawn
+I (98191) prd.app: pattern=orange-f77f2f drawn
+D (100891) prd.app: heartbeat
+I (100892) prd.app: button idle level=released total=0
+I (100892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (104260) prd.app: pattern=comparison-chart drawn
+I (110339) prd.app: pattern=corner-markers drawn
+D (110891) prd.app: heartbeat
+I (110892) prd.app: button idle level=released total=0
+I (110892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (116407) prd.app: pattern=colour-bars drawn
+D (120891) prd.app: heartbeat
+I (120892) prd.app: button idle level=released total=0
+I (120892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (122474) prd.app: pattern=checkerboard-1px drawn
+I (128546) prd.app: pattern=gradient drawn
+D (130891) prd.app: heartbeat
+I (130892) prd.app: button idle level=released total=0
+I (130892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (134612) prd.app: pattern=black drawn
+I (140677) prd.app: pattern=white drawn
+D (140891) prd.app: heartbeat
+I (140892) prd.app: button idle level=released total=0
+I (140892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (146743) prd.app: pattern=near-black-111315 drawn
+D (150891) prd.app: heartbeat
+I (150892) prd.app: button idle level=released total=0
+I (150892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (152809) prd.app: pattern=orange-f77f2f drawn
+I (158877) prd.app: pattern=comparison-chart drawn
+D (160891) prd.app: heartbeat
+I (160892) prd.app: button idle level=released total=0
+I (160892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (164955) prd.app: pattern=corner-markers drawn
+D (170891) prd.app: heartbeat
+I (170892) prd.app: button idle level=released total=0
+I (170892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (171024) prd.app: pattern=colour-bars drawn
+D (180891) prd.app: heartbeat
+I (180892) prd.app: button idle level=released total=0
+I (180892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (183163) prd.app: pattern=gradient drawn
+I (189229) prd.app: pattern=black drawn
+D (190891) prd.app: heartbeat
+I (190892) prd.app: button idle level=released total=0
+I (190892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (195294) prd.app: pattern=white drawn
+D (200891) prd.app: heartbeat
+I (200892) prd.app: button idle level=released total=0
+I (200892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (201360) prd.app: pattern=near-black-111315 drawn
+I (207426) prd.app: pattern=orange-f77f2f drawn
+D (210891) prd.app: heartbeat
+I (210892) prd.app: button idle level=released total=0
+I (210892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (213495) prd.app: pattern=comparison-chart drawn
+I (219574) prd.app: pattern=corner-markers drawn
+D (220891) prd.app: heartbeat
+I (220892) prd.app: button idle level=released total=0
+I (220892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (225642) prd.app: pattern=colour-bars drawn
+D (230891) prd.app: heartbeat
+I (230892) prd.app: button idle level=released total=0
+I (230892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (231709) prd.app: pattern=checkerboard-1px drawn
+I (237781) prd.app: pattern=gradient drawn
+D (240891) prd.app: heartbeat
+I (240892) prd.app: button idle level=released total=0
+I (240892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (243847) prd.app: pattern=black drawn
+I (249912) prd.app: pattern=white drawn
+D (250891) prd.app: heartbeat
+I (250892) prd.app: button idle level=released total=0
+I (250892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (255978) prd.app: pattern=near-black-111315 drawn
+D (260891) prd.app: heartbeat
+I (260892) prd.app: button idle level=released total=0
+I (260892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (262045) prd.app: pattern=orange-f77f2f drawn
+I (268113) prd.app: pattern=comparison-chart drawn
+D (270891) prd.app: heartbeat
+I (270892) prd.app: button idle level=released total=0
+I (270892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (274193) prd.app: pattern=corner-markers drawn
+I (280261) prd.app: pattern=colour-bars drawn
+D (280891) prd.app: heartbeat
+I (280892) prd.app: button idle level=released total=0
+I (280892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (286327) prd.app: pattern=checkerboard-1px drawn
+D (290891) prd.app: heartbeat
+I (290892) prd.app: button idle level=released total=0
+I (290892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (292400) prd.app: pattern=gradient drawn
+I (298466) prd.app: pattern=black drawn
+D (300891) prd.app: heartbeat
+I (300892) prd.app: button idle level=released total=0
+I (300892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (304531) prd.app: pattern=white drawn
+I (310597) prd.app: pattern=near-black-111315 drawn
+D (310891) prd.app: heartbeat
+I (310892) prd.app: button idle level=released total=0
+I (310892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (316663) prd.app: pattern=orange-f77f2f drawn
+D (320891) prd.app: heartbeat
+I (320892) prd.app: button idle level=released total=0
+I (320892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (322731) prd.app: pattern=comparison-chart drawn
+I (328810) prd.app: pattern=corner-markers drawn
+D (330891) prd.app: heartbeat
+I (330892) prd.app: button idle level=released total=0
+I (330892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (334879) prd.app: pattern=colour-bars drawn
+I (340892) prd.app: button idle level=released total=0
+I (340892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (340894) prd.app: heartbeat
+I (347017) prd.app: pattern=gradient drawn
+I (350892) prd.app: button idle level=released total=0
+I (350892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (350894) prd.app: heartbeat
+I (359148) prd.app: pattern=white drawn
+I (360892) prd.app: button idle level=released total=0
+I (360892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (360894) prd.app: heartbeat
+I (365214) prd.app: pattern=near-black-111315 drawn
+I (370892) prd.app: button idle level=released total=0
+I (370892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (370894) prd.app: heartbeat
+I (371280) prd.app: pattern=orange-f77f2f drawn
+I (377349) prd.app: pattern=comparison-chart drawn
+I (380892) prd.app: button idle level=released total=0
+I (380892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (380894) prd.app: heartbeat
+I (383428) prd.app: pattern=corner-markers drawn
+I (389496) prd.app: pattern=colour-bars drawn
+I (390892) prd.app: button idle level=released total=0
+I (390892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (390894) prd.app: heartbeat
+I (395563) prd.app: pattern=checkerboard-1px drawn
+I (400892) prd.app: button idle level=released total=0
+I (400892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (400894) prd.app: heartbeat
+I (401635) prd.app: pattern=gradient drawn
+I (407701) prd.app: pattern=black drawn
+I (410892) prd.app: button idle level=released total=0
+I (410892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (410894) prd.app: heartbeat
+I (413766) prd.app: pattern=white drawn
+I (419832) prd.app: pattern=near-black-111315 drawn
+I (420892) prd.app: button idle level=released total=0
+I (420892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (420894) prd.app: heartbeat
+I (425898) prd.app: pattern=orange-f77f2f drawn
+I (430892) prd.app: button idle level=released total=0
+I (430892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (430894) prd.app: heartbeat
+I (431966) prd.app: pattern=comparison-chart drawn
+I (438045) prd.app: pattern=corner-markers drawn
+I (440892) prd.app: button idle level=released total=0
+I (440892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (440894) prd.app: heartbeat
+I (444113) prd.app: pattern=colour-bars drawn
+I (450180) prd.app: pattern=checkerboard-1px drawn
+I (450892) prd.app: button idle level=released total=0
+I (450892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (450894) prd.app: heartbeat
+I (454218) prd.app: button event=short-press total=1 short=1 long=0 very_long=0
+I (454218) prd.app: button stats raw_edges=2 raw_dropped=0 events=1 events_dropped=0
+I (456253) prd.app: pattern=gradient drawn
+D (460894) prd.app: heartbeat
+I (464218) prd.app: button idle level=released total=1
+I (464218) prd.app: button stats raw_edges=2 raw_dropped=0 events=1 events_dropped=0
+I (468384) prd.app: pattern=white drawn
+D (470894) prd.app: heartbeat
+I (474218) prd.app: button idle level=released total=1
+I (474218) prd.app: button stats raw_edges=2 raw_dropped=0 events=1 events_dropped=0
+I (474450) prd.app: pattern=near-black-111315 drawn
+I (480516) prd.app: pattern=orange-f77f2f drawn
+D (480894) prd.app: heartbeat
+I (484218) prd.app: button idle level=released total=1
+I (484218) prd.app: button stats raw_edges=2 raw_dropped=0 events=1 events_dropped=0
+I (486585) prd.app: pattern=comparison-chart drawn
+D (490894) prd.app: heartbeat
+I (492663) prd.app: pattern=corner-markers drawn
+I (494218) prd.app: button idle level=released total=1
+I (494218) prd.app: button stats raw_edges=2 raw_dropped=0 events=1 events_dropped=0
+I (498732) prd.app: pattern=colour-bars drawn
+D (500894) prd.app: heartbeat
+I (504218) prd.app: button idle level=released total=1
+I (504218) prd.app: button stats raw_edges=2 raw_dropped=0 events=1 events_dropped=0
+I (504799) prd.app: pattern=checkerboard-1px drawn
+I (510872) prd.app: pattern=gradient drawn
+D (510894) prd.app: heartbeat
+I (514218) prd.app: button idle level=released total=1
+I (514218) prd.app: button stats raw_edges=2 raw_dropped=0 events=1 events_dropped=0
+I (516938) prd.app: pattern=black drawn
+I (518748) prd.app: button event=short-press total=2 short=2 long=0 very_long=0
+I (518748) prd.app: button stats raw_edges=4 raw_dropped=0 events=2 events_dropped=0
+I (519345) prd.app: button event=short-press total=3 short=3 long=0 very_long=0
+I (519345) prd.app: button stats raw_edges=6 raw_dropped=0 events=3 events_dropped=0
+I (519980) prd.app: button event=short-press total=4 short=4 long=0 very_long=0
+I (519980) prd.app: button stats raw_edges=8 raw_dropped=0 events=4 events_dropped=0
+I (520658) prd.app: button event=short-press total=5 short=5 long=0 very_long=0
+I (520658) prd.app: button stats raw_edges=10 raw_dropped=0 events=5 events_dropped=0
+D (520894) prd.app: heartbeat
+I (521346) prd.app: button event=short-press total=6 short=6 long=0 very_long=0
+I (521346) prd.app: button stats raw_edges=12 raw_dropped=0 events=6 events_dropped=0
+I (522042) prd.app: button event=short-press total=7 short=7 long=0 very_long=0
+I (522042) prd.app: button stats raw_edges=14 raw_dropped=0 events=7 events_dropped=0
+I (522846) prd.app: button event=short-press total=8 short=8 long=0 very_long=0
+I (522846) prd.app: button stats raw_edges=16 raw_dropped=0 events=8 events_dropped=0
+I (523003) prd.app: pattern=white drawn
+I (523577) prd.app: button event=short-press total=9 short=9 long=0 very_long=0
+I (523577) prd.app: button stats raw_edges=18 raw_dropped=0 events=9 events_dropped=0
+I (525242) prd.app: button event=short-press total=10 short=10 long=0 very_long=0
+I (525242) prd.app: button stats raw_edges=20 raw_dropped=0 events=10 events_dropped=0
+I (525887) prd.app: button event=short-press total=11 short=11 long=0 very_long=0
+I (525887) prd.app: button stats raw_edges=22 raw_dropped=0 events=11 events_dropped=0
+I (529070) prd.app: pattern=near-black-111315 drawn
+D (530894) prd.app: heartbeat
+I (535136) prd.app: pattern=orange-f77f2f drawn
+I (535887) prd.app: button idle level=released total=11
+I (535887) prd.app: button stats raw_edges=22 raw_dropped=0 events=11 events_dropped=0
+D (540894) prd.app: heartbeat
+I (541205) prd.app: pattern=comparison-chart drawn
+I (545887) prd.app: button idle level=released total=11
+I (545887) prd.app: button stats raw_edges=22 raw_dropped=0 events=11 events_dropped=0
+I (547285) prd.app: pattern=corner-markers drawn
+D (550894) prd.app: heartbeat
+I (553353) prd.app: pattern=colour-bars drawn
+I (555887) prd.app: button idle level=released total=11
+I (555887) prd.app: button stats raw_edges=22 raw_dropped=0 events=11 events_dropped=0
+I (559126) prd.app: button event=long-press total=12 short=11 long=1 very_long=0
+I (559126) prd.app: button stats raw_edges=24 raw_dropped=0 events=12 events_dropped=0
+I (559419) prd.app: pattern=checkerboard-1px drawn
+D (560894) prd.app: heartbeat
+I (563678) prd.app: button event=long-press total=13 short=11 long=2 very_long=0
+I (563678) prd.app: button stats raw_edges=26 raw_dropped=0 events=13 events_dropped=0
+I (565492) prd.app: pattern=gradient drawn
+I (567364) prd.app: button event=long-press total=14 short=11 long=3 very_long=0
+I (567364) prd.app: button stats raw_edges=28 raw_dropped=0 events=14 events_dropped=0
+I (570879) prd.app: button event=long-press total=15 short=11 long=4 very_long=0
+I (570879) prd.app: button stats raw_edges=30 raw_dropped=0 events=15 events_dropped=0
+D (570894) prd.app: heartbeat
+I (571558) prd.app: pattern=black drawn
+I (574817) prd.app: button event=long-press total=16 short=11 long=5 very_long=0
+I (574817) prd.app: button stats raw_edges=32 raw_dropped=0 events=16 events_dropped=0
+I (577623) prd.app: pattern=white drawn
+I (578629) prd.app: button event=long-press total=17 short=11 long=6 very_long=0
+I (578629) prd.app: button stats raw_edges=34 raw_dropped=0 events=17 events_dropped=0
+D (580894) prd.app: heartbeat
+I (582348) prd.app: button event=long-press total=18 short=11 long=7 very_long=0
+I (582348) prd.app: button stats raw_edges=36 raw_dropped=0 events=18 events_dropped=0
+I (583689) prd.app: pattern=near-black-111315 drawn
+I (585675) prd.app: button event=long-press total=19 short=11 long=8 very_long=0
+I (585675) prd.app: button stats raw_edges=38 raw_dropped=0 events=19 events_dropped=0
+I (588739) prd.app: button event=long-press total=20 short=11 long=9 very_long=0
+I (588739) prd.app: button stats raw_edges=40 raw_dropped=0 events=20 events_dropped=0
+I (589755) prd.app: pattern=orange-f77f2f drawn
+D (590894) prd.app: heartbeat
+I (591517) prd.app: button event=long-press total=21 short=11 long=10 very_long=0
+I (591517) prd.app: button stats raw_edges=42 raw_dropped=0 events=21 events_dropped=0
+I (595823) prd.app: pattern=comparison-chart drawn
+D (600894) prd.app: heartbeat
+I (601517) prd.app: button idle level=released total=21
+I (601517) prd.app: button stats raw_edges=42 raw_dropped=0 events=21 events_dropped=0
+I (601903) prd.app: pattern=corner-markers drawn
+I (607971) prd.app: pattern=colour-bars drawn
+D (610894) prd.app: heartbeat
+I (611517) prd.app: button idle level=released total=21
+I (611517) prd.app: button stats raw_edges=42 raw_dropped=0 events=21 events_dropped=0
+I (614036) prd.app: pattern=checkerboard-1px drawn
+I (620109) prd.app: pattern=gradient drawn
+D (620894) prd.app: heartbeat
+I (621517) prd.app: button idle level=released total=21
+I (621517) prd.app: button stats raw_edges=42 raw_dropped=0 events=21 events_dropped=0
+I (626175) prd.app: pattern=black drawn
+D (630894) prd.app: heartbeat
+I (631517) prd.app: button idle level=released total=21
+I (631517) prd.app: button stats raw_edges=42 raw_dropped=0 events=21 events_dropped=0
+I (632124) prd.app: button event=short-press total=22 short=12 long=10 very_long=0
+I (632124) prd.app: button stats raw_edges=44 raw_dropped=0 events=22 events_dropped=0
+I (632240) prd.app: pattern=white drawn
+I (638307) prd.app: pattern=near-black-111315 drawn
+D (640894) prd.app: heartbeat
+I (640966) prd.app: button event=very-long-press total=23 short=12 long=10 very_long=1
+I (640966) prd.app: button stats raw_edges=45 raw_dropped=0 events=23 events_dropped=0
+I (644374) prd.app: pattern=orange-f77f2f drawn
+I (650443) prd.app: pattern=comparison-chart drawn
+D (650894) prd.app: heartbeat
+I (650966) prd.app: button idle level=pressed total=23
+I (650966) prd.app: button stats raw_edges=47 raw_dropped=0 events=23 events_dropped=0
+I (652298) prd.app: button event=very-long-press total=24 short=12 long=10 very_long=2
+I (652298) prd.app: button stats raw_edges=47 raw_dropped=0 events=24 events_dropped=0
+I (656522) prd.app: pattern=corner-markers drawn
+D (660894) prd.app: heartbeat
+I (662298) prd.app: button idle level=pressed total=24
+I (662298) prd.app: button stats raw_edges=49 raw_dropped=0 events=24 events_dropped=0
+I (662591) prd.app: pattern=colour-bars drawn
+I (664179) prd.app: button event=very-long-press total=25 short=12 long=10 very_long=3
+I (664179) prd.app: button stats raw_edges=49 raw_dropped=0 events=25 events_dropped=0
+I (668657) prd.app: pattern=checkerboard-1px drawn
+D (670894) prd.app: heartbeat
+I (674179) prd.app: button idle level=pressed total=25
+I (674179) prd.app: button stats raw_edges=51 raw_dropped=0 events=25 events_dropped=0
+I (674730) prd.app: pattern=gradient drawn
+I (676910) prd.app: button event=very-long-press total=26 short=12 long=10 very_long=4
+I (676910) prd.app: button stats raw_edges=51 raw_dropped=0 events=26 events_dropped=0
+I (680796) prd.app: pattern=black drawn
+D (680894) prd.app: heartbeat
+I (686861) prd.app: pattern=white drawn
+I (686910) prd.app: button idle level=pressed total=26
+I (686910) prd.app: button stats raw_edges=53 raw_dropped=0 events=26 events_dropped=0
+I (689808) prd.app: button event=very-long-press total=27 short=12 long=10 very_long=5
+I (689808) prd.app: button stats raw_edges=53 raw_dropped=0 events=27 events_dropped=0
+D (690894) prd.app: heartbeat
+I (692927) prd.app: pattern=near-black-111315 drawn
+I (698993) prd.app: pattern=orange-f77f2f drawn
+I (699808) prd.app: button idle level=pressed total=27
+I (699808) prd.app: button stats raw_edges=55 raw_dropped=0 events=27 events_dropped=0
+D (700894) prd.app: heartbeat
+I (702136) prd.app: button event=very-long-press total=28 short=12 long=10 very_long=6
+I (702136) prd.app: button stats raw_edges=55 raw_dropped=0 events=28 events_dropped=0
+I (705061) prd.app: pattern=comparison-chart drawn
+D (710894) prd.app: heartbeat
+I (711141) prd.app: pattern=corner-markers drawn
+I (712136) prd.app: button idle level=released total=28
+I (712136) prd.app: button stats raw_edges=56 raw_dropped=0 events=28 events_dropped=0
+I (717209) prd.app: pattern=colour-bars drawn
+D (720894) prd.app: heartbeat
+I (722136) prd.app: button idle level=released total=28
+I (722136) prd.app: button stats raw_edges=56 raw_dropped=0 events=28 events_dropped=0
+I (723276) prd.app: pattern=checkerboard-1px drawn
+I (729348) prd.app: pattern=gradient drawn
+D (730894) prd.app: heartbeat
+I (732136) prd.app: button idle level=released total=28
+I (732136) prd.app: button stats raw_edges=56 raw_dropped=0 events=28 events_dropped=0
+I (735414) prd.app: pattern=black drawn
+D (740894) prd.app: heartbeat
+I (741479) prd.app: pattern=white drawn
+I (742136) prd.app: button idle level=released total=28
+I (742136) prd.app: button stats raw_edges=56 raw_dropped=0 events=28 events_dropped=0
+I (747545) prd.app: pattern=near-black-111315 drawn
+D (750894) prd.app: heartbeat
+I (752136) prd.app: button idle level=released total=28
+I (752136) prd.app: button stats raw_edges=56 raw_dropped=0 events=28 events_dropped=0
+I (753611) prd.app: pattern=orange-f77f2f drawn
+I (759679) prd.app: pattern=comparison-chart drawn
+D (760894) prd.app: heartbeat
+I (762136) prd.app: button idle level=released total=28
+I (762136) prd.app: button stats raw_edges=56 raw_dropped=0 events=28 events_dropped=0
+I (765758) prd.app: pattern=corner-markers drawn
+D (770894) prd.app: heartbeat
+I (771827) prd.app: pattern=colour-bars drawn
+I (772136) prd.app: button idle level=released total=28
+I (772136) prd.app: button stats raw_edges=56 raw_dropped=0 events=28 events_dropped=0
+I (777893) prd.app: pattern=checkerboard-1px drawn
+D (780894) prd.app: heartbeat
+I (782136) prd.app: button idle level=released total=28
+I (782136) prd.app: button stats raw_edges=56 raw_dropped=0 events=28 events_dropped=0
+I (783966) prd.app: pattern=gradient drawn
+I (790032) prd.app: pattern=black drawn
+D (790894) prd.app: heartbeat
+I (792136) prd.app: button idle level=released total=28
+I (792136) prd.app: button stats raw_edges=56 raw_dropped=0 events=28 events_dropped=0
+I (796098) prd.app: pattern=white drawn
+I (797938) prd.app: button event=long-press total=29 short=12 long=11 very_long=6
+I (797938) prd.app: button stats raw_edges=58 raw_dropped=0 events=29 events_dropped=0
+D (800894) prd.app: heartbeat
+I (802164) prd.app: pattern=near-black-111315 drawn
+I (807938) prd.app: button idle level=released total=29
+I (807938) prd.app: button stats raw_edges=58 raw_dropped=0 events=29 events_dropped=0
+I (808230) prd.app: pattern=orange-f77f2f drawn
+D (810894) prd.app: heartbeat
+I (814299) prd.app: pattern=comparison-chart drawn
+
+==============================================================================
+PART 3 - ROM download loader reached by holding BOOT across a power cycle
+
+Passive capture (no DTR/RTS asserted). Proves manual BOOT recovery works, and
+that the download-mode latch survives resets - only a power cycle clears it.
+==============================================================================
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x15 (USB_UART_CHIP_RESET),boot:0x22 (DOWNLOAD(USB/UART0))
+Saved PC:0x40041a76
+waiting for download
+
+esptool cross-checks, summarised (raw output withheld: it prints the MAC):
+  - 'chip_id' with auto-reset, IO0 configured as an application input:
+    connected, ESP32-S3 (QFN56) rev v0.2, USB mode USB-Serial/JTAG,
+    stub uploaded and running. Flashing needs no button press.
+  - 'chip_id --before no_reset --after no_reset' after the BOOT power cycle:
+    connected and reported 'Staying in bootloader'. This succeeds only if the
+    chip is already in the loader, so BOOT entry is confirmed.
+  - 'run' did NOT leave the loader; the board re-reported boot:0x22.
+    A USB-C power cycle without BOOT held was required.
+
+==============================================================================
+PART 4 - after the download-mode excursion
+
+Power cycle without BOOT held booted straight into the application, which also
+proves IO0 is not held low by a stuck contact. 3 further taps classify cleanly.
+==============================================================================
+I (879) prd.app: Prusa Remote Display 0.1.0-dev
+I (880) prd.boot: version=0.1.0-dev git=425ad5a12650 dirty=true profile=hardware-validation idf=v5.5.4 board=waveshare_esp32_s3_lcd_2_8
+I (880) prd.boot: phase=initializing
+I (883) prd.boot: phase=ready
+I (892) prd.button: button ready gpio=0 active=low pull_up=external hw_debounce=no debounce_ms=25 long_ms=1500 very_long_ms=8000 level=released
+I (892) prd.app: button validation active — press to classify
+I (1028) prd.app: display validation active 320x240 cycling patterns every 6 s
+I (1107) prd.app: pattern=corner-markers drawn
+I (7175) prd.app: pattern=colour-bars drawn
+D (10891) prd.app: heartbeat
+I (10892) prd.app: button idle level=released total=0
+I (10892) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (13241) prd.app: pattern=checkerboard-1px drawn
+I (16188) prd.app: button event=short-press total=1 short=1 long=0 very_long=0
+I (16188) prd.app: button stats raw_edges=2 raw_dropped=0 events=1 events_dropped=0
+I (16721) prd.app: button event=short-press total=2 short=2 long=0 very_long=0
+I (16721) prd.app: button stats raw_edges=4 raw_dropped=0 events=2 events_dropped=0
+I (17280) prd.app: button event=short-press total=3 short=3 long=0 very_long=0
+I (17280) prd.app: button stats raw_edges=6 raw_dropped=0 events=3 events_dropped=0
+I (19313) prd.app: pattern=gradient drawn
+D (20891) prd.app: heartbeat
+I (27280) prd.app: button idle level=released total=3
+I (27280) prd.app: button stats raw_edges=6 raw_dropped=0 events=3 events_dropped=0
+D (30891) prd.app: heartbeat
+I (31444) prd.app: pattern=white drawn
+I (37280) prd.app: button idle level=released total=3
+I (37280) prd.app: button stats raw_edges=6 raw_dropped=0 events=3 events_dropped=0
+I (37510) prd.app: pattern=near-black-111315 drawn
+D (40891) prd.app: heartbeat
+I (43576) prd.app: pattern=orange-f77f2f drawn
+I (47280) prd.app: button idle level=released total=3
+I (47280) prd.app: button stats raw_edges=6 raw_dropped=0 events=3 events_dropped=0

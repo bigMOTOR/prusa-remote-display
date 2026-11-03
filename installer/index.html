@@ -1,0 +1,84 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 Mykola Fiantsev -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Install your remote display</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+<header class="brand">Prusa Remote Display <span>Community project · Pre-beta</span></header>
+<main>
+  <div class="intro">
+    <p class="eyebrow">GET STARTED</p>
+    <h1>Set up your display.</h1>
+    <p class="lead">Install ready-made firmware, then connect to your printer.<br>
+      No compiling. No account.</p>
+  </div>
+  <section class="installation" aria-labelledby="install-title">
+    <div class="section-title"><span class="step" aria-hidden="true">1</span>
+      <h2 id="install-title"><span class="visually-hidden">Step 1: </span>Install the firmware</h2></div>
+    <p>Connect your display to the computer with a <strong>USB data cable</strong>.
+      Use desktop Chrome or Edge and close any app using the display's USB port.</p>
+    <p id="release-status" class="release-status" role="status">Checking release availability…</p>
+    <fieldset>
+      <legend>Before installing</legend>
+      <label class="confirmation"><input type="checkbox" id="board-confirm">
+        <span>My board is <strong>Waveshare <span class="board-id">ESP32-S3-LCD-2.8</span>,
+          <span class="board-id">non-touch.</span></strong>
+          <span class="supporting">The touch model and other ESP32-S3 boards are not supported.</span></span></label>
+      <label class="confirmation"><input type="checkbox" id="erase-confirm">
+        <span>I understand that initial installation <strong>erases saved display settings.</strong>
+          <span class="supporting">It does not change the printer.</span></span></label>
+    </fieldset>
+    <div id="install-host">
+      <button id="install" disabled>Install firmware</button>
+    </div>
+    <p id="browser-status" class="secondary"></p>
+    <details class="technical">
+      <summary>Compatibility and installation details</summary>
+      <p>Safari can show this guide, but cannot install over USB because it does not
+        provide Web Serial. Use desktop Chrome or Edge for USB installation;
+        iOS is not supported by this path. Chip detection cannot identify this exact board.
+        Check its model before proceeding.
+        Installation starts only after you choose a USB port and confirm in the installer.</p>
+    </details>
+  </section>
+  <section class="setup" aria-labelledby="setup-title">
+    <div class="section-title"><span class="step" aria-hidden="true">2</span>
+      <h2 id="setup-title"><span class="visually-hidden">Step 2: </span>Connect to your printer</h2></div>
+    <ol>
+      <li>After installation, follow the display's setup screen.</li>
+      <li>Join its <strong>PRD-Setup-…</strong> Wi-Fi network with the password on the screen.
+        Stay connected even if your phone says there is no internet.</li>
+      <li>Open the address shown on the display, normally <code>http://192.168.4.1</code>.</li>
+      <li>Check your home Wi-Fi, then enter your printer's local address and PrusaLink API key.</li>
+    </ol>
+    <p class="local-setup-note">Your Wi-Fi password and printer key belong in that local setup page,
+      <strong>not on this website</strong>. Normal monitoring does not use this site.</p>
+  </section>
+  <details class="assembly">
+    <summary>Buying and assembling the display</summary>
+    <p>The enclosure and complete parts list are still being physically verified.
+      This page is not yet a finished build-your-own kit. Do not substitute another
+      board, force tight printed parts or press through an unsupported switch.</p>
+  </details>
+  <footer>
+    <p class="non-affiliation">Independent community project; not affiliated with or endorsed by Prusa Research.</p>
+    <nav aria-label="Project information">
+      <a id="source-link" href="https://github.com/bigMOTOR/prusa-remote-display">Source and project status</a>
+      <a href="third-party-notices.txt">Third-party licenses</a>
+    </nav>
+    <details class="privacy">
+      <summary>Privacy and project information</summary>
+      <p>No account or analytics are added by this page. Its hosting provider may keep
+        standard access logs. The page does not request your Wi-Fi password or API key.</p>
+    </details>
+  </footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,120 @@
+# Milestone 1 Phase F — LVGL foundation, hardware validation
+#
+# Board: Waveshare ESP32-S3-LCD-2.8 (non-touch, SKU 30223)
+# Profile: hardware-validation · ESP-IDF v5.5.4 · LVGL 9.5.0
+# Date: 2026-08-04
+#
+# FILTERED per Bootstrap Spec 16.8. Removed: esp_driver_spi and spi_bus_lock
+# per-transfer chatter (ESP_EARLY_LOGV, ~68 lines/s, not suppressible at run
+# time), and the ESP-IDF boot register/memory dump. No machine paths,
+# usernames, serial numbers, credentials, network names or printer payloads
+# appear in this file. Unfiltered capture retained outside the repository.
+#
+# PART 1 — boot, renderer initialisation, first frame
+
+rst:0x15 (USB_UART_CHIP_RESET),boot:0x2a (SPI_FAST_FLASH_BOOT)
+I (24) boot: ESP-IDF v5.5.4 2nd stage bootloader
+I (24) boot: compile time Aug  4 2026 18:55:34
+I (25) boot: Multicore bootloader
+I (25) boot: chip revision: v0.2
+I (25) boot: efuse block revision: v1.4
+I (26) boot: Enabling RNG early entropy source...
+I (26) boot: Partition Table:
+I (26) boot: ## Label            Usage          Type ST Offset   Length
+I (27) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (27) boot:  1 nvs_keys         NVS keys         01 04 0000f000 00001000
+I (28) boot:  2 otadata          OTA data         01 00 00010000 00002000
+I (28) boot:  3 phy_init         RF data          01 01 00012000 00001000
+I (28) boot:  4 factory_cfg      Unknown data     01 40 00013000 0000d000
+I (29) boot:  5 ota_0            OTA app          00 10 00020000 00680000
+I (29) boot:  6 ota_1            OTA app          00 11 006a0000 00680000
+I (30) boot:  7 coredump         Unknown data     01 03 00d20000 00100000
+I (30) boot:  8 assets           Unknown data     01 41 00e20000 001e0000
+I (30) boot: End of partition table
+I (31) esp_image: segment 0: paddr=00020020 vaddr=3c0a0020 size=3a570h (238960) map
+I (67) esp_image: segment 1: paddr=0005a598 vaddr=3fc97600 size=045c4h ( 17860) load
+I (70) esp_image: segment 2: paddr=0005eb64 vaddr=40374000 size=014b4h (  5300) load
+I (72) esp_image: segment 3: paddr=00060020 vaddr=42000020 size=9a980h (633216) map
+I (166) esp_image: segment 4: paddr=000fa9a8 vaddr=403754b4 size=120ech ( 73964) load
+I (180) esp_image: segment 5: paddr=0010ca9c vaddr=50000000 size=00020h (    32) load
+I (188) boot: Loaded app from partition at offset 0x20000
+I (188) boot: Disabling RNG early entropy source...
+D (190) octal_psram: exp_data: 0x5a6b7c8d
+D (190) octal_psram: ref_data: 0x5a6b7c8d
+I (190) octal_psram: vendor id    : 0x0d (AP)
+I (190) octal_psram: dev id       : 0x02 (generation 3)
+I (191) octal_psram: density      : 0x03 (64 Mbit)
+I (191) octal_psram: good-die     : 0x01 (Pass)
+I (191) octal_psram: Latency      : 0x01 (Fixed)
+I (191) octal_psram: VCC          : 0x01 (3V)
+I (191) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (192) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (192) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (192) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (193) octal_psram: DriveStrength: 0x00 (1/1)
+I (199) cpu_start: Multicore app
+D (200) cpu_start: Pro cpu up
+D (200) cpu_start: Starting app cpu, entry point is 0x40375600
+D (0) cpu_start: App cpu up
+D (642) cpu_start: calling init function: 0x42002c80 on core: 0
+D (642) cpu_start: calling init function: 0x42003bd4 on core: 0
+I (642) cpu_start: Pro cpu start user code
+I (642) cpu_start: cpu freq: 160000000 Hz
+D (642) cpu_start: calling init function: 0x42002bd0 on core: 0
+D (644) cpu_start: calling init function: 0x42002c94 on core: 0
+D (645) cpu_start: calling init function: 0x42005980 on core: 0
+D (659) cpu_start: calling init function: 0x42009970 on core: 0
+D (659) cpu_start: calling init function: 0x42008d8c on core: 0
+D (659) cpu_start: calling init function: 0x42009f34 on core: 0
+D (908) cpu_start: calling init function: 0x42003c20 on core: 0
+D (909) cpu_start: calling init function: 0x42003c30 on core: 0
+D (909) cpu_start: calling init function: 0x4200a724 on core: 0
+D (910) cpu_start: calling init function: 0x4200b898 on core: 0
+D (910) cpu_start: calling init function: 0x4200a95c on core: 0
+D (910) cpu_start: calling init function: 0x42008d98 on core: 0
+
+
+# PART 2 — periodic measurement, first minute
+
+V (1139) spi_master: TX 0x3fcbddc0,[ l0en; 321,m iIs _p(tr1_e1x39) prd.app: task=prd_ui_val statc k0_, busye_tpesrsam=: 810,9 a free_low_bytes=2932 used_peak_bytleigsn=me5nt2: 601 , hneeead_droom=35%
+I (1165) prd.ui: flush submitted=6 completed=5 outstanding=1 waits_blocked=5 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=7355 us_mean=7486 us_max=7980 swap_us_mean=401
+I (1166) prd.ui: memory lvgl_used=7316/63648 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195407 internal_largest=122868 psram_free=8385732
+I (1167) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3988 used_peak_bytes=4204 headroom=48%
+I (10967) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (16167) prd.ui: flush submitted=306 completed=305 outstanding=1 waits_blocked=36 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2660 us_mean=2919 us_max=7980 swap_us_mean=64
+I (16168) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195407 internal_largest=122868 psram_free=8385732
+I (16169) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (20969) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (30971) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (31139) prd.app: ui/display cross-check agree ui_submitted=606 ui_completed=605 panel_submitted=606 panel_completed=606 completion_lag=1 in_flight=0 peak_in_flight=1 panel_spurious=0 panel_wait_timeouts=0
+I (31140) prd.app: task=prd_ui_val stack_bytes=8192 free_low_bytes=2932 used_peak_bytes=5260 headroom=35%
+
+
+# PART 3 — soak, every 8th sample across 31.9 minutes
+
+I (106181) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (226198) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (346215) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (466233) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (586250) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (706267) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (826283) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (946302) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (1066319) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (1186337) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (1306355) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (1426372) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (1546388) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (1666407) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (1786425) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (1906441) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+
+
+# PART 4 — final state at 1906 s
+
+I (1891440) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (1901242) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (1906440) prd.ui: flush submitted=38106 completed=38106 outstanding=0 waits_blocked=3743 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2615 us_mean=2861 us_max=7980 swap_us_mean=56
+I (1906441) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (1906442) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (1911243) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%

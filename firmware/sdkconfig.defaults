@@ -1,0 +1,166 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_OFFSET=0x8000
+CONFIG_COMPILER_CXX_EXCEPTIONS=n
+CONFIG_COMPILER_CXX_RTTI=n
+CONFIG_FREERTOS_HZ=1000
+CONFIG_FREERTOS_USE_TRACE_FACILITY=y
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=y
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=y
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# Software-only OTA signature verification. No hardware Secure Boot or eFuse
+# provisioning. Build unsigned, then use the owner-local signing tool. For RSA
+# IDF trusts the first signature key of the running app; initial trusted install
+# is therefore a separately authorised, signed USB application image.
+CONFIG_SECURE_SIGNED_APPS_NO_SECURE_BOOT=y
+CONFIG_SECURE_SIGNED_APPS_RSA_SCHEME=y
+CONFIG_SECURE_SIGNED_ON_UPDATE_NO_SECURE_BOOT=y
+# CONFIG_SECURE_BOOT is not set
+# CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES is not set
+# CONFIG_BOOTLOADER_APP_ANTI_ROLLBACK is not set
+# Bootstrap Spec §8.2 lists CONFIG_NVS_ENCRYPTION=y here. It is deliberately absent —
+# see the block at the end of this file for the ruling and the reasoning.
+CONFIG_APP_RETRIEVE_LEN_ELF_SHA=16
+CONFIG_APP_COMPILE_TIME_DATE=n
+CONFIG_LOG_TIMESTAMP_SOURCE_RTOS=y
+CONFIG_LOG_COLORS=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+
+# Places gpio_get_level/gpio_set_level/gpio_intr_disable in IRAM.
+#
+# Required by the button's edge interrupt, which is allocated with
+# ESP_INTR_FLAG_IRAM so that it keeps firing while the flash cache is disabled —
+# which is what an NVS write (Milestone 3) and an OTA write (Milestone 7) both do.
+# An IRAM interrupt handler that calls a flash-resident function faults, and the
+# fault would present as an unexplained crash during someone else's flash write.
+#
+# Costs a few hundred bytes of IRAM. Placement only: no behaviour changes.
+CONFIG_GPIO_CTRL_FUNC_IN_IRAM=y
+
+# Inter-Processor Call task stack, raised from the ESP32-S3 default of 1280.
+#
+# Installing the GPIO ISR service with ESP_INTR_FLAG_IRAM runs work on the other
+# core's IPC task, and 1280 bytes is not enough for it once the interrupt
+# allocator's own logging is formatting on that stack — it overflowed on the first
+# boot of Milestone 2 Phase B, and pinning the calling task only moved the overflow
+# from ipc1 to ipc0.
+#
+# Set in the base defaults rather than in the hardware-validation profile on
+# purpose. The verbose log level is what made it fail first, but sizing a stack so
+# that it only survives when logging is quiet is not sizing it at all.
+#
+# Costs 1280 bytes per core, so 2.5 kB of internal RAM.
+CONFIG_ESP_IPC_TASK_STACK_SIZE=2560
+
+
+# --- LVGL renderer (Milestone 1 Phase F) -----------------------------------
+#
+# Configured through Kconfig rather than an lv_conf.h. Under ESP-IDF, LVGL maps
+# CONFIG_LV_* onto its own options, so every renderer setting is then visible in
+# the generated sdkconfig and in the build's config diff — the same reason the
+# project's own validation flags are Kconfig rather than environment variables.
+#
+# Only settings that must not drift are pinned here. Anything left unset keeps
+# LVGL's own default deliberately; see docs/decisions/0005-lvgl-integration.md.
+
+# RGB565. The display component's validated pixel format. The panel's big-endian
+# byte order is selected in code per display (LV_COLOR_FORMAT_RGB565_SWAPPED),
+# not here, because it is a property of this panel and not of the renderer.
+CONFIG_LV_COLOR_DEPTH_16=y
+
+# LVGL's examples and demos default to y and would otherwise be compiled into
+# every image. Neither is product code and neither is referenced.
+CONFIG_LV_BUILD_EXAMPLES=n
+CONFIG_LV_BUILD_DEMOS=n
+
+# Route LVGL's own diagnostics into the project log under the prd.ui tag.
+# Warnings and errors only: LVGL's info and trace levels are per-redraw chatter,
+# and a renderer that logs every frame cannot be watched during a soak.
+CONFIG_LV_USE_LOG=y
+CONFIG_LV_LOG_LEVEL_WARN=y
+
+# LVGL's built-in allocator over a fixed pool, rather than the C library's.
+# The pool is a closed accounting system: lv_mem_monitor() then reports used and
+# peak exactly, so a rising figure under a static scene is a leak rather than
+# ambient system memory pressure. It also cannot fail because something else
+# exhausted the system heap. 64 kB is LVGL's default and is PROVISIONAL —
+# Milestone 1 has one scene to size it against; real scenes arrive in Milestone 2.
+CONFIG_LV_USE_BUILTIN_MALLOC=y
+CONFIG_LV_MEM_SIZE_KILOBYTES=64
+
+
+# --- Typography (Milestone 2 Phase C) ---------------------------------------
+#
+# Product typography is Inter (Production UI Specification §4), generated with
+# tabular figures into six committed C sources under components/ui/src/fonts/ and
+# compiled into every profile. See assets/fonts/inter/PROVENANCE.md.
+#
+# LVGL still requires LV_FONT_DEFAULT to name a BUILT-IN face: under ESP-IDF the
+# choice offers only built-ins, with no custom option, so a generated face cannot be
+# nominated here. Every product label sets its own face explicitly from the token
+# layer, and the screen inherits the Inter body face, so this default is never drawn.
+#
+# UNSCII 8 rather than Montserrat 14, for two reasons. It is a small bitmap face
+# instead of roughly 10 kB of anti-aliased glyphs that nothing renders. And if a
+# label ever does reach the default, a monospace pixel font makes that immediately
+# obvious, where Montserrat would look almost right — which is the harder defect to
+# find. Montserrat is switched off entirely; the diagnostic scene selects it back
+# when it is the compiled scene.
+CONFIG_LV_FONT_DEFAULT_UNSCII_8=y
+CONFIG_LV_FONT_UNSCII_8=y
+# CONFIG_LV_FONT_MONTSERRAT_14 is not set
+
+# LVGL's QR code widget, for the setup access point's join code.
+#
+# NOT A NEW DEPENDENCY. The pinned LVGL 9.5.0 already ships src/libs/qrcode/ — the widget
+# plus Project Nayuki's qrcodegen under the MIT licence, which is compatible with this
+# project's GPL-3.0-only. Nothing is added to dependencies.lock and no encoder is vendored
+# or written here: writing a QR encoder to avoid enabling one already in the tree would be
+# the larger risk, not the smaller.
+#
+# The widget derives from lv_canvas, which CONFIG_LV_USE_CANVAS already enables, and its
+# canvas is LV_COLOR_FORMAT_I1 — one bit per pixel, so the code costs about 2 kB of the
+# 64 kB LVGL pool rather than a colour buffer.
+CONFIG_LV_USE_QRCODE=y
+
+# NVS ENCRYPTION IS OFF, AND THAT IS THE PRODUCT'S CURRENT STORAGE POLICY.
+#
+# Owner ruling, 2026-08-14: encrypted NVS and HMAC/eFuse key provisioning are not
+# requirements of the current product or of current release builds. They are deferred
+# production-security hardening with no scheduled milestone. Plaintext NVS is the
+# supported policy in debug, hardware-validation AND release until an explicit future
+# security decision changes it — it is not a development escape hatch.
+#
+# WHY IT IS NOT MERELY UNUSED. Milestone 0 set CONFIG_NVS_ENCRYPTION=y believing it to be
+# inert compile-time support. It is not. On ESP32-S3, SOC_HMAC_SUPPORTED makes the HMAC
+# key-protection scheme the only available one once flash encryption is off, and
+# nvs_sec_provider registers it automatically through an ESP_SYSTEM_INIT_FN that ESP-IDF
+# deliberately force-links. nvs_flash_init() then reads the security config, finds no
+# key in eFuse on a virgin device, and calls nvs_flash_generate_keys_v2(), which reaches
+# esp_efuse_write_key(EFUSE_BLK_KEY0, ESP_EFUSE_KEY_PURPOSE_HMAC_UP, ...) —
+# an IRREVERSIBLE burn, because CONFIG_EFUSE_VIRTUAL is not set. Verified against the
+# pinned ESP-IDF v5.5.4 sources, not assumed.
+#
+# Turning the option off removes generate_keys_hmac from the image entirely, so the
+# invariant is structural rather than a call-site convention. tools/check-efuse-safety.sh
+# enforces the call-site half.
+#
+# THE LINE BELOW IS THIS FILE'S ONLY STATEMENT ABOUT THE OPTION, AND MUST STAY THAT WAY.
+# The §8.2 block above carried a contradicting CONFIG_NVS_ENCRYPTION=y until 2026-08-16.
+# The effective value was still `n`, because a later assignment in one defaults file wins
+# — but that made an irreversible-hardware invariant rest on line ordering, and it read as
+# a live setting to anyone who stopped at the first match. Do not reintroduce it.
+#
+# THIS DIVERGES FROM Bootstrap Specification §9.5, which staged NVS encryption as
+# buildable from Milestone 0. The divergence is recorded in docs/development/; no Project
+# Source has been modified.
+# CONFIG_NVS_ENCRYPTION is not set

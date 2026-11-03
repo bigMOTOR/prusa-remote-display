@@ -1,0 +1,548 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# Continuous integration, Firmware Repository Bootstrap Specification v0.3 §13.
+# Job names follow §13.2.
+#
+# Two corrections from the previous workflow, both of which let real breakage
+# through:
+#
+#   - The `paths:` filters restricted triggers to firmware/** and
+#     .github/workflows/**, so a change to the root .clang-format, .clang-tidy or
+#     .editorconfig ran no CI at all. §13.1 specifies the trigger set with no path
+#     filtering, and the formatting policy lives at the root.
+#   - Version tags were not a trigger, which §13.1 requires and which the
+#     reproducibility job depends on.
+#
+# Runner labels and the container are pinned. `ubuntu-latest` moves between
+# Ubuntu releases without notice, which is the same class of problem as a
+# floating container tag that §13.3 prohibits outright.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Documented major version for the formatting and static-analysis tools
+  # (§13.2 Job 1: "install clang-format at the documented major version").
+  # Installed from PyPI rather than a distro package so a CI runner and a
+  # developer's machine can agree on an exact version — clang-format output
+  # differs between majors, so "a recent clang-format" is not a policy.
+  CLANG_TOOLS_VERSION: 22.1.8
+  # The browser suite's only language runtime. Pinned exactly rather than taking whatever the
+  # runner image happens to preinstall, because Firmware Architecture Specification §22 requires
+  # dependencies to be pinned, and because a suite that reports a page defect should not be able
+  # to blame a Node it was never tested against. 22.23.2 is the current Node 22 LTS ("Jod") and is
+  # also what ubuntu-24.04 preinstalls today, so setup-node resolves it from the runner's tool
+  # cache instead of downloading it. See ADR-0006.
+  NODE_VERSION: 22.23.2
+
+jobs:
+  installer:
+    name: Browser Installer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          # v5 otherwise adds automatic package-manager caching; preserve no-cache policy.
+          package-manager-cache: false
+      - name: Install locked browser tools without lifecycle scripts
+        run: npm --prefix installer ci --ignore-scripts --no-audit --no-fund
+      - name: Test installer contracts
+        run: npm --prefix installer test
+      - name: Build disabled preview
+        run: node installer/build.mjs "$RUNNER_TEMP/installer-preview"
+      # No deploy step: publishing and real USB proof remain separate gates.
+  # --- Job 1 — format (§13.2) ---------------------------------------------
+  format:
+    name: Format
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Install clang-format ${{ env.CLANG_TOOLS_VERSION }}
+        run: pipx install "clang-format==${CLANG_TOOLS_VERSION}"
+
+      - name: Check formatting
+        run: ./firmware/tools/check-format.sh
+
+  # --- Job 3 — clang-tidy (§13.2) -----------------------------------------
+  clang-tidy:
+    name: Clang-Tidy
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Install clang-tidy ${{ env.CLANG_TOOLS_VERSION }}
+        run: pipx install "clang-tidy==${CLANG_TOOLS_VERSION}"
+
+      # check-tidy.sh configures the host test build only to obtain a compile
+      # database; it analyses project component sources, never ESP-IDF or
+      # third-party code (§12.2).
+      - name: Run clang-tidy
+        run: ./firmware/tools/check-tidy.sh
+
+  # --- source-gates (not numbered in §13.2) -------------------------------
+  #
+  # Two gates that already existed and, until now, ran only in the local
+  # verification procedure. Neither is named in §13.2, but §12.4 puts static
+  # analysis in the Milestone 0 CI scope, and a check that depends on someone
+  # remembering to run it is not an enforced invariant.
+  #
+  # check-efuse-safety.sh carries the owner ruling of 2026-08-14 — "there must be
+  # no reachable eFuse-writing path in the firmware" — which Bootstrap §9.5 states
+  # from the other side: "irreversible eFuse operations shall never be part of a
+  # normal `flash` command". This is the one gate in the workflow whose failure
+  # cannot be undone on the affected board, so it is also the one least suited to
+  # a manual step.
+  #
+  # check-tokens.sh carries Production UI Specification §2's token rules and the
+  # first four items of its §14 checklist.
+  #
+  # check-credential-logs.py carries Architecture Spec §13.5's "credentials must never be written
+  # to logs", unqualified, together with the owner clarification of 2026-08-23 that the actual home
+  # Wi-Fi SSID is credential material under §§7.3, 13.2 and 13.5. It exists because that rule had
+  # NO enforcement that could see the one real breach: network::restart() appended the configured
+  # SSID to an Info line, release compiles Info in, and the path needs a second same-boot
+  # credential submission — so no bench capture of a first-time provisioning could contain it, and
+  # the §13.5 packaging scan is static while the SSID is runtime data. wifi.cpp cannot be host
+  # compiled either, so direct source inspection is the only deterministic check available for
+  # that line at all.
+  #
+  # ⛔ ITS SCOPE, STATED SO THE JOB'S GREEN TICK IS NOT READ AS MORE THAN IT IS: this is a
+  # regression guard over the DIRECT SOURCE TEXT of known project-owned logging shapes. It does
+  # no alias analysis, no data-flow tracking and no interprocedural reasoning, so it does NOT
+  # prove that no credential can ever reach a log. It fails on the class of line that actually
+  # shipped and on the neighbouring shapes, and its own detector — including that line, and the
+  # false positives an earlier draft produced — is tested by
+  # firmware/test/tools/test_credential_log_scan.py.
+  #
+  # ⛔ NO FILE IS EXEMPT. setup_ap.cpp's device-generated setup SSID is permitted by a marker BOUND
+  # to one call and consumed by it — a second such log needs its own marker, and a marker that binds
+  # to nothing is itself a finding. That call is still rejected if a credential joins it, and the
+  # marker's uniqueness in the tree is asserted by the same tests.
+  #
+  # ⬅️ ITS MASKING IS A LEXER, NOT ORDERED REGEXES, because both possible orders were measured to
+  # have a bypass: comments-first let `"http://host/" + password` through, and literals-first lets a
+  # block comment holding one quote erase the log call itself.
+  #
+  # check-licensing.sh carries Open Source Licensing Decision 001: each tracked
+  # file either declares the licence that decision assigns its area, together
+  # with the project copyright line, or is an exception recorded WITH A REASON in
+  # firmware/tools/licensing-manifest. A file matching no rule fails, so new
+  # third-party material cannot enter the tree without a decision being written
+  # down. The reasons matter as much as the rules: a gate that only knew "this
+  # file lacks our header" would be an argument for re-heading someone else's
+  # work, which is the opposite of compliance.
+  #
+  # Its own job rather than steps appended to Format: a token or eFuse finding
+  # reported under a job named "Format" would name the wrong thing, and this
+  # project has already paid for diagnostics that report the convenient fact
+  # instead of the needed one. No toolchain is installed because none of these
+  # scripts needs one — they are bash over find and grep, plus one stdlib-only
+  # Python scanner — and all are written to behave identically here and on macOS.
+  source-gates:
+    name: Source Gates
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Check eFuse safety
+        run: ./firmware/tools/check-efuse-safety.sh
+
+      # Runs even when the gate above failed, so one push reports every finding
+      # rather than one finding per round trip.
+      - name: Check Production UI tokens
+        if: ${{ !cancelled() }}
+        run: ./firmware/tools/check-tokens.sh
+
+      - name: Check credential logging
+        if: ${{ !cancelled() }}
+        run: ./firmware/tools/check-credential-logs.py
+
+      - name: Check licensing headers
+        if: ${{ !cancelled() }}
+        run: ./firmware/tools/check-licensing.sh
+
+      - name: Test standard-library tooling
+        if: ${{ !cancelled() }}
+        run: ./firmware/tools/test-tools.sh
+
+      - name: Test OTA configuration safety
+        if: ${{ !cancelled() }}
+        run: python3 -m unittest discover -s firmware/test/configuration -p 'test_*.py' -v
+
+  # --- browser-tests (not numbered in §13.2) ------------------------------
+  #
+  # The deterministic browser-flow suite over the real served provisioning page. It was committed
+  # with M3.8 and, until now, ran only when a developer typed the command — which is finding F2's
+  # shape exactly ("gates that ran nowhere but a developer's terminal"), reintroduced. It is the
+  # only thing that tests the page's BEHAVIOUR: it caught `hidden` doing nothing on an SVG, a
+  # success class surviving into an error summary, three POSTs where one was intended, and the
+  # restart hang — four defects that had each already reached physical acceptance, and none of
+  # which is visible in the asset text that served_page_tests.cpp can read.
+  #
+  # Its own job rather than a step inside Host Tests, following the source-gates precedent: a page
+  # defect reported under a job named "Host Tests" would name the wrong thing, and the two
+  # suites share no toolchain. Separate jobs also run in parallel.
+  #
+  # Ubuntu, not macOS. Every assertion the suite makes is font-independent — computed colours,
+  # `display`, declared `font-size`, two CSS-positioned rectangle comparisons, the 375 px viewport
+  # and horizontal overflow — so matching iOS font metrics buys nothing here. The 375x812
+  # viewport comes from a same-origin iframe rather than
+  # --window-size, so it is exact on either platform (Chrome clamps --window-size to 500 px on
+  # macOS, which once cropped a screenshot and was read as a page overflow).
+  #
+  # No browser is downloaded and no third-party action is used. The runner image ships Google
+  # Chrome; run.mjs resolves it, refuses anything older than the minimum `--headless=new` needs,
+  # proves it actually starts, and prints the version it got. Chromium's own documentation records
+  # that the official /opt/google/chrome install carries the AppArmor profile permitting the
+  # unprivileged user namespaces its sandbox needs on Ubuntu 23.10+, which a self-downloaded build
+  # does not — so the packaged browser is both the cheaper and the more reliable choice.
+  browser-tests:
+    name: Browser Tests
+    runs-on: ubuntu-24.04
+    # The suite's known failure mode is a browser that never exits, so the job carries the outer
+    # bound the harness's own per-capture and per-scenario deadlines sit inside.
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Install Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      # The declared tool requirement, recorded in the log before the suite runs. run.mjs checks
+      # and enforces this too; printing it here means a version-drift failure is readable without
+      # expanding the suite's own output.
+      - name: Report the browser and Node the suite will use
+        run: |
+          node --version
+          if ! command -v google-chrome > /dev/null 2>&1; then
+            echo "::error::the ubuntu-24.04 image did not provide google-chrome. The browser is a \
+          declared tool requirement of this suite (ADR-0006); it is not downloaded."
+            exit 1
+          fi
+          google-chrome --version
+
+      - name: Run the browser suite
+        run: ./firmware/tools/test-browser.sh
+
+      # The suite captures five iPhone-width screenshots of the states worth looking at. They are
+      # the only artifact a failure cannot reconstruct from the log, so they are kept when it
+      # fails. `firmware/build/` is git-ignored, so nothing here can dirty the tree.
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: browser-shots
+          path: firmware/build/browser-shots/
+          if-no-files-found: warn
+
+  # --- Job 2 — host-tests (§13.2) -----------------------------------------
+  #
+  # Ubuntu/Clang, owner-approved §13.2 amendment. Plain and sanitized runs are in one
+  # job so both results belong to the same commit and toolchain.
+  host-tests:
+    name: Host Tests (Linux)
+    runs-on: ubuntu-24.04
+    # Safety ceiling, not a claimed measured GitHub duration. The renderer also
+    # retains its narrower 20-minute bound; first hosted-run timing remains owed.
+    timeout-minutes: 45
+    env:
+      CC: clang-18
+      CXX: clang++-18
+      PRD_BUILD_JOBS: "2"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Report toolchain
+        run: |
+          "$CC" --version
+          "$CXX" --version
+          test "$("$CC" -dumpversion)" = "18.1.3"
+          test "$("$CXX" -dumpversion)" = "18.1.3"
+          cmake --version
+
+      - name: Run host tests
+        run: ./firmware/tools/test-host.sh
+
+      # §12.5: AddressSanitizer and UndefinedBehaviorSanitizer, and a sanitizer
+      # failure fails CI. LeakSanitizer is explicitly disabled in the wrapper;
+      # the migration does not silently add or claim a new sanitizer scope.
+      - name: Run host tests with ASan and UBSan
+        run: ./firmware/tools/test-host.sh --sanitize
+
+      # Real LVGL controller and review instruments, including font restoration and
+      # post-final sleep. Uses the checksum-pinned LVGL preparation, not ESP-IDF hardware.
+      - name: Run native renderer with ASan and UBSan
+        timeout-minutes: 20
+        run: bash ./firmware/tools/test-render.sh
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: host-test-logs
+          path: |
+            firmware/build/host-tests/Testing/
+            firmware/build/host-tests-asan/Testing/
+            firmware/build/controller-tests-1/*.log
+            firmware/build/controller-tests-1/**/*.log
+            firmware/build/controller-tests-2/*.log
+            firmware/build/controller-tests-2/**/*.log
+          if-no-files-found: ignore
+
+  # --- Job 4 — firmware-debug (§13.2) -------------------------------------
+  firmware-debug:
+    name: Firmware Debug
+    runs-on: ubuntu-24.04
+    # §13.3: an official Espressif container pinned to a v5.5.4-specific immutable
+    # digest, never a floating tag. Resolved 2026-08-05 from espressif/idf:v5.5.4.
+    # Update this deliberately; GitHub Actions does not allow a variable here, so
+    # the digest is repeated in each firmware job and all copies must match.
+    container:
+      image: espressif/idf@sha256:b9f2d6ea1c19e0c9f7959bdb74a9e3c775642f9d0f3b841937c5fa3363db892b
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # Full history and tags, so gitDescribe and the tag/version check see
+          # the same history a developer does (§14.1, §14.2).
+          fetch-depth: 0
+
+      - name: Trust the workspace
+        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+      - name: Restore ccache
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: .ccache
+          key: ccache-debug-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-debug-${{ runner.os }}-
+
+      - name: Verify ESP-IDF version
+        run: . "${IDF_PATH}/export.sh" && test "$(idf.py --version)" = "ESP-IDF v5.5.4"
+
+      - name: Build debug profile
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          IDF_CCACHE_ENABLE: "1"
+        run: . "${IDF_PATH}/export.sh" && ./firmware/tools/build.sh debug
+
+      - name: Test signed firmware packaging with disposable keys
+        run: . "${IDF_PATH}/export.sh" && python -m unittest discover -s firmware/test/signing -p 'test_*.py' -v
+
+      - name: Test OTA staging adapter with pinned SHA-256 and sanitizers
+        run: . "${IDF_PATH}/export.sh" && bash ./firmware/tools/test-ota-adapter.sh
+
+      - name: Analyze OTA staging adapter with clang-tidy ${{ env.CLANG_TOOLS_VERSION }}
+        run: |
+          . "${IDF_PATH}/export.sh"
+          python -m pip install "clang-tidy==${CLANG_TOOLS_VERSION}"
+          clang-tidy -p firmware/build/ota-adapter-tests firmware/components/ota/src/device_ingestion.cpp firmware/components/ota/src/image_identity.cpp
+
+      # §12.4: binary size report and partition validation. --no-archive keeps
+      # this to the report; the debug profile is not a release artifact.
+      - name: Report build identity and sizes
+        run: |
+          ./firmware/tools/print-build-info.py --profile debug
+          ./firmware/tools/print-build-info.py --profile debug --check
+          ./firmware/tools/package-firmware.py --profile debug --no-archive
+
+  # --- Job 4b — firmware-hardware-validation ------------------------------
+  #
+  # Not named in §13.2, but §19.3 requires all three profiles to build from a
+  # clean checkout, and this is the profile that compiles every validation flow
+  # and the LVGL validation scene. Without this job that code is only ever built
+  # on a developer's machine.
+  firmware-hardware-validation:
+    name: Firmware Hardware-Validation
+    runs-on: ubuntu-24.04
+    container:
+      image: espressif/idf@sha256:b9f2d6ea1c19e0c9f7959bdb74a9e3c775642f9d0f3b841937c5fa3363db892b
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Trust the workspace
+        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+      - name: Verify ESP-IDF version
+        run: . "${IDF_PATH}/export.sh" && test "$(idf.py --version)" = "ESP-IDF v5.5.4"
+
+      - name: Build hardware-validation profile
+        run: . "${IDF_PATH}/export.sh" && ./firmware/tools/build.sh hardware-validation
+
+      - name: Report build identity and sizes
+        run: |
+          ./firmware/tools/print-build-info.py --profile hardware-validation
+          ./firmware/tools/print-build-info.py --profile hardware-validation --check
+          ./firmware/tools/package-firmware.py --profile hardware-validation --no-archive
+
+  # --- Job 5 — firmware-release (§13.2) -----------------------------------
+  firmware-release:
+    name: Firmware Release
+    # Owner ruling 2026-09-25: release-profile builds require a version-tag ref.
+    # This includes a manual dispatch explicitly run on a version tag.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    container:
+      image: espressif/idf@sha256:b9f2d6ea1c19e0c9f7959bdb74a9e3c775642f9d0f3b841937c5fa3363db892b
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Trust the workspace
+        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+      # A fresh checkout is clean, so the §14.4 dirty-tree gate passes on its own.
+      # The gate is NOT relaxed here and must not be: a release that needed it
+      # disabled is a release nobody can trace to a commit. This step exists to
+      # make a dirty CI workspace a legible failure rather than a confusing
+      # CMake error later.
+      - name: Confirm a clean tree before the release build
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Working tree is dirty in CI; the §14.4 release gate will reject it."
+            git status --porcelain
+            exit 1
+          fi
+          echo "tree is clean"
+
+      - name: Verify ESP-IDF version
+        run: . "${IDF_PATH}/export.sh" && test "$(idf.py --version)" = "ESP-IDF v5.5.4"
+
+      - name: Build release profile from a clean directory
+        run: |
+          . "${IDF_PATH}/export.sh"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
+          echo "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}"
+          rm -rf firmware/build/release
+          ./firmware/tools/build.sh release
+
+      # §12.3 rule 6: release CI shall fail on any project warning. build.sh does
+      # not fail on warnings by itself, so the logs are inspected for warnings
+      # attributed to project files. ESP-IDF and managed-component warnings are
+      # excluded per §7.6 and §12.3 rule 5.
+      - name: Fail on project warnings
+        run: |
+          logs=$(find firmware/build/release/log -type f 2>/dev/null || true)
+          if [ -z "${logs}" ]; then
+            echo "::error::no build logs found to inspect"
+            exit 1
+          fi
+          if grep -h "warning:" ${logs} \
+              | grep -E "firmware/(components|main|test)/" \
+              | grep -v "managed_components" > /tmp/project-warnings.txt; then
+            echo "::error::project warnings in a release build"
+            cat /tmp/project-warnings.txt
+            exit 1
+          fi
+          echo "no project warnings"
+
+      - name: Package artifacts and generate checksums
+        run: |
+          ./firmware/tools/print-build-info.py --profile release
+          ./firmware/tools/print-build-info.py --profile release --check
+          ./firmware/tools/package-firmware.py --profile release
+          echo "--- SHA256SUMS ---"
+          cat firmware/build/release/artifacts/SHA256SUMS
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: firmware-release-${{ github.sha }}
+          path: |
+            firmware/build/release/artifacts/
+            firmware/build/release/prusa-remote-display-*.tar.gz
+          if-no-files-found: error
+
+  # --- Job 6 — reproducibility (§13.2) ------------------------------------
+  #
+  # Owner ruling 2026-09-25: release-profile work requires a version-tag ref,
+  # including a manual dispatch explicitly run on that tag.
+  reproducibility:
+    name: Reproducibility
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    container:
+      image: espressif/idf@sha256:b9f2d6ea1c19e0c9f7959bdb74a9e3c775642f9d0f3b841937c5fa3363db892b
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Trust the workspace
+        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+      # Both builds get the same SOURCE_DATE_EPOCH, taken from the commit (§14.3).
+      # Two builds differing only because they ran at different times would say
+      # nothing about reproducibility.
+      - name: Build release twice from clean directories
+        run: |
+          . "${IDF_PATH}/export.sh"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
+          echo "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}"
+
+          rm -rf firmware/build/release
+          env -u SOURCE_DATE_EPOCH ./firmware/tools/build.sh release
+          cp firmware/build/release/prusa_remote_display.bin /tmp/first.bin
+          ./firmware/tools/package-firmware.py --profile release >/dev/null
+          cp firmware/build/release/prusa-remote-display-*.tar.gz /tmp/first.tar.gz
+
+          rm -rf firmware/build/release
+          ./firmware/tools/build.sh release
+          cp firmware/build/release/prusa_remote_display.bin /tmp/second.bin
+          ./firmware/tools/package-firmware.py --profile release >/dev/null
+          cp firmware/build/release/prusa-remote-display-*.tar.gz /tmp/second.tar.gz
+
+      - name: Compare application binaries
+        run: |
+          sha256sum /tmp/first.bin /tmp/second.bin
+          if cmp -s /tmp/first.bin /tmp/second.bin; then
+            echo "application binary is reproducible"
+          else
+            echo "::error::release application binary is NOT reproducible"
+            exit 1
+          fi
+
+      # The archive is compared separately: it is produced entirely by this
+      # project's packaging script, so a difference there is ours to fix, whereas
+      # a difference in the binary could originate in the toolchain.
+      - name: Compare artifact archives
+        run: |
+          sha256sum /tmp/first.tar.gz /tmp/second.tar.gz
+          if cmp -s /tmp/first.tar.gz /tmp/second.tar.gz; then
+            echo "artifact archive is reproducible"
+          else
+            echo "::error::artifact archive is NOT reproducible"
+            exit 1
+          fi

@@ -1,0 +1,26 @@
+# Repeat-boot verification — 20 soft resets (RTS), Bootstrap Spec §19.8
+# Each cycle asserts flash=pass, psram=pass, phase=ready, no faults.
+
+cycle  1/20: ok
+cycle  2/20: ok
+cycle  3/20: ok
+cycle  4/20: ok
+cycle  5/20: ok
+cycle  6/20: ok
+cycle  7/20: ok
+cycle  8/20: ok
+cycle  9/20: ok
+cycle 10/20: ok
+cycle 11/20: ok
+cycle 12/20: ok
+cycle 13/20: ok
+cycle 14/20: ok
+cycle 15/20: ok
+cycle 16/20: ok
+cycle 17/20: ok
+cycle 18/20: ok
+cycle 19/20: ok
+cycle 20/20: ok
+
+clean boots: 20/20
+reset reasons seen: ['usb']

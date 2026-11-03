@@ -1,0 +1,25 @@
+# Cold power-cycle verification — 5 unplug/replug cycles, Bootstrap Spec §19.8
+# Owner-approved deviation: 5 cold cycles instead of the 20 in the approved
+# Milestone 1 plan. Accepted by the project owner at Phase B closure together
+# with the 20 soft-reset cycles and the 30+ minute soak. Not an open task.
+# Boot #1 is the pre-existing session at capture start, not a cold boot;
+# cold boots are #2-#6, each showing the uptime counter restarting near 10.8 s.
+
+[   0.0s] capture started (200s window, expecting 5 cycles)
+[   0.0s] port open   (/dev/cu.usbmodem2101)
+[   4.4s] BOOT #1 confirmed (uptime 160821 ms -> full boot path completed)
+[  16.0s] PORT LOST  -> unplug #1 detected
+[  24.8s] port open   (/dev/cu.usbmodem2101)
+[  34.8s] BOOT #2 confirmed (uptime 10821 ms -> full boot path completed)
+[  42.1s] PORT LOST  -> unplug #2 detected
+[  49.7s] port open   (/dev/cu.usbmodem2101)
+[  60.0s] BOOT #3 confirmed (uptime 10829 ms -> full boot path completed)
+[  68.5s] PORT LOST  -> unplug #3 detected
+[  76.0s] port open   (/dev/cu.usbmodem2101)
+[  86.2s] BOOT #4 confirmed (uptime 10830 ms -> full boot path completed)
+[  95.5s] PORT LOST  -> unplug #4 detected
+[ 103.1s] port open   (/dev/cu.usbmodem2101)
+[ 113.4s] BOOT #5 confirmed (uptime 10829 ms -> full boot path completed)
+[ 121.6s] PORT LOST  -> unplug #5 detected
+[ 129.8s] port open   (/dev/cu.usbmodem2101)
+[ 140.1s] BOOT #6 confirmed (uptime 10829 ms -> full boot path completed)

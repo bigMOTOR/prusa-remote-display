@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+# Managed dependencies for the ui component (Bootstrap Spec §7.7).
+#
+# The version is pinned exactly, not as a range: Bootstrap Spec §7.7 requires
+# exact pins and forbids floating Git branches, so a rebuild months from now
+# resolves to the same renderer that was validated on the bench. Rationale for
+# the version itself is in docs/decisions/0005-lvgl-integration.md.
+#
+# LVGL is declared here rather than in main or at project level because ui is
+# the only component that includes LVGL headers. Declaring it on the component
+# that uses it keeps the dependency direction honest: nothing else can reach
+# LVGL by accident through a transitive requirement.
+dependencies:
+  lvgl/lvgl:
+    version: "==9.5.0"
+    # Generated and checksum-verified by tools/prepare-lvgl.py before resolution.
+    override_path: "../../build/dependencies/lvgl__lvgl"

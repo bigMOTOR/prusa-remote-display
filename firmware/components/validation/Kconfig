@@ -1,0 +1,197 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+menu "Prusa Remote Display validation"
+
+    config PRD_VALIDATION_SCENARIOS
+        bool "Compile the fixture-driven scenario flow"
+        default n
+        help
+            Compiles the Milestone 2 Phase B bring-up flow: the deterministic fixture
+            catalogue and scenario sequences, driving the real application store
+            through real typed events and logging the resolved presentation after
+            every accepted mutation.
+
+            It is the on-device counterpart of the host reducer and projection
+            suites: the same events, the same reducer, the same projection, running
+            on the target. It renders nothing — no LVGL widget, no product scene —
+            and it opens no socket.
+
+            The BOOT button controls it while it runs: short press advances one step,
+            long press pauses and resumes, very long press restarts the scenario.
+            Those gestures are also dispatched into the store as the product facts
+            they are, so what the model sees is unchanged by the bench controls.
+
+            This is diagnostics, not product behaviour. Enable only in the
+            hardware-validation profile; the debug and release profiles must leave it
+            off so no fixture data reaches a product image.
+
+    config PRD_VALIDATION_OPERATIONAL_WALK
+        bool "Hold one operational state at a time, advanced by the button"
+        default n
+        help
+            Walks the six operational fixtures — Ready, Preparing, Printing, Paused,
+            Completed and Stopped — one at a time, holding each indefinitely until the BOOT
+            button advances to the next.
+
+            WHY THIS EXISTS. The scenario sweep moves on its own schedule, which makes it the
+            wrong instrument for judging a composition: a state is on screen for a couple of
+            seconds and the reviewer is racing a timer rather than looking. This holds a single
+            state until someone decides they have seen enough of it.
+
+            Each fixture is a list of real events folded through the real reducer, so what is
+            held is a presentation the product can actually reach — not a hand-assembled state
+            that might describe something impossible.
+
+            Short press advances, long press goes back, very long press restarts at Ready. The
+            gestures are also dispatched into the store as the product facts they are, exactly
+            as the scenario flow does, so what the model sees is unchanged by the bench
+            control.
+
+            MUTUALLY EXCLUSIVE WITH PRD_VALIDATION_SCENARIOS: both drive the same store, and
+            two drivers would interleave events neither could be held responsible for.
+
+            This is diagnostics. Enable only in the hardware-validation profile.
+
+    config PRD_VALIDATION_BRIGHTNESS_HARNESS
+        bool "Walk the brightness levels, advanced only by the button"
+        default n
+        depends on PRD_UI_DIAGNOSTIC_SCENE
+        help
+            Holds one brightness level at a time, indefinitely, until a short BOOT press
+            advances exactly one step. The PANEL carries a large step identifier, the full
+            step label and a fixed neutral grey wedge; chat is not part of the test.
+
+            THE SEQUENCE. C1-C4 walk the candidate On ceilings (50, 65, 80, 100 %). D1-D4
+            walk the candidate Dimmed fractions of the reference ceiling's emitted light
+            (30, 20, 12, 6 %). F1-F4 walk the production recession: 80 %, a two-second
+            fade to 15 % of light, a labelled warning that the next press will darken the
+            panel, the two-second fade to true off, and the wake back to 80 %. The next
+            press returns to C1.
+
+            WHY IT EXISTS, AND WHAT IT REPLACES. The 50 % ceiling and the Dimmed fraction
+            are working baselines in no accepted Project Source, and both must be settled
+            against the physical panel. An earlier instrument advanced itself every 8-15
+            seconds while chat announced each step; the announcements arrived batched, the
+            owner could not identify which level was visible, and that run was ruled
+            INVALID as a selection oracle. Nothing here advances on its own.
+
+            FOUR ANSWERS, NOT THREE. C1-C4 are judged TWICE and independently: once as the
+            ACTIVE level for Printing, setup and actionable states, once as the QUIET level
+            for a resting Ready and for a Completed or Unavailable acknowledgement. They
+            may coincide; the harness does not assume it.
+
+            WHY IT DEPENDS ON THE DIAGNOSTIC SCENE. Brightness has to be judged against a
+            composition, and no Printer Unavailable composition is accepted — the one that
+            reached the owner was rejected twice. The dependency makes an image that walks
+            the backlight over a rejected product frame unbuildable: the diagnostic scene
+            owns the screen, controller.cpp is not compiled, and the harness draws its own
+            neutral instrument surface.
+
+            NO PWM VALUE IS HARD-CODED. Each step names a ceiling and a fraction of that
+            ceiling's LIGHT; the control percentage comes from
+            display::percent_for_light_fraction(), the same function the product uses.
+
+            MUTUALLY EXCLUSIVE WITH PRD_VALIDATION_SCENARIOS AND
+            PRD_VALIDATION_OPERATIONAL_WALK: all three consume the same short press.
+
+            This is instrumentation, not a product-screen proposal, and not product
+            behaviour. Enable only in the hardware-validation profile.
+
+    config PRD_VALIDATION_PRINTING_TIMELINE
+        bool "Replay a print from JSON status bodies through the whole production path"
+        default n
+        help
+            Drives the product from the PrusaLink boundary with no printer: a versioned,
+            synthetic timeline of GET /api/v1/status response bodies goes through the
+            PRODUCTION decoder, normalizer, events, store, reducer, projection and UI.
+
+            WHAT IT IS FOR. Printing telemetry — the percentage, the remaining time, the
+            elapsed time — could not reach the panel at all until this checkpoint, because
+            the decoder read no job fields. The composition, the transitions between Ready,
+            Preparing, Printing, Paused, Finished and back, the temperature treatment and
+            the Active brightness all have to be LOOKED AT, and a real print takes an hour
+            of a printer nobody wants to tie up. This compresses the print and leaves every
+            stage downstream of the response body untouched.
+
+            WHAT IT IS NOT. Not a PrusaLink server: no socket is opened, and the network
+            stack, the worker task and the poll pacing are all bypassed, so it demonstrates
+            nothing about the transport. Not a second UI: the panel shows the product's own
+            composition. And NOT PHYSICAL ACCEPTANCE — the bodies are shaped to the
+            Prusa-Link-Web OpenAPI contract and to Prusa-Firmware-Buddy v6.8.1's status
+            renderer, and they are NOT captured from a printer. Field-set compatibility
+            still rests on a future real capture, redacted into a firmware-specific fixture.
+
+            The timeline covers Ready; Preparing with changing temperatures; Printing with
+            several progress and time updates; Paused; resumed Printing; Finished; the job
+            object being retired; and back to Ready. Two steps carry individually unusable
+            optional fields, one omits time_remaining as v6.8.1 does when it has no valid
+            estimate, and one carries additive members at three levels.
+
+            It runs on its own, holding each state for 18 seconds — about 5.1 minutes for the
+            run — because the question is about a sequence rather than a frame, and because a
+            reviewer needs long enough to actually read a percentage, a remaining time, two
+            temperature pairs and a brightness level. Each hold stays under the 20-second Quiet
+            recession boundary, so the panel keeps the Active level being judged.
+
+            Every step emits ONE serial row, led by `step N/17`, carrying the state's label and
+            every projected value. The BOOT button stops it: short press single-steps regardless
+            of the schedule, long press pauses and resumes, very long press restarts with a
+            fresh generation. None of the three has a product meaning while this is compiled in.
+
+            MUTUALLY EXCLUSIVE WITH THE THREE FLOWS ABOVE. The scenario sweep and the
+            operational walk dispatch into the same store, and the brightness harness takes
+            the backlight this flow needs the product display policy to own.
+
+            This is diagnostics, not product behaviour. Enable only in the
+            hardware-validation profile; the debug and release profiles must leave it off so
+            no fixture data reaches a product image.
+
+    config PRD_VALIDATION_ACCESS_REVIEW
+        bool "Replace the print timeline with the access-screen review"
+        default n
+        depends on PRD_VALIDATION_PRINTING_TIMELINE
+        depends on !PRD_VALIDATION_PRINTING_LOSS_REVIEW
+        depends on !PRD_VALIDATION_SCENARIOS && !PRD_VALIDATION_OPERATIONAL_WALK
+        depends on !PRD_UI_DIAGNOSTIC_SCENE
+        help
+            Reuses the existing synthetic-source lease and gesture isolation but replaces
+            the print timeline entirely. Ten automatic 18-second holds exercise Connecting,
+            authentication and unsupported failures, corrections, failed retries and Ready.
+            The final Ready source refreshes every five seconds without changing sleep policy.
+            No socket, credential, storage or renderer operation belongs to this producer.
+            BOOT gestures are consumed and ignored; reconnect to restart only when instructed.
+            Compile only for a dedicated diagnostic review image, never a product image.
+
+    config PRD_VALIDATION_PRINTER_ERROR_REVIEW
+        bool "Use printer-condition error sequence instead of access errors"
+        default n
+        depends on PRD_VALIDATION_ACCESS_REVIEW
+        help
+            Isolated synthetic observations through the normal reducer and UI. No network
+            or credential writes. Includes first Error, Printing and Paused recovery,
+            one 38-second stale interval, then stable Ready with normal sleep.
+
+    config PRD_VALIDATION_PRINTING_LOSS_REVIEW
+        bool "Continue the Printing timeline with real-time loss/recovery chapters"
+        default n
+        depends on PRD_VALIDATION_PRINTING_TIMELINE
+        help
+            After the 17 print steps, run four synthetic observation-loss chapters:
+            Ready settled recovery, Printing entry recovery to Completed, Printing
+            recovery during retirement fade, and Ready retirement/Off recovery.
+            The model's real freshness and display timers are unchanged. Each loss
+            waits for actual expiry; no future timestamp or shortened policy is used.
+            Consequently the existing Degraded appearance is exercised too, not hidden.
+            That appearance is an open UX finding, not accepted by enabling this run.
+
+            After the chapters, refresh final Ready every five seconds indefinitely,
+            without restarting display recession. Observe the post-run Quiet/Dimmed/Off
+            cycle separately. Logs distinguish completion from manual skips or controls.
+            Short press skips a chapter, long press pauses/resumes, very long restarts
+            the entire print. All gestures remain diagnostic-only.
+
+            Diagnostic builds only; absent from every non-selected target build.
+            This adds no renderer, network request, reset operation or storage access.
+
+endmenu

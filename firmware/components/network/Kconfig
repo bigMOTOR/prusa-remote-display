@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+menu "Prusa Remote Display network"
+
+    config PRD_WIFI_DRIVER_TIMING
+        bool "Record how long each esp_wifi station call takes"
+        default n
+        help
+            Measures all FOUR synchronous station calls the application task now makes —
+            esp_wifi_set_config(), esp_wifi_connect(), esp_wifi_disconnect() and
+            esp_wifi_sta_get_ap_info() — and emits one timeline record per call carrying the
+            duration in microseconds and the esp_err_t the driver returned.
+
+            THE FOURTH IS IN THE SEAM BECAUSE IT MOVED TOO. esp_wifi_sta_get_ap_info() used to
+            run on the station's own task; retiring that task put it in observe(), on every
+            published observation while Connected. Measuring three of the four would have
+            measured three quarters of the change.
+
+            WHY THIS EXISTS. All four are thin wrappers over libnet80211.a blobs, so no
+            latency bound for them can be proven by reading the pinned SDK. They now run on
+            the application task, which Architecture Specification §10.2 requires to have
+            "no long blocking I/O" — so the question is a real acceptance question and the
+            only instrument that can answer it is a physical measurement.
+
+            NON-SECRET BY CONSTRUCTION. The timeline signature admits an event name and up
+            to two integers and has no way to carry a string value, so no SSID, passphrase,
+            API key or address can reach a record. What is emitted is a duration and a
+            return code.
+
+            This is diagnostics, not product behaviour. The debug and release profiles leave
+            it off. The hardware-validation profile ENABLES it — permanently, by PM decision
+            of 2026-08-25 — so that the tree which was reviewed is the tree that gets
+            measured: flipping the symbol for the measurement run would have made the
+            measured image differ from the reviewed candidate by a source edit.
+
+endmenu

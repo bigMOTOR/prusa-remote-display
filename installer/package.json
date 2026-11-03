@@ -1,0 +1,13 @@
+{
+  "name": "remote-display-installer",
+  "version": "1.0.0",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "esp-web-tools": "10.4.0"
+  }
+}

@@ -1,0 +1,84 @@
+# Phase C — display bring-up: SPI clock sweep and repeated initialisation
+# Firmware 0.1.0-dev, profile hardware-validation, ESP-IDF v5.5.4
+# Each step: full esp_lcd init -> checkerboard/colour-bars/corner-markers -> deinit.
+# Normalisation: ANSI escapes and CR removed; VERBOSE driver spam filtered out.
+# Some lines are truncated where both CPU cores wrote to the console at once
+# (a known VERBOSE-profile artifact, not data loss from the panel).
+
+I (1017) prd.display: init ok host=SPI2 clock_hz=10000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (1017) prd.app: sweep=1 clock_hz=10000000 init_ok attempts=1 failures=0
+D (10885) prd.app: heartbea
+I (14185) prd.display: init ok host=SPI2 clock_hz=20000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (14186) prd.app: sweep=1 clock_hz=20000000 init_ok attempts=2 failures=0
+D (20885) prd.app: heartbea
+I (27201) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (27201) prd.app: sweep=1 clock_hz=40000000 init_ok attempts=3 failures=0
+D (30885) prd.app: heartbea
+I (40148) prd.display: init ok host=SPI2 clock_hz=80000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (40149) prd.app: sweep=1 clock_hz=80000000 init_ok attempts=4 failures=0
+D (40885) prd.app: heartbea
+D (50885) prd.app: heartbea
+I (53085) prd.display: init ok host=SPI2 clock_hz=10000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (53086) prd.app: sweep=2 clock_hz=10000000 init_ok attempts=5 failures=0
+D (60885) prd.app: heartbea
+I (66254) prd.display: init ok host=SPI2 clock_hz=20000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (66255) prd.app: sweep=2 clock_hz=20000000 init_ok attempts=6 failures=0
+D (70885) prd.app: heartbea
+I (79270) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (79271) prd.app: sweep=2 clock_hz=40000000 init_ok attempts=7 failures=0
+D (80885) prd.app: heartbea
+D (90885) prd.app: heartbea
+I (92217) prd.display: init ok host=SPI2 clock_hz=80000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (92218) prd.app: sweep=2 clock_hz=80000000 init_ok attempts=8 failures=0
+D (100885) prd.app: heartbea
+I (105155) prd.display: init ok host=SPI2 clock_hz=10000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (105156) prd.app: sweep=3 clock_hz=10000000 init_ok attempts=9 failures=0
+D (110885) prd.app: heartbea
+I (118325) prd.display: init ok host=SPI2 clock_hz=20000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (118326) prd.app: sweep=3 clock_hz=20000000 init_ok attempts=10 failures=0
+D (120885) prd.app: heartbea
+D (130885) prd.app: heartbea
+I (131341) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (131342) prd.app: sweep=3 clock_hz=40000000 init_ok attempts=11 failures=0
+D (140885) prd.app: heartbea
+I (144291) prd.display: init ok host=SPI2 clock_hz=80000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (144292) prd.app: sweep=3 clock_hz=80000000 init_ok attempts=12 failures=0
+D (150885) prd.app: heartbea
+I (157231) prd.display: init ok host=SPI2 clock_hz=10000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (157232) prd.app: sweep=4 clock_hz=10000000 init_ok attempts=13 failures=0
+D (160885) prd.app: heartbea
+I (170401) prd.display: init ok host=SPI2 clock_hz=20000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (170402) prd.app: sweep=4 clock_hz=20000000 init_ok attempts=14 failures=0
+D (170885) prd.app: heartbea
+D (180885) prd.app: heartbea
+I (183417) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (183418) prd.app: sweep=4 clock_hz=40000000 init_ok attempts=15 failures=0
+D (190885) prd.app: heartbea
+I (196365) prd.display: init ok host=SPI2 clock_hz=80000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (196366) prd.app: sweep=4 clock_hz=80000000 init_ok attempts=16 failures=0
+D (200885) prd.app: heartbea
+I (209304) prd.display: init ok host=SPI2 clock_hz=10000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (209305) prd.app: sweep=5 clock_hz=10000000 init_ok attempts=17 failures=0
+D (210885) prd.app: heartbea
+D (220885) prd.app: heartbea
+I (222475) prd.display: init ok host=SPI2 clock_hz=20000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (222476) prd.app: sweep=5 clock_hz=20000000 init_ok attempts=18 failures=0
+D (230885) prd.app: heartbea
+I (235491) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (235492) prd.app: sweep=5 clock_hz=40000000 init_ok attempts=19 failures=0
+D (240885) prd.app: heartbea
+I (248438) prd.display: init ok host=SPI2 clock_hz=80000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (248439) prd.app: sweep=5 clock_hz=80000000 init_ok attempts=20 failures=0
+D (250885) prd.app: heartbea
+D (260885) prd.app: heartbea
+I (261378) prd.display: init ok host=SPI2 clock_hz=10000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (261379) prd.app: sweep=6 clock_hz=10000000 init_ok attempts=21 failures=0
+D (270885) prd.app: heartbea
+I (274548) prd.display: init ok host=SPI2 clock_hz=20000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (274549) prd.app: sweep=6 clock_hz=20000000 init_ok attempts=22 failures=0
+D (280885) prd.app: heartbea
+I (287565) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (287566) prd.app: sweep=6 clock_hz=40000000 init_ok attempts=23 failures=0
+D (290885) prd.app: heartbea
+
+# RESULT: 23 init attempts, 0 failures, 6 sweeps, no faults.

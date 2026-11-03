@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+name: Desktop Installer
+on:
+  pull_request:
+    paths: ["desktop-installer/**", "firmware/tools/check-release-assets.py", "firmware/test/signing/**", ".github/workflows/desktop-installer.yml"]
+  push:
+    branches: [main]
+    paths: ["desktop-installer/**", "firmware/tools/check-release-assets.py", "firmware/test/signing/**", ".github/workflows/desktop-installer.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-installer-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Ordinary changes use Linux; the owner requests native validation explicitly.
+        os: ${{ github.event_name == 'workflow_dispatch' && fromJSON('["ubuntu-24.04","macos-14","windows-2022"]') || fromJSON('["ubuntu-24.04"]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Prepare pinned Python independently of setup-python binary availability
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.11.6"
+          python-version: "3.12.13"
+          activate-environment: true
+          venv-path: ${{ runner.temp }}/desktop-venv
+          enable-cache: true
+          cache-python: true
+          cache-dependency-glob: "desktop-installer/*.lock"
+      - name: Install Linux offscreen Qt libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libgl1 libxkbcommon0
+      - name: Record actual runtime
+        run: python -B -c "import platform, sys; print(platform.platform()); print(sys.version); assert sys.version_info[:3] == (3, 12, 13)"
+      - name: Install hashed build backend and desktop dependencies
+        run: |
+          uv pip install --require-hashes -r desktop-installer/bootstrap.lock
+          uv pip install --no-build-isolation --require-hashes -r desktop-installer/requirements.lock
+      - name: Test release policy and actual GUI without USB
+        run: python -B -m unittest discover -s desktop-installer -p 'test_*.py' -v
+      - name: Test signatures and initial image with disposable keys
+        run: python -B -m unittest discover -s firmware/test/signing -p 'test_*.py' -v
+      - name: Build disabled native preview on target platform
+        if: runner.os != 'Linux'
+        run: python -B desktop-installer/build.py "$RUNNER_TEMP/desktop-preview"
+      # No publisher key, signing, USB access, upload or publication step.

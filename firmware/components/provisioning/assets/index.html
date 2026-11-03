@@ -1,0 +1,157 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 Mykola Fiantsev -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Prusa Remote Display</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1 id="product">Prusa Remote Display</h1>
+      <p class="lead" id="lead">First, connect this display to your Wi-Fi.</p>
+
+      <!--
+        Shown instead of the forms when this page was reached over the local network rather
+        than over the display's own setup network. The device refuses configuration changes
+        from the network side, so offering the forms here would offer a control that cannot
+        work — the same reason this page carried no Save action before one could save.
+
+        It states what is true and instructs nothing. There is deliberately no "hold the
+        button to start setup again": that gesture does not exist in this firmware yet, and
+        naming it would be the lie this rule exists to prevent.
+      -->
+      <p id="readOnly" class="notice" role="status" hidden>
+        This display is already set up. Over your network this page shows status only &mdash; it
+        cannot change the display&rsquo;s settings.
+      </p>
+
+      <section id="updateCard" class="facts" aria-labelledby="updateTitle" hidden>
+        <h2 id="updateTitle">Update available</h2>
+        <p>Firmware <span id="updateVersion"></span> is ready to install.</p>
+        <button id="updateInstall" type="button" hidden>Install update</button>
+        <p id="updateStatus" class="note" role="status" aria-live="polite"></p>
+      </section>
+
+      <!-- Two steps, one persistence transaction. Nothing is saved until step 2 succeeds. -->
+      <form id="wifiForm" autocomplete="off" novalidate>
+        <p id="wifiSummary" class="summary" role="alert" hidden></p>
+
+        <fieldset>
+          <legend>Step 1 &middot; Your Wi-Fi</legend>
+
+          <label for="wifiSsid">Network name</label>
+          <input id="wifiSsid" name="wifiSsid" type="text" maxlength="32"
+                 autocapitalize="none" autocorrect="off" spellcheck="false"
+                 aria-describedby="wifiSsidError" />
+          <p class="error" id="wifiSsidError" hidden></p>
+
+          <label for="wifiPassword">Wi-Fi password</label>
+          <div class="reveal">
+            <input id="wifiPassword" name="wifiPassword" type="password" maxlength="63"
+                   autocomplete="new-password"
+                   aria-describedby="wifiPasswordError wifiPasswordHint" />
+            <button id="wifiPasswordReveal" type="button" class="reveal-toggle"
+                    aria-controls="wifiPassword" aria-pressed="false"
+                    aria-label="Show password" title="Show password">
+              <!-- Both glyphs ship; which one shows follows aria-pressed, in CSS. The
+                   button's state therefore has exactly one source of truth. -->
+              <svg class="reveal-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   aria-hidden="true" focusable="false">
+                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <svg class="reveal-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   aria-hidden="true" focusable="false">
+                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="M3 3l18 18" />
+              </svg>
+            </button>
+          </div>
+          <p class="error" id="wifiPasswordError" hidden></p>
+          <p class="hint" id="wifiPasswordHint">Leave empty if the network is open.</p>
+        </fieldset>
+
+        <button id="wifiSubmit" type="submit">Check this Wi-Fi</button>
+      </form>
+
+      <!-- Revealed only once the device has actually joined and held the connection. -->
+      <form id="printerForm" autocomplete="off" novalidate hidden>
+        <p id="printerSummary" class="summary" role="alert" hidden></p>
+
+        <fieldset>
+          <legend>Step 2 &middot; Your printer</legend>
+
+          <!-- ⛔ NO PLACEHOLDER THAT LOOKS LIKE AN ENTERED VALUE. A grey "192.168.1.50" in an
+               empty Address field and a grey "80" in an empty Port field read as configuration
+               already present on a phone, and pressing Save then reported both as missing.
+               The expected format now sits ON THE LABEL, at label size, where it cannot be
+               mistaken for data and does not depend on the smallest type on the page. -->
+          <label for="printerHost">Address <span class="example">e.g. 192.168.1.50</span></label>
+          <input id="printerHost" name="printerHost" type="text" maxlength="64"
+                 autocapitalize="none" autocorrect="off" spellcheck="false"
+                 aria-describedby="printerHostError printerHostHint" />
+          <p class="error" id="printerHostError" hidden></p>
+          <p class="hint" id="printerHostHint">Find it on your printer: Settings &rarr; Network.
+            The field must hold the address only — no http:// and no port.</p>
+
+          <!-- A REAL VALUE, NOT A SUGGESTION. PrusaLink serves over plain HTTP, so 80 is the
+               port nearly every device will use; presenting it as an actual editable value is
+               what makes the field honest. It is a browser form value only — ConfigV1's
+               default remains 0 (unset), and nothing about the schema, its migrations or the
+               persisted record changes. -->
+          <label for="printerPort">Port <span class="example">usually 80</span></label>
+          <input id="printerPort" name="printerPort" type="text" inputmode="numeric"
+                 maxlength="5" value="80" aria-describedby="printerPortError" />
+          <p class="error" id="printerPortError" hidden></p>
+
+          <label for="printerApiKey">API key <span class="example">from PrusaLink</span></label>
+          <!-- The SAME control as the Wi-Fi password, deliberately: one reveal affordance in the
+               product, not two that drift apart. Same markup, same classes, same CSS, same
+               aria-pressed mechanism — only the accessible name differs. -->
+          <div class="reveal">
+            <input id="printerApiKey" name="printerApiKey" type="password" maxlength="64"
+                   autocomplete="off" aria-describedby="printerApiKeyError printerHint" />
+            <button id="printerApiKeyReveal" type="button" class="reveal-toggle"
+                    aria-controls="printerApiKey" aria-pressed="false"
+                    aria-label="Show API key" title="Show API key">
+              <svg class="reveal-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   aria-hidden="true" focusable="false">
+                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <svg class="reveal-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   aria-hidden="true" focusable="false">
+                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="M3 3l18 18" />
+              </svg>
+            </button>
+          </div>
+          <p class="error" id="printerApiKeyError" hidden></p>
+          <p class="hint" id="printerHint">On the printer: Settings &rarr; Network &rarr;
+            PrusaLink. Copy the API key shown there.</p>
+        </fieldset>
+
+        <button id="printerSubmit" type="submit">Save and finish</button>
+      </form>
+
+      <p id="done" class="done" role="status" aria-live="polite" hidden></p>
+
+      <dl class="facts">
+        <dt>Firmware</dt>
+        <dd id="version">&mdash;</dd>
+      </dl>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

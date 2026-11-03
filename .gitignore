@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+# macOS
+.DS_Store
+
+# Xcode
+DerivedData/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+
+# Visual Studio Code
+.vscode/
+
+# Idea
+.idea/
+
+# Private / internal — not part of the public repository
+/CLAUDE.md
+/docs/project-sources/
+
+# docs/development stays private by default. Only the explicit public guides
+# below are exceptions; other working notes and Project Sources remain private.
+#
+# The trailing /* matters. A pattern of `/docs/development/` excludes the
+# directory itself, and Git does not descend into an excluded directory, so a
+# later negation could never re-include anything inside it. Excluding the
+# *contents* leaves the directory visible and makes the explicit negations effective.
+/docs/development/*
+!/docs/development/macos-setup.md
+!/docs/development/first-flash.md
+!/docs/development/ota-physical-validation.md
+!/docs/development/architecture.md
+!/docs/development/ui-rendering.md
+
+# ESP-IDF
+firmware/build/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/managed_components/
+
+# Host tests
+firmware/test/host/build/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+
+# Logs
+*.log
+!hardware/validation/evidence/*.log
+
+# Temporary files
+*.tmp
+*.swp
+
+# Browser installer dependencies and generated static output
+/installer/node_modules/
+/installer/dist/

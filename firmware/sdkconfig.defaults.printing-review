@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+# Optional final layer after debug defaults. Synthetic input; no real printer polling.
+# Not a production/release profile. See validation Kconfig for controls and evidence limits.
+CONFIG_PRD_VALIDATION_PRINTING_TIMELINE=y
+CONFIG_PRD_VALIDATION_PRINTING_LOSS_REVIEW=y
+# CONFIG_PRD_VALIDATION_SCENARIOS is not set
+# CONFIG_PRD_VALIDATION_OPERATIONAL_WALK is not set
+# CONFIG_PRD_VALIDATION_BRIGHTNESS_HARNESS is not set
+# CONFIG_PRD_UI_SCENE_ANNOTATION is not set
+# CONFIG_PRD_UI_DIAGNOSTIC_SCENE is not set
+# CONFIG_PRD_DISPLAY_TEST_PATTERNS is not set

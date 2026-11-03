@@ -1,0 +1,34 @@
+// SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+// SPDX-License-Identifier: GPL-3.0-only
+
+#pragma once
+
+namespace prd::app_model::generated {
+
+inline constexpr char kBuildProfile[] = "@PRD_BUILD_PROFILE@";
+inline constexpr char kGitCommit[] = "@PRD_GIT_COMMIT@";
+
+// gitDescribe and the matched release tag, per Bootstrap Spec §14.2.
+//
+// Both are read from this generated header by tools/print-build-info.py and
+// tools/package-firmware.py, which is what puts them into build-info.txt and
+// manifest.json. Being `inline constexpr` and unreferenced by firmware code, they
+// are not linked into the image — the claim they satisfy is that the build exposes
+// them, not that the binary carries them.
+//
+// Deliberately kept out of the boot log line: that line appears in every
+// committed evidence log from Milestone 1, and changing its shape would
+// invalidate the comparisons those logs exist to support.
+inline constexpr char kGitDescribe[] = "@PRD_GIT_DESCRIBE@";
+
+// Empty unless this commit carries a version tag matching kProjectVersion.
+inline constexpr char kReleaseTag[] = "@PRD_RELEASE_TAG@";
+inline constexpr bool kGitDirty = @PRD_GIT_DIRTY_CPP@;
+
+inline constexpr char kBuildEpoch[] = "@PRD_BUILD_EPOCH@";
+
+inline constexpr char kIdfVersion[] = "@PRD_IDF_VERSION@";
+inline constexpr char kProjectVersion[] = "@PROJECT_VER@";
+inline constexpr char kBoardTarget[] = "@PRD_BOARD_TARGET@";
+
+} // namespace prd::app_model::generated

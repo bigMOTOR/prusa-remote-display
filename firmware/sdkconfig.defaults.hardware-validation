@@ -1,0 +1,156 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+CONFIG_COMPILER_OPTIMIZATION_DEBUG=y
+CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_ENABLE=y
+
+# DEBUG, not VERBOSE, since Milestone 2 Phase D.
+#
+# esp_driver_spi emits one ESP_EARLY_LOGV line per SPI transaction, and the renderer runs
+# continuously. The ESP_EARLY_LOG* family is compile-time only and ignores runtime tag levels
+# by design, so raising those tags to warning at run time — which the render report flow does
+# — cannot silence them. At the redraw rate the product actually uses, two tasks then write to
+# the same UART concurrently and the output interleaves character by character: the validation
+# flow's own lines come out shredded and unreadable.
+#
+# That was tolerable when the evidence log was filtered after the fact. It is not tolerable
+# for an interactive review, where the log is what says which state the panel is holding.
+#
+# DEBUG compiles the VERBOSE lines out entirely. Nothing the project logs is above DEBUG, so
+# no project diagnostic is lost — what goes is ESP-IDF's per-transaction driver tracing, which
+# has served its purpose: the SPI path was validated in Milestone 1 and is now covered by the
+# ui/display transfer cross-check, which counts every transfer without printing any of them.
+CONFIG_LOG_DEFAULT_LEVEL_DEBUG=y
+CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y
+
+CONFIG_ESP_SYSTEM_PANIC_PRINT_HALT=y
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+
+CONFIG_HEAP_POISONING_COMPREHENSIVE=y
+CONFIG_FREERTOS_CHECK_STACKOVERFLOW_CANARY=y
+
+CONFIG_ESP_TASK_WDT_PANIC=y
+
+# Milestone 1 Phase C display validation patterns: deliberately NOT selected.
+#
+# They were selected here throughout Milestone 1, and it was harmless then because the
+# Phase F LVGL scene took precedence over them at run time. Milestone 2 Phase C moves
+# that exclusion to compile time and makes the product renderer the thing on the other
+# side of it: the patterns write pixels straight to the panel, so when they are compiled
+# in, app_core does not start the renderer at all.
+#
+# Leaving this on would therefore have produced a hardware-validation image whose
+# product scene never runs — an image that validates nothing it was built to validate.
+# It was caught by the measured image size and nothing else, which is the second time
+# in this milestone that has been the only signal.
+#
+# The patterns remain available: set CONFIG_PRD_DISPLAY_TEST_PATTERNS=y to get the
+# Milestone 1 panel, SPI-clock, colour A/B and backlight flows back, and accept that the
+# renderer stays out of the way while they own the panel.
+# CONFIG_PRD_DISPLAY_TEST_PATTERNS is not set
+
+# Milestone 1 Phase E: add gesture logging on top of normal product input. The
+# button itself is product behaviour and is compiled in every profile
+# (PRD_BUTTON_ENABLED, default y); this only adds the validation log lines.
+CONFIG_PRD_BUTTON_EVENT_LOG=y
+
+# --- Store-driving bench instruments: BOTH OFF IN THIS PROFILE -------------
+#
+# Milestone 2 Phase B's scenario sweep and Phase D's operational walk are both fixture
+# drivers: each dispatches a scripted list of real events through the real reducer into the
+# real application store. They are mutually exclusive with each other (the combination is an
+# #error), and as of checkpoint 3c neither is selected here.
+#
+# ⛔ WHY THE WALK IS NO LONGER DEFAULT -- PM decision, 2026-08-26. This profile is the one
+# used for connectivity and driver-latency validation, and that work needs the product's own
+# state to be the authoritative one. A fixture driver writing into the same store is not a
+# passive observer of it: app_core takes real decisions from state the walk supplies, so with
+# a walk selected the profile validates the harness's account of the device rather than the
+# device's. With both off, the store carries only real events, the boot's own provisioning
+# decision stands, and what the panel shows is what the product resolved.
+#
+# ⬅️ THE WALK IS NOT REMOVED, AND IT IS STILL THE RIGHT INSTRUMENT FOR ITS OWN QUESTION.
+# Judging the operational family one composition at a time is exactly what it is for, and it
+# remains buildable as a deliberate UI bench mode: set CONFIG_PRD_VALIDATION_OPERATIONAL_WALK=y
+# (or CONFIG_PRD_VALIDATION_SCENARIOS=y for the Phase B sweep) when that is the question being
+# asked. What changed is only which of them this profile selects by default.
+#
+# ⛔ BEFORE SELECTING EITHER ONE AGAIN, READ THIS. Checkpoint 3c confirmed a validation-harness
+# defect in the fixture-driver/product-services interaction, and 3c deliberately did NOT repair
+# it -- the repair is separate work and is owed before a walk is used on hardware again. With
+# the walk selected, the Ready fixture asserts ConfigurationStatus::Valid,
+# has_printer_configuration and NetworkPhase::Connected with a fabricated address into the real
+# store, and app_core then reads that state for four decisions that are not presentation:
+#   - local_interface_tick() starts the persistent local server on a station address the device
+#     does not hold. On a boot that raised no access point -- recovery, where the TCP/IP stack
+#     was never initialised -- that reaches httpd_start() and PANICS in lwIP (Invalid mbox).
+#   - refresh_reachability() publishes and mDNS-advertises that fabricated address.
+#   - printer_worker_permitted() becomes true, so the poll supervisor attempts and refuses a
+#     worker every application tick, with an NVS read each time.
+#   - the privileged-session expiry resolves as though a valid configuration existed.
+# None of it can reach the station intent machine, the provisioning transaction or the four
+# measured driver calls -- those read no store state at all -- but the four above are enough
+# that a walk-selected image must not be treated as a product-faithful device.
+# CONFIG_PRD_VALIDATION_OPERATIONAL_WALK is not set
+# CONFIG_PRD_VALIDATION_SCENARIOS is not set
+
+# Milestone 1 Phase F, narrowed in Milestone 2 Phase C: the renderer measurement
+# report. Flush accounting, the LVGL pool, the heap, task stacks, presentation
+# intake and scene resolution, every 15 seconds, plus the independent cross-check
+# between LVGL's flush count and the panel's transfer count.
+#
+# This is what every draw-buffer and pool-size decision in the project rests on,
+# and it is deliberately independent of which scene is compiled: the figures are
+# as useful over the product composition as they were over the bring-up scene.
+CONFIG_PRD_UI_RENDER_REPORT=y
+
+# Name the presentations that have no composition yet, so a black panel means a fault
+# rather than an unimplemented screen. Phase C builds one of Production UI §9's sixteen
+# screens, so more than half of the fixture sweep resolves to nothing — and an
+# unannotated black panel cannot be told apart from a dead renderer.
+CONFIG_PRD_UI_SCENE_ANNOTATION=y
+
+# The Milestone 1 Phase F foundation diagnostic scene is deliberately NOT selected.
+#
+# It is retained and still buildable — CONFIG_PRD_UI_DIAGNOSTIC_SCENE=y — because a
+# scene with known-correct expected output is worth more than a product screen when
+# a panel, a draw buffer or a flush path is suspect. But it replaces the product
+# composition at compile time, so leaving it on would mean the hardware-validation
+# image validated the bench scene rather than the product one.
+#
+# It also pulled in CONFIG_LV_FONT_MONTSERRAT_48 for its large numeric label. That
+# is gone with it: product typography is Inter (Production UI Specification §4),
+# generated with tabular figures and compiled into every profile.
+
+# --- Wi-Fi driver latency measurement (Milestone 3 checkpoint 3c) ------------
+#
+# esp_wifi_set_config(), esp_wifi_connect(), esp_wifi_disconnect() and
+# esp_wifi_sta_get_ap_info() now run on the application task, and no latency bound for any of
+# them can be proven from the pinned SDK: all four are thin wrappers over libnet80211.a blobs.
+# §10.2 requires that task to have "no long blocking I/O", so the bound has to be measured on
+# the board.
+#
+# ⬅️ AND THIS PROFILE IS WHERE THAT MEASUREMENT HAPPENS, WHICH IS WHY NO STORE-DRIVING BENCH
+# INSTRUMENT IS SELECTED ABOVE. Connectivity and latency validation are only worth as much as
+# the state they run against: with the fixture drivers off, the application store carries only
+# real events, so the association, the lease and the application task's own workload during
+# each measured call are the product's and not a harness's.
+#
+# ENABLED PERMANENTLY IN THIS PROFILE -- PM decision, 2026-08-25. Debug and release stay off.
+#
+# The reason it is on rather than flipped later: enabling it for the measurement run would be a
+# source mutation, so the tree that had been reviewed would not be the tree that was measured. On
+# here, the physical run measures the exact reviewed candidate tree.
+#
+# Four calls are covered -- set-config, connect, disconnect and get-ap-info. The fourth is included
+# because it MOVED onto the application task when the station task was retired: it now runs in
+# observe() on every published observation while Connected. Each record carries a duration in
+# microseconds and the esp_err_t, and nothing else -- the timeline signature cannot carry a string
+# value, so no SSID, passphrase, API key or address can reach one.
+CONFIG_PRD_WIFI_DRIVER_TIMING=y
+
+# Private physical OTA validation is opt-in. The owner sets both values in the
+# hardware-validation build's local sdkconfig, never in tracked defaults. Empty
+# values leave even this profile on the official GitHub release channel.
+CONFIG_PRD_OTA_LAN_ORIGIN=""
+CONFIG_PRD_OTA_LAN_CA_CERT_PATH=""

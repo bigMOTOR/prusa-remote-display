@@ -1,0 +1,282 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Palette transcribed from Production UI Specification §5, so the page and the panel
+ * read as the same product. Duplicated rather than shared because no mechanism spans
+ * C++ tokens and CSS; if §5's palette changes, this file changes with it.
+ */
+
+:root {
+  --success: #5cb85c;
+  --background: #111315;
+  --surface: #181b1f;
+  --primary: #f2f3f4;
+  --secondary: #b7bdc5;
+  --tertiary: #7c848e;
+  --accent: #f77f2f;
+  --error: #e06262;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 24px 16px;
+  background: var(--background);
+  color: var(--primary);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+}
+
+main {
+  max-width: 32rem;
+  margin: 0 auto;
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.lead {
+  margin: 0 0 24px;
+  color: var(--secondary);
+}
+
+.facts {
+  margin: 0 0 24px;
+  padding: 16px;
+  background: var(--surface);
+  border-radius: 8px;
+  border-left: 4px solid var(--accent);
+}
+
+.facts dt {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.facts dd {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin: 0;
+  font-size: 14px;
+  color: var(--tertiary);
+}
+
+form {
+  margin: 0 0 24px;
+}
+
+fieldset {
+  margin: 0 0 16px;
+  padding: 16px;
+  background: var(--surface);
+  border: 0;
+  border-radius: 8px;
+}
+
+legend {
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+label {
+  display: block;
+  margin: 12px 0 4px;
+  font-size: 14px;
+  color: var(--secondary);
+}
+
+input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--background);
+  color: var(--primary);
+  border: 1px solid var(--tertiary);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 16px; /* 16px stops iOS Safari zooming the page on focus. */
+}
+
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* An invalid field carries the ERROR hue, not the accent. The accent is this page's
+   ordinary emphasis — it is on the submit button and the facts panel — so using it for a
+   failed field made a failure indistinguishable from ordinary furniture. */
+input.invalid {
+  border-color: var(--error);
+}
+
+/* The expected format, ON THE LABEL. Physical review rejected an example that lived only in
+   12 px tertiary text below the field: guidance for a required field a first-time user has
+   never filled in cannot depend on the smallest, quietest type on the page. At label size and
+   secondary luminance it is legible at normal phone viewing distance, and it sits where the eye
+   already is before typing. Existing type sizes and existing colour tokens only. */
+.example {
+  font-weight: 400;
+  color: var(--tertiary);
+}
+
+/* Supporting detail — where to find the value — stays below the field, at 13 px rather than 12
+   so it is readable rather than merely present. */
+.hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--secondary);
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  background: var(--accent);
+  color: var(--background);
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.6;
+}
+
+/* The summary sits ABOVE the primary action, inside the form. Below it, on a phone, it is
+   off-screen at the moment the user needs it — which is how the first mobile acceptance
+   check failed. */
+.summary {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--primary);
+}
+
+.summary.good {
+  border-left-color: var(--success);
+}
+
+/* ⛔ DECLARED AFTER .good, AND DELIBERATELY. `applyReport()` assigns the class outright, so
+   the two cannot normally coexist — but the stage-1 confirmation styled this same element as
+   a success, and when the printer step then failed, "3 fields need attention." was drawn in
+   green. Ordering makes the error win even if a future edit forgets to reset the class, so
+   the guarantee does not rest on one assignment staying correct. */
+.summary.bad {
+  border-left-color: var(--error);
+}
+
+/* Per-field text, so an invalid field is never indicated by colour alone — the Product
+   Brief forbids that, and a border tint is invisible to anyone who cannot see it. */
+.error {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--error);
+}
+
+.done {
+  margin: 0 0 24px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-left: 4px solid var(--success);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--primary);
+}
+
+/* Shown in place of the forms when this page was reached over the local network, where the
+   display refuses configuration changes. Existing tokens only, and deliberately the neutral
+   accent rather than --success or --error: nothing succeeded and nothing went wrong. */
+.notice {
+  margin: 0 0 24px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--primary);
+}
+
+/* Show/hide for the one field a person types blind — the conventional trailing affordance
+   INSIDE the field, not a second control beside it. Existing tokens only. */
+.reveal {
+  position: relative;
+}
+
+/* Room for the affordance, so a long password never runs underneath it. */
+.reveal input {
+  padding-right: 48px;
+}
+
+.reveal-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 44px; /* A 44 px target: the smallest comfortable touch size on a phone. */
+  height: 100%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  border-radius: 0 8px 8px 0;
+  color: var(--tertiary);
+}
+
+.reveal-toggle[aria-pressed="true"] {
+  color: var(--primary);
+}
+
+.reveal-toggle svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+/* ⛔ WHICH GLYPH SHOWS FOLLOWS aria-pressed, NOT A `hidden` ATTRIBUTE. `hidden` is an HTML
+   attribute: SVGElement does not implement the IDL property, so `svg.hidden = true` sets a
+   JS expando that no selector can see and BOTH eyes drew at once. Found by driving the real
+   page. Deriving it from the ARIA state the button already carries leaves one source of
+   truth instead of two that can disagree. */
+.reveal-toggle[aria-pressed="false"] .reveal-eye-off,
+.reveal-toggle[aria-pressed="true"] .reveal-eye {
+  display: none;
+}
+
+/* The outline is drawn on the button rather than suppressed: this control is reachable by
+   keyboard and must show where focus is. */
+.reveal-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}

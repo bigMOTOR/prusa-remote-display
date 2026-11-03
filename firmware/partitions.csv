@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+# Name,      Type, SubType,   Offset,    Size,      Flags
+nvs,         data, nvs,       0x9000,    0x6000,
+nvs_keys,    data, nvs_keys,  0xF000,    0x1000,    encrypted
+otadata,     data, ota,       0x10000,   0x2000,
+phy_init,    data, phy,       0x12000,   0x1000,
+factory_cfg, data, 0x40,      0x13000,   0xD000,    encrypted
+ota_0,       app,  ota_0,     0x20000,   0x680000,
+ota_1,       app,  ota_1,     0x6A0000,  0x680000,
+coredump,    data, coredump,  0xD20000,  0x100000,  encrypted
+assets,      data, 0x41,      0xE20000,  0x1E0000,  encrypted

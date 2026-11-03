@@ -1,0 +1,83 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+menu "Prusa Remote Display UI"
+
+    config PRD_UI_RENDER_REPORT
+        bool "Log renderer flush, memory and stack measurements periodically"
+        default n
+        help
+            Emits the flush-path, LVGL-pool, heap, task-stack, presentation-intake
+            and scene-resolution figures every 15 seconds under the prd.ui tag.
+
+            This is measurement, not product behaviour, and it is what every
+            draw-buffer and pool-size decision in the project rests on. It is
+            deliberately independent of which scene is compiled: the figures are as
+            useful over the product composition as they were over the Milestone 1
+            bring-up scene, and tying them to a bench scene would mean the product
+            scene could never be profiled.
+
+            Enable in the hardware-validation profile. Leave off for debug and
+            release, where a log line every 15 seconds is noise.
+
+    config PRD_UI_SCENE_ANNOTATION
+        bool "Annotate presentations that have no composition yet"
+        default n
+        help
+            Draws a small line of metadata-sized text naming the presentation layer,
+            subject state and confidence whenever the scene controller resolves a
+            presentation it has no composition for.
+
+            WHY THIS EXISTS. Production UI Specification §9 defines sixteen screens and
+            Milestone 2 Phase C implements one of them, so most presentations resolve to
+            nothing and the panel shows `color.background` alone. On a bench that is
+            indistinguishable from a dead render task, a lost flush completion, a panic
+            halt with the backlight still on, or a backlight fault — which makes a black
+            panel useless as evidence and, worse, able to hide a real fault.
+
+            With this on, black means broken and text means "no composition yet, and here
+            is which one was asked for".
+
+            This is a bench annotation, not a product placeholder. It carries no printer
+            data, invents nothing, and is compiled out of debug and release — Production
+            UI §9 forbids simulated and placeholder data, and a "coming soon" panel in a
+            product image would be exactly that.
+
+    config PRD_UI_DIAGNOSTIC_SCENE
+        bool "Replace the product scene with the LVGL foundation diagnostic scene"
+        default n
+        # The scene draws Montserrat deliberately: it is LVGL's built-in, so what it
+        # exercises is the renderer and not the project's own generated faces. The base
+        # defaults switch Montserrat off because no product image should carry a
+        # typeface nothing draws, so the scene selects back exactly what it uses.
+        select LV_FONT_MONTSERRAT_14
+        select LV_FONT_MONTSERRAT_48
+        help
+            Compiles the Milestone 1 Phase F bring-up scene in place of the product
+            composition: a deliberately non-product screen that exercises every
+            rendering primitive the accepted Production UI Specification needs — an
+            anti-aliased round-capped arc, large and small text, a rapidly updating
+            numeric value, an object clipped by the canvas edge, and the accepted
+            background and accent colours as colour probes.
+
+            It remains available because it is validated hardware-bring-up
+            diagnostics: when a panel, a draw buffer or a flush path is suspect, a
+            scene with known-correct expected output is worth more than a product
+            screen whose content depends on the whole application stack.
+
+            MUTUALLY EXCLUSIVE WITH THE PRODUCT SCENE, AT COMPILE TIME. Both build
+            on the display's active screen and strip its style, so two builders would
+            interleave and neither could be held responsible for the result. Selecting
+            this option compiles the product scene controller out entirely rather
+            than leaving a run-time precedence rule that no test can check.
+
+            While it is selected the application store still runs and presentations
+            are still submitted; they are received and counted, and nothing is drawn
+            from them.
+
+            This is diagnostics, not product behaviour. It must stay off in debug and
+            release so no bench artwork can reach a product image, and off in the
+            normal hardware-validation flow so that what is validated is the product
+            composition.
+
+endmenu

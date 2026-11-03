@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+menu "Prusa Remote Display OTA"
+
+    config PRD_OTA_LAN_ORIGIN
+        string "Private hardware-validation HTTPS origin"
+        default ""
+        help
+            Exact https://PRIVATE_IPV4:PORT origin of the owner-operated local OTA fixture.
+            Valid only in hardware-validation and only with the matching CA certificate path.
+            Leave empty for the official GitHub release path.
+
+    config PRD_OTA_LAN_CA_CERT_PATH
+        string "Private hardware-validation CA PEM path"
+        default ""
+        help
+            Absolute path to the public CA PEM that validates the local fixture server.
+            Never point this at a private key. The certificate is embedded in the
+            hardware-validation image; the private server key remains outside the repository.
+
+endmenu

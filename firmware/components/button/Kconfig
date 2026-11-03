@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+menu "Prusa Remote Display button"
+
+    config PRD_BUTTON_ENABLED
+        bool "Initialise the multifunction button as product input"
+        default y
+        help
+            Brings up the button and feeds its classified gestures into the
+            application store, where app_core translates them into
+            app_model::ButtonGesture facts and the reducer decides what they mean.
+
+            This is product behaviour and belongs in every profile. It is separate
+            from PRD_BUTTON_EVENT_LOG below, which only adds validation logging:
+            until Milestone 2 Phase B the two were the same switch, so the only way
+            to have a working button was to compile a bring-up flow into the image.
+
+            Turning this off leaves the input uninitialised. Nothing else changes —
+            the component compiles either way — but the device then has no physical
+            input at all.
+
+    config PRD_BUTTON_EVENT_LOG
+        bool "Additionally log every classified gesture"
+        depends on PRD_BUTTON_ENABLED
+        default n
+        help
+            Adds the Milestone 1 Phase E bring-up logging on top of normal product
+            input: every classified gesture is logged with running per-gesture
+            counters and the queue statistics, so presses can be counted against
+            what the firmware actually classified.
+
+            This is diagnostics, not product behaviour. Enable only in the
+            hardware-validation profile; the debug and release profiles must leave
+            it off so no validation code reaches a product image.
+
+endmenu

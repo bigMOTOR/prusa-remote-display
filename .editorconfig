@@ -1,0 +1,50 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# Editor defaults, so a contributor's editor agrees with .clang-format before
+# the formatter runs rather than fighting it afterwards.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Mirrors .clang-format ColumnLimit (Bootstrap Spec §12.1).
+max_line_length = 100
+
+[*.{c,h,cpp,hpp}]
+indent_size = 4
+
+[*.{cmake,txt}]
+indent_size = 4
+
+[CMakeLists.txt]
+indent_size = 4
+
+[*.{yml,yaml}]
+indent_size = 2
+
+[*.py]
+indent_size = 4
+
+[*.sh]
+indent_size = 4
+
+[*.md]
+# Markdown uses trailing whitespace for hard line breaks. The project does not
+# rely on it, but stripping it silently would change rendering if it ever did.
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab
+
+# Kconfig is whitespace-significant and ESP-IDF's own files use tabs for the
+# help-text indentation this project matches.
+[Kconfig*]
+indent_style = tab
+indent_size = 4

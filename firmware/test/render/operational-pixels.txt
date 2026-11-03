@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+# September 6 owner-reviewed native composition; current baseline, not R2 preservation.
+# The known remaining estimate takes precedence over unknown-progress absence copy.
+0 31b158aa9d959e5a
+1 42d71f4178c76bf6
+2 8132f1d84d65b4f4
+3 8a72dd58668bebb5
+4 11ea57f18a7ccd94
+5 405075c99e5e5e01
+6 1c652659b93cebd8
+7 e1217226fa5e53fd
+8 c3620ea2f27f48c2
+9 ad1cd80248fdfa15
+10 b98a89c8c1dba929
+11 a6582d20be85aea4
+12 54e11db7cfba681f
+13 f38a2541fdefe5a4
+# September 8 owner-requested Completed body-luminance repair; geometry unchanged.
+14 11ca79db4d4bcc07
+15 950f2b3e90654226

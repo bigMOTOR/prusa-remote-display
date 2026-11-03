@@ -1,0 +1,1175 @@
+# Milestone 2 Phase B — application orchestration, fixtures and fake printer source
+#
+# Board: Waveshare ESP32-S3-LCD-2.8 (non-touch, SKU 30223)
+# Profile: hardware-validation · ESP-IDF v5.5.4
+# Date: 2026-08-05
+#
+# This is the FINAL re-validation, run against the code as it stands after the
+# pre-commit review moved the scenario sweep policy out of the validation flow and
+# into FakeSource::sweep(). An earlier run against the pre-refactor code produced the
+# same figures; the two are compared in the record.
+#
+# Two runs are recorded, in order:
+#
+#   A. Unattended run. Built from the hardware-validation profile with
+#      PRD_UI_VALIDATION_SCENE and PRD_DISPLAY_TEST_PATTERNS turned off, so the
+#      fixture and scenario log is not interleaved with the LVGL render soak's
+#      per-transfer ESP_EARLY_LOGV output. That output is compile-time only, cannot
+#      be filtered at run time, and corrupts individual log lines rather than merely
+#      diluting them. Everything else about the profile is unchanged.
+#
+#   B. Button-control run, same image. Four physical BOOT presses: short, long, long,
+#      very long — exercising step, pause, resume and restart, with the pause landing
+#      at a scenario boundary, which is where the Phase B pause defect lived.
+#
+# Filtered to the prd.* tags. Full unfiltered captures are not committed: the combined
+# size across the session exceeds 4 MB, almost all ESP-IDF verbose driver output.
+#
+# ===========================================================================
+# RUN A — cold boot, 21-fixture catalogue, nine-scenario sweep through
+#         FakeSource::sweep(), catalogue wrap with rising generations
+# ===========================================================================
+I (878) prd.app: Prusa Remote Display 0.1.0-dev
+I (879) prd.boot: version=0.1.0-dev git=7df161893f6e dirty=true profile=hardware-validation idf=v5.5.4 board=waveshare_esp32_s3_lcd_2_8
+I (879) prd.boot: phase=initializing
+I (879) prd.boot: phase=hardware-initializing
+I (880) prd.board: target=waveshare_esp32_s3_lcd_2_8 validation=provisional
+I (880) prd.board: chip=ESP32-S3 rev=0.2 cores=2 reset=usb
+I (881) prd.board: flash_detected=16777216 expected=16777216 result=pass
+I (881) prd.board: psram_detected=8388608 expected=8388608 result=pass
+W (882) prd.board: usb_console=native_usb_serial_jtag result=unvalidated
+I (882) prd.boot: phase=starting-services
+I (883) prd.app: application task queue_slots=12 event_bytes=360 scenarios=on
+I (883) prd.boot: phase=ready
+I (884) prd.app: task=prd_app stack_bytes=12288 free_low_bytes=6980 used_peak_bytes=5308 headroom=56%
+I (884) prd.app: fixture catalogue: 21 presentations
+I (885) prd.app: fixture[0]=boot-starting rev=1 layer=system-lifecycle subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (886) prd.app: fixture[1]=setup-required rev=4 layer=recovery-or-provisioning subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (887) prd.app: fixture[2]=setup-active rev=5 layer=recovery-or-provisioning subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (888) prd.app: fixture[3]=validating-configuration rev=5 layer=recovery-or-provisioning subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (890) prd.app: fixture[4]=setup-failed rev=5 layer=recovery-or-provisioning subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (891) prd.app: fixture[5]=acquiring-printer-state rev=6 layer=subject-presentation subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (892) prd.app: fixture[6]=ready rev=8 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (894) prd.app: fixture[7]=preparing rev=8 layer=subject-presentation subject=preparing condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (895) prd.app: fixture[8]=printing rev=9 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (897) prd.app: fixture[9]=paused rev=9 layer=subject-presentation subject=paused condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (898) prd.app: fixture[10]=completed rev=9 layer=subject-presentation subject=completed condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (900) prd.app: fixture[11]=stopped rev=9 layer=subject-presentation subject=stopped condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (902) prd.app: fixture[12]=printer-unavailable rev=11 layer=subject-presentation subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (903) prd.app: fixture[13]=authentication-required rev=6 layer=access-condition subject=acquiring-state condition=none confidence=unavailable access=authentication-required modal=none ring=no horizon=no telemetry=no stale=no
+I (904) prd.app: fixture[14]=unsupported-interface rev=6 layer=access-condition subject=acquiring-state condition=none confidence=unavailable access=unsupported-interface modal=none ring=no horizon=no telemetry=no stale=no
+I (906) prd.app: fixture[15]=firmware-updating rev=10 layer=exclusive-operation subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (908) prd.app: fixture[16]=factory-resetting rev=11 layer=exclusive-operation subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (909) prd.app: fixture[17]=recovery-mode rev=5 layer=recovery-or-provisioning subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (910) prd.app: fixture[18]=device-fault rev=4 layer=device-fault subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (912) prd.app: fixture[19]=settings-modal rev=10 layer=modal-surface subject=printing condition=none confidence=current access=none modal=settings ring=yes horizon=no telemetry=yes stale=no
+I (913) prd.app: fixture[20]=factory-reset-confirmation rev=10 layer=modal-surface subject=printing condition=none confidence=current access=none modal=factory-reset-confirmation ring=yes horizon=no telemetry=yes stale=no
+I (914) prd.app: scenario loaded=cold-boot-to-ready gen=0 steps=8
+I (915) prd.app: initial rev=4 layer=subject-presentation subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (915) prd.app: initial values
+I (916) prd.app: task=prd_app stack_bytes=12288 free_low_bytes=4420 used_peak_bytes=7868 headroom=35%
+I (918) prd.button: button ready gpio=0 active=low pull_up=external hw_debounce=no debounce_ms=25 long_ms=1500 very_long_ms=8000 isr=iram level=released
+I (919) prd.app: task=main stack_bytes=3584 free_low_bytes=1916 used_peak_bytes=1668 headroom=53%
+I (1016) prd.app: step 1/8 cold-boot-to-ready "boot starting"
+I (1017) prd.app: step 2/8 cold-boot-to-ready "hardware validated"
+I (1017) prd.app: step 3/8 cold-boot-to-ready "storage ready"
+I (1017) prd.app: step 4/8 cold-boot-to-ready "configuration valid"
+I (1018) prd.app: step 5/8 cold-boot-to-ready "boot complete"
+I (1018) prd.app: step 6/8 cold-boot-to-ready "wifi connected"
+I (1019) prd.app: step 7/8 cold-boot-to-ready "printer connected"
+I (1019) prd.app: step 8/8 cold-boot-to-ready "printer ready"
+I (1019) prd.app: state rev=12 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (1020) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (1020) prd.app: scenario complete=cold-boot-to-ready steps_applied=8 rev=12
+I (7021) prd.app: scenario loaded=first-setup-to-ready gen=1 steps=12
+I (7121) prd.app: step 1/12 first-setup-to-ready "boot starting"
+I (7122) prd.app: step 2/12 first-setup-to-ready "hardware validated"
+I (7122) prd.app: step 3/12 first-setup-to-ready "storage ready"
+I (7122) prd.app: step 4/12 first-setup-to-ready "no configuration"
+I (7123) prd.app: step 5/12 first-setup-to-ready "boot complete"
+I (7123) prd.app: state rev=15 layer=recovery-or-provisioning subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (7124) prd.app: state values
+I (8024) prd.app: step 6/12 first-setup-to-ready "setup active"
+I (8024) prd.app: state rev=16 layer=recovery-or-provisioning subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (8025) prd.app: state values
+I (9025) prd.app: step 7/12 first-setup-to-ready "validating configuration"
+I (9025) prd.app: state rev=17 layer=recovery-or-provisioning subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (9026) prd.app: state values
+I (10026) prd.app: step 8/12 first-setup-to-ready "configuration saved"
+I (10026) prd.app: state rev=18 layer=subject-presentation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=yes telemetry=yes stale=yes
+I (10027) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (10127) prd.app: step 9/12 first-setup-to-ready "wifi connected"
+I (10127) prd.app: state rev=19 layer=subject-presentation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=yes telemetry=yes stale=yes
+I (10128) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (10228) prd.app: step 10/12 first-setup-to-ready "probing printer"
+I (10228) prd.app: state rev=20 layer=subject-presentation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=yes telemetry=yes stale=yes
+I (10229) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (10919) prd.app: button idle level=released total=0
+I (10919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (10919) prd.app: heartbeat rev=20
+I (11029) prd.app: step 11/12 first-setup-to-ready "printer connected"
+I (11029) prd.app: state rev=21 layer=subject-presentation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=yes telemetry=yes stale=yes
+I (11030) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (11130) prd.app: step 12/12 first-setup-to-ready "printer ready"
+I (11130) prd.app: state rev=22 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (11131) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (11131) prd.app: scenario complete=first-setup-to-ready steps_applied=20 rev=22
+I (17132) prd.app: scenario loaded=full-print-cycle gen=2 steps=19
+I (17232) prd.app: step 1/19 full-print-cycle "boot starting"
+I (17233) prd.app: step 2/19 full-print-cycle "hardware validated"
+I (17233) prd.app: step 3/19 full-print-cycle "storage ready"
+I (17234) prd.app: step 4/19 full-print-cycle "configuration valid"
+I (17234) prd.app: step 5/19 full-print-cycle "boot complete"
+I (17234) prd.app: step 6/19 full-print-cycle "wifi connected"
+I (17235) prd.app: step 7/19 full-print-cycle "printer connected"
+I (17235) prd.app: step 8/19 full-print-cycle "printer ready"
+I (17235) prd.app: state rev=28 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (17236) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (18136) prd.app: step 9/19 full-print-cycle "heating"
+I (18136) prd.app: state rev=29 layer=subject-presentation subject=preparing condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (18137) prd.app: state values printer=Workshop nozzle=145 bed=45
+I (19137) prd.app: step 10/19 full-print-cycle "printing"
+I (19137) prd.app: state rev=30 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=yes stale=no
+I (19138) prd.app: state values printer=Workshop nozzle=215 bed=60
+I (19238) prd.app: step 11/19 full-print-cycle "job 5%"
+I (19238) prd.app: state rev=31 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (19239) prd.app: state values printer=Workshop job=CORE One.gcode progress=5% remaining=6840s layer=12/250 nozzle=215 bed=60
+I (20140) prd.app: step 12/19 full-print-cycle "job 40%"
+I (20140) prd.app: state rev=32 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (20141) prd.app: state values printer=Workshop job=CORE One.gcode progress=40% remaining=4320s layer=100/250 nozzle=215 bed=60
+I (20919) prd.app: button idle level=released total=0
+I (20919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (20919) prd.app: heartbeat rev=32
+I (21142) prd.app: step 13/19 full-print-cycle "paused"
+I (21142) prd.app: state rev=33 layer=subject-presentation subject=paused condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (21143) prd.app: state values printer=Workshop job=CORE One.gcode progress=40% remaining=4320s layer=100/250 nozzle=215 bed=60
+I (22144) prd.app: step 14/19 full-print-cycle "resumed"
+I (22144) prd.app: state rev=34 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (22145) prd.app: state values printer=Workshop job=CORE One.gcode progress=40% remaining=4320s layer=100/250 nozzle=215 bed=60
+I (22246) prd.app: step 15/19 full-print-cycle "job 80%"
+I (22246) prd.app: state rev=35 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (22247) prd.app: state values printer=Workshop job=CORE One.gcode progress=80% remaining=1440s layer=200/250 nozzle=215 bed=60
+I (23148) prd.app: step 16/19 full-print-cycle "job 100%"
+I (23148) prd.app: state rev=36 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (23149) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=215 bed=60
+I (23250) prd.app: step 17/19 full-print-cycle "completed"
+I (23250) prd.app: state rev=37 layer=subject-presentation subject=completed condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (23251) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=215 bed=60
+I (25152) prd.app: step 18/19 full-print-cycle "job cleared by printer"
+I (25152) prd.app: state rev=38 layer=subject-presentation subject=completed condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (25153) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=215 bed=60
+I (26154) prd.app: step 19/19 full-print-cycle "settled to ready"
+I (26154) prd.app: state rev=39 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (26155) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=22 bed=22
+I (26156) prd.app: scenario complete=full-print-cycle steps_applied=39 rev=39
+I (30919) prd.app: button idle level=released total=0
+I (30919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (30919) prd.app: heartbeat rev=39
+I (32156) prd.app: scenario loaded=printing-to-stopped gen=3 steps=13
+I (32256) prd.app: step 1/13 printing-to-stopped "boot starting"
+I (32257) prd.app: step 2/13 printing-to-stopped "hardware validated"
+I (32257) prd.app: step 3/13 printing-to-stopped "storage ready"
+I (32258) prd.app: step 4/13 printing-to-stopped "configuration valid"
+I (32258) prd.app: step 5/13 printing-to-stopped "boot complete"
+I (32258) prd.app: step 6/13 printing-to-stopped "wifi connected"
+I (32259) prd.app: step 7/13 printing-to-stopped "printer connected"
+I (32259) prd.app: step 8/13 printing-to-stopped "printer ready"
+I (32260) prd.app: state rev=44 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (32260) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=22 bed=22
+I (33161) prd.app: step 9/13 printing-to-stopped "heating"
+I (33161) prd.app: state rev=45 layer=subject-presentation subject=preparing condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (33162) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=145 bed=45
+I (34163) prd.app: step 10/13 printing-to-stopped "printing"
+I (34163) prd.app: state rev=46 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (34164) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=215 bed=60
+I (34265) prd.app: step 11/13 printing-to-stopped "job 34%"
+I (34266) prd.app: state rev=47 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (34266) prd.app: state values printer=Workshop job=CORE One.gcode progress=34% remaining=4752s layer=86/250 nozzle=215 bed=60
+I (36167) prd.app: step 12/13 printing-to-stopped "stopped"
+I (36167) prd.app: state rev=48 layer=subject-presentation subject=stopped condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (36168) prd.app: state values printer=Workshop job=CORE One.gcode progress=34% remaining=4752s layer=86/250 nozzle=200 bed=60
+I (40169) prd.app: step 13/13 printing-to-stopped "settled to ready"
+I (40169) prd.app: state rev=49 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (40170) prd.app: state values printer=Workshop job=CORE One.gcode progress=34% remaining=4752s layer=86/250 nozzle=22 bed=22
+I (40171) prd.app: scenario complete=printing-to-stopped steps_applied=52 rev=49
+I (40919) prd.app: button idle level=released total=0
+I (40919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (40919) prd.app: heartbeat rev=49
+I (46171) prd.app: scenario loaded=confidence-decay gen=4 steps=14
+I (46271) prd.app: step 1/14 confidence-decay "boot starting"
+I (46272) prd.app: step 2/14 confidence-decay "hardware validated"
+I (46272) prd.app: step 3/14 confidence-decay "storage ready"
+I (46273) prd.app: step 4/14 confidence-decay "configuration valid"
+I (46273) prd.app: step 5/14 confidence-decay "boot complete"
+I (46273) prd.app: step 6/14 confidence-decay "wifi connected"
+I (46274) prd.app: step 7/14 confidence-decay "printer connected"
+I (46274) prd.app: step 8/14 confidence-decay "printer ready"
+I (46274) prd.app: state rev=54 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (46275) prd.app: state values printer=Workshop job=CORE One.gcode progress=34% remaining=4752s layer=86/250 nozzle=22 bed=22
+I (47176) prd.app: step 9/14 confidence-decay "printing"
+I (47176) prd.app: state rev=55 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (47177) prd.app: state values printer=Workshop job=CORE One.gcode progress=34% remaining=4752s layer=86/250 nozzle=215 bed=60
+I (47278) prd.app: step 10/14 confidence-decay "job 62%"
+I (47278) prd.app: state rev=56 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (47279) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% remaining=2736s layer=156/250 nozzle=215 bed=60
+I (50919) prd.app: button idle level=released total=0
+I (50919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (50919) prd.app: heartbeat rev=56
+I (52180) prd.app: step 11/14 confidence-decay "confidence degraded"
+I (52180) prd.app: state rev=57 layer=subject-presentation subject=printing condition=none confidence=degraded access=none modal=none ring=yes horizon=no telemetry=yes stale=yes
+I (52181) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% remaining=2736s layer=156/250 nozzle=215 bed=60
+I (60919) prd.app: button idle level=released total=0
+I (60919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (60919) prd.app: heartbeat rev=57
+I (60982) prd.app: task=prd_app stack_bytes=12288 free_low_bytes=4420 used_peak_bytes=7868 headroom=35%
+I (66182) prd.app: step 12/14 confidence-decay "printer stopped answering"
+I (66182) prd.app: state rev=58 layer=subject-presentation subject=printing condition=none confidence=degraded access=none modal=none ring=yes horizon=no telemetry=yes stale=yes
+I (66183) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% remaining=2736s layer=156/250 nozzle=215 bed=60
+I (70919) prd.app: button idle level=released total=0
+I (70919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (70919) prd.app: heartbeat rev=58
+I (76184) prd.app: step 13/14 confidence-decay "state stale"
+I (76184) prd.app: state rev=58 layer=subject-presentation subject=printing condition=none confidence=degraded access=none modal=none ring=yes horizon=no telemetry=yes stale=yes
+I (76185) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% remaining=2736s layer=156/250 nozzle=215 bed=60
+I (80919) prd.app: button idle level=released total=0
+I (80919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (80920) prd.app: heartbeat rev=58
+I (90919) prd.app: button idle level=released total=0
+I (90919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (90920) prd.app: heartbeat rev=58
+I (100919) prd.app: button idle level=released total=0
+I (100919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (100920) prd.app: heartbeat rev=58
+I (110919) prd.app: button idle level=released total=0
+I (110919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (110920) prd.app: heartbeat rev=58
+I (116186) prd.app: step 14/14 confidence-decay "state expired"
+I (116186) prd.app: state rev=59 layer=subject-presentation subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (116187) prd.app: state values printer=Workshop
+I (116187) prd.app: scenario complete=confidence-decay steps_applied=66 rev=59
+I (120919) prd.app: button idle level=released total=0
+I (120919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (120920) prd.app: heartbeat rev=59
+I (120987) prd.app: task=prd_app stack_bytes=12288 free_low_bytes=4420 used_peak_bytes=7868 headroom=35%
+I (122187) prd.app: scenario loaded=authentication-recovery gen=5 steps=11
+I (122287) prd.app: step 1/11 authentication-recovery "boot starting"
+I (122288) prd.app: step 2/11 authentication-recovery "hardware validated"
+I (122288) prd.app: step 3/11 authentication-recovery "storage ready"
+I (122289) prd.app: step 4/11 authentication-recovery "configuration valid"
+I (122289) prd.app: step 5/11 authentication-recovery "boot complete"
+I (122289) prd.app: step 6/11 authentication-recovery "wifi connected"
+I (122290) prd.app: step 7/11 authentication-recovery "api key rejected"
+I (122290) prd.app: state rev=63 layer=access-condition subject=printing condition=none confidence=unavailable access=authentication-required modal=none ring=no horizon=no telemetry=no stale=no
+I (122291) prd.app: state values printer=Workshop
+I (123191) prd.app: step 8/11 authentication-recovery "api key corrected"
+I (123191) prd.app: state rev=64 layer=subject-presentation subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (123192) prd.app: state values printer=Workshop
+I (123292) prd.app: step 9/11 authentication-recovery "probing printer"
+I (123292) prd.app: state rev=65 layer=subject-presentation subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (123293) prd.app: state values printer=Workshop
+I (124193) prd.app: step 10/11 authentication-recovery "printer connected"
+I (124193) prd.app: state rev=66 layer=subject-presentation subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (124194) prd.app: state values printer=Workshop
+I (124294) prd.app: step 11/11 authentication-recovery "printer ready"
+I (124294) prd.app: state rev=67 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (124295) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (124296) prd.app: scenario complete=authentication-recovery steps_applied=77 rev=67
+I (130296) prd.app: scenario loaded=firmware-update-lifecycle gen=6 steps=16
+I (130396) prd.app: step 1/16 firmware-update-lifecycle "boot starting"
+I (130397) prd.app: step 2/16 firmware-update-lifecycle "hardware validated"
+I (130397) prd.app: step 3/16 firmware-update-lifecycle "storage ready"
+I (130398) prd.app: step 4/16 firmware-update-lifecycle "configuration valid"
+I (130398) prd.app: step 5/16 firmware-update-lifecycle "boot complete"
+I (130398) prd.app: step 6/16 firmware-update-lifecycle "wifi connected"
+I (130399) prd.app: step 7/16 firmware-update-lifecycle "printer connected"
+I (130399) prd.app: step 8/16 firmware-update-lifecycle "printer ready"
+I (130400) prd.app: state rev=73 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (130400) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (130919) prd.app: button idle level=released total=0
+I (130919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (130920) prd.app: heartbeat rev=73
+I (131301) prd.app: step 9/16 firmware-update-lifecycle "checking for update"
+I (131301) prd.app: state rev=74 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (131302) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (132302) prd.app: step 10/16 firmware-update-lifecycle "update available"
+I (132302) prd.app: state rev=75 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (132303) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (133303) prd.app: step 11/16 firmware-update-lifecycle "downloading 20%"
+I (133303) prd.app: state rev=76 layer=exclusive-operation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (133304) prd.app: state values printer=Workshop update=20%
+I (134304) prd.app: step 12/16 firmware-update-lifecycle "downloading 70%"
+I (134304) prd.app: state rev=77 layer=exclusive-operation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (134305) prd.app: state values printer=Workshop update=70%
+I (135305) prd.app: step 13/16 firmware-update-lifecycle "verifying image"
+I (135305) prd.app: state rev=78 layer=exclusive-operation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (135306) prd.app: state values printer=Workshop update=100%
+I (136306) prd.app: step 14/16 firmware-update-lifecycle "installing 40%"
+I (136306) prd.app: state rev=79 layer=exclusive-operation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (136307) prd.app: state values printer=Workshop update=40%
+I (137307) prd.app: step 15/16 firmware-update-lifecycle "installing 95%"
+I (137307) prd.app: state rev=80 layer=exclusive-operation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (137308) prd.app: state values printer=Workshop update=95%
+I (138308) prd.app: step 16/16 firmware-update-lifecycle "reboot required"
+I (138308) prd.app: state rev=81 layer=subject-presentation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=yes telemetry=yes stale=yes
+I (138309) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (138309) prd.app: scenario complete=firmware-update-lifecycle steps_applied=93 rev=81
+I (144310) prd.app: scenario loaded=recovery-and-device-fault gen=7 steps=11
+I (144410) prd.app: step 1/11 recovery-and-device-fault "boot starting"
+I (144411) prd.app: step 2/11 recovery-and-device-fault "hardware validated"
+I (144411) prd.app: step 3/11 recovery-and-device-fault "storage ready"
+I (144412) prd.app: step 4/11 recovery-and-device-fault "configuration valid"
+I (144412) prd.app: step 5/11 recovery-and-device-fault "boot complete"
+I (144413) prd.app: step 6/11 recovery-and-device-fault "wifi connected"
+I (144413) prd.app: step 7/11 recovery-and-device-fault "printer connected"
+I (144413) prd.app: step 8/11 recovery-and-device-fault "printer ready"
+I (144414) prd.app: state rev=86 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (144415) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (145315) prd.app: step 9/11 recovery-and-device-fault "recovery mode"
+I (145315) prd.app: state rev=87 layer=recovery-or-provisioning subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (145316) prd.app: state values printer=Workshop
+I (149316) prd.app: step 10/11 recovery-and-device-fault "recovery cleared"
+I (149316) prd.app: state rev=88 layer=subject-presentation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=yes telemetry=yes stale=yes
+I (149317) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (150317) prd.app: step 11/11 recovery-and-device-fault "device fault"
+I (150317) prd.app: state rev=89 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (150318) prd.app: state values printer=Workshop
+I (150318) prd.app: scenario complete=recovery-and-device-fault steps_applied=104 rev=89
+I (150919) prd.app: button idle level=released total=0
+I (150919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (150920) prd.app: heartbeat rev=89
+I (156318) prd.app: scenario loaded=modal-over-operational-subject gen=8 steps=14
+I (156418) prd.app: step 1/14 modal-over-operational-subject "boot starting"
+I (156419) prd.app: step 2/14 modal-over-operational-subject "hardware validated"
+I (156419) prd.app: step 3/14 modal-over-operational-subject "storage ready"
+I (156420) prd.app: step 4/14 modal-over-operational-subject "configuration valid"
+I (156420) prd.app: step 5/14 modal-over-operational-subject "boot complete"
+I (156420) prd.app: step 6/14 modal-over-operational-subject "wifi connected"
+I (156421) prd.app: step 7/14 modal-over-operational-subject "printer connected"
+I (156421) prd.app: step 8/14 modal-over-operational-subject "printer ready"
+I (156422) prd.app: state rev=94 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (156422) prd.app: state values printer=Workshop
+I (157323) prd.app: step 9/14 modal-over-operational-subject "printing"
+I (157323) prd.app: state rev=95 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (157324) prd.app: state values printer=Workshop
+I (157424) prd.app: step 10/14 modal-over-operational-subject "job 62%"
+I (157424) prd.app: state rev=96 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (157425) prd.app: state values printer=Workshop
+I (158325) prd.app: step 11/14 modal-over-operational-subject "settings opened"
+I (158325) prd.app: state rev=97 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (158326) prd.app: state values printer=Workshop
+I (160919) prd.app: button idle level=released total=0
+I (160919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (160920) prd.app: heartbeat rev=97
+I (161326) prd.app: step 12/14 modal-over-operational-subject "settings closed"
+I (161326) prd.app: state rev=97 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (161327) prd.app: state values printer=Workshop
+I (162327) prd.app: step 13/14 modal-over-operational-subject "reset confirmation"
+I (162327) prd.app: state rev=98 layer=device-fault subject=printing condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (162328) prd.app: state values printer=Workshop
+I (165328) prd.app: step 14/14 modal-over-operational-subject "confirmation dismissed"
+I (165328) prd.app: state rev=98 layer=device-fault subject=printing condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (165329) prd.app: state values printer=Workshop
+I (165329) prd.app: scenario complete=modal-over-operational-subject steps_applied=118 rev=98
+I (170919) prd.app: button idle level=released total=0
+I (170919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (170920) prd.app: heartbeat rev=98
+I (171330) prd.app: scenario loaded=cold-boot-to-ready gen=9 steps=8
+I (171430) prd.app: step 1/8 cold-boot-to-ready "boot starting"
+I (171431) prd.app: step 2/8 cold-boot-to-ready "hardware validated"
+I (171431) prd.app: step 3/8 cold-boot-to-ready "storage ready"
+I (171432) prd.app: step 4/8 cold-boot-to-ready "configuration valid"
+I (171432) prd.app: step 5/8 cold-boot-to-ready "boot complete"
+I (171432) prd.app: step 6/8 cold-boot-to-ready "wifi connected"
+I (171433) prd.app: step 7/8 cold-boot-to-ready "printer connected"
+I (171433) prd.app: step 8/8 cold-boot-to-ready "printer ready"
+I (171434) prd.app: state rev=103 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (171434) prd.app: state values printer=Workshop
+I (171434) prd.app: scenario complete=cold-boot-to-ready steps_applied=126 rev=103
+I (177435) prd.app: scenario loaded=first-setup-to-ready gen=10 steps=12
+I (177535) prd.app: step 1/12 first-setup-to-ready "boot starting"
+I (177536) prd.app: step 2/12 first-setup-to-ready "hardware validated"
+I (177536) prd.app: step 3/12 first-setup-to-ready "storage ready"
+I (177536) prd.app: step 4/12 first-setup-to-ready "no configuration"
+I (177537) prd.app: step 5/12 first-setup-to-ready "boot complete"
+I (177537) prd.app: state rev=106 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (177538) prd.app: state values
+I (178438) prd.app: step 6/12 first-setup-to-ready "setup active"
+I (178438) prd.app: state rev=107 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (178439) prd.app: state values
+I (179439) prd.app: step 7/12 first-setup-to-ready "validating configuration"
+I (179439) prd.app: state rev=108 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (179440) prd.app: state values
+I (180440) prd.app: step 8/12 first-setup-to-ready "configuration saved"
+I (180440) prd.app: state rev=109 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (180441) prd.app: state values printer=Workshop
+I (180541) prd.app: step 9/12 first-setup-to-ready "wifi connected"
+I (180541) prd.app: state rev=110 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (180542) prd.app: state values printer=Workshop
+I (180642) prd.app: step 10/12 first-setup-to-ready "probing printer"
+I (180642) prd.app: state rev=111 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (180643) prd.app: state values printer=Workshop
+I (180919) prd.app: button idle level=released total=0
+I (180919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (180920) prd.app: heartbeat rev=111
+I (181043) prd.app: task=prd_app stack_bytes=12288 free_low_bytes=4420 used_peak_bytes=7868 headroom=35%
+I (181443) prd.app: step 11/12 first-setup-to-ready "printer connected"
+I (181443) prd.app: state rev=112 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (181444) prd.app: state values printer=Workshop
+I (181544) prd.app: step 12/12 first-setup-to-ready "printer ready"
+I (181544) prd.app: state rev=113 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (181545) prd.app: state values printer=Workshop
+I (181545) prd.app: scenario complete=first-setup-to-ready steps_applied=138 rev=113
+I (187546) prd.app: scenario loaded=full-print-cycle gen=11 steps=19
+I (187646) prd.app: step 1/19 full-print-cycle "boot starting"
+I (187647) prd.app: step 2/19 full-print-cycle "hardware validated"
+I (187647) prd.app: step 3/19 full-print-cycle "storage ready"
+I (187648) prd.app: step 4/19 full-print-cycle "configuration valid"
+I (187648) prd.app: step 5/19 full-print-cycle "boot complete"
+I (187648) prd.app: step 6/19 full-print-cycle "wifi connected"
+I (187649) prd.app: step 7/19 full-print-cycle "printer connected"
+I (187649) prd.app: step 8/19 full-print-cycle "printer ready"
+I (187649) prd.app: state rev=119 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (187650) prd.app: state values printer=Workshop
+I (188550) prd.app: step 9/19 full-print-cycle "heating"
+I (188550) prd.app: state rev=120 layer=device-fault subject=preparing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (188551) prd.app: state values printer=Workshop
+I (189551) prd.app: step 10/19 full-print-cycle "printing"
+I (189551) prd.app: state rev=121 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (189552) prd.app: state values printer=Workshop
+I (189652) prd.app: step 11/19 full-print-cycle "job 5%"
+I (189652) prd.app: state rev=122 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (189653) prd.app: state values printer=Workshop
+I (190553) prd.app: step 12/19 full-print-cycle "job 40%"
+I (190553) prd.app: state rev=123 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (190554) prd.app: state values printer=Workshop
+I (190919) prd.app: button idle level=released total=0
+I (190919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (190920) prd.app: heartbeat rev=123
+I (191554) prd.app: step 13/19 full-print-cycle "paused"
+I (191554) prd.app: state rev=124 layer=device-fault subject=paused condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (191555) prd.app: state values printer=Workshop
+I (192555) prd.app: step 14/19 full-print-cycle "resumed"
+I (192555) prd.app: state rev=125 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (192556) prd.app: state values printer=Workshop
+I (192656) prd.app: step 15/19 full-print-cycle "job 80%"
+I (192656) prd.app: state rev=126 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (192657) prd.app: state values printer=Workshop
+I (193557) prd.app: step 16/19 full-print-cycle "job 100%"
+I (193557) prd.app: state rev=127 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (193558) prd.app: state values printer=Workshop
+I (193658) prd.app: step 17/19 full-print-cycle "completed"
+I (193658) prd.app: state rev=128 layer=device-fault subject=completed condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (193659) prd.app: state values printer=Workshop
+I (195559) prd.app: step 18/19 full-print-cycle "job cleared by printer"
+I (195559) prd.app: state rev=129 layer=device-fault subject=completed condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (195560) prd.app: state values printer=Workshop
+I (196560) prd.app: step 19/19 full-print-cycle "settled to ready"
+I (196560) prd.app: state rev=130 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (196561) prd.app: state values printer=Workshop
+I (196561) prd.app: scenario complete=full-print-cycle steps_applied=157 rev=130
+I (200919) prd.app: button idle level=released total=0
+I (200919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (200920) prd.app: heartbeat rev=130
+I (202562) prd.app: scenario loaded=printing-to-stopped gen=12 steps=13
+I (202662) prd.app: step 1/13 printing-to-stopped "boot starting"
+I (202663) prd.app: step 2/13 printing-to-stopped "hardware validated"
+I (202663) prd.app: step 3/13 printing-to-stopped "storage ready"
+I (202664) prd.app: step 4/13 printing-to-stopped "configuration valid"
+I (202664) prd.app: step 5/13 printing-to-stopped "boot complete"
+I (202664) prd.app: step 6/13 printing-to-stopped "wifi connected"
+I (202665) prd.app: step 7/13 printing-to-stopped "printer connected"
+I (202665) prd.app: step 8/13 printing-to-stopped "printer ready"
+I (202666) prd.app: state rev=135 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (202666) prd.app: state values printer=Workshop
+I (203566) prd.app: step 9/13 printing-to-stopped "heating"
+I (203566) prd.app: state rev=136 layer=device-fault subject=preparing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (203567) prd.app: state values printer=Workshop
+I (204567) prd.app: step 10/13 printing-to-stopped "printing"
+I (204567) prd.app: state rev=137 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (204568) prd.app: state values printer=Workshop
+I (204668) prd.app: step 11/13 printing-to-stopped "job 34%"
+I (204668) prd.app: state rev=138 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (204669) prd.app: state values printer=Workshop
+I (206569) prd.app: step 12/13 printing-to-stopped "stopped"
+I (206569) prd.app: state rev=139 layer=device-fault subject=stopped condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (206570) prd.app: state values printer=Workshop
+I (210570) prd.app: step 13/13 printing-to-stopped "settled to ready"
+I (210570) prd.app: state rev=140 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (210571) prd.app: state values printer=Workshop
+I (210571) prd.app: scenario complete=printing-to-stopped steps_applied=170 rev=140
+I (210919) prd.app: button idle level=released total=0
+I (210919) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (210920) prd.app: heartbeat rev=140
+I (216572) prd.app: scenario loaded=confidence-decay gen=13 steps=14
+I (216672) prd.app: step 1/14 confidence-decay "boot starting"
+I (216673) prd.app: step 2/14 confidence-decay "hardware validated"
+I (216673) prd.app: step 3/14 confidence-decay "storage ready"
+I (216674) prd.app: step 4/14 confidence-decay "configuration valid"
+I (216674) prd.app: step 5/14 confidence-decay "boot complete"
+I (216674) prd.app: step 6/14 confidence-decay "wifi connected"
+I (216675) prd.app: step 7/14 confidence-decay "printer connected"
+I (216675) prd.app: step 8/14 confidence-decay "printer ready"
+I (216676) prd.app: state rev=145 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (216676) prd.app: state values printer=Workshop
+I (217576) prd.app: step 9/14 confidence-decay "printing"
+I (217576) prd.app: state rev=146 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (217577) prd.app: state values printer=Workshop
+I (217677) prd.app: step 10/14 confidence-decay "job 62%"
+I (217677) prd.app: state rev=147 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (217678) prd.app: state values printer=Workshop
+
+# ===========================================================================
+# RUN B — button controls
+#
+# Expected: short press steps; the first long press pauses at a scenario boundary
+# (paused=yes) and the next scenario must NOT load; the second long press resumes
+# (paused=no) and only then does the next scenario load; the very long press restarts
+# with a fresh generation.
+# ===========================================================================
+I (887) prd.app: Prusa Remote Display 0.1.0-dev
+I (888) prd.boot: version=0.1.0-dev git=7df161893f6e dirty=true profile=hardware-validation idf=v5.5.4 board=waveshare_esp32_s3_lcd_2_8
+I (888) prd.boot: phase=initializing
+I (888) prd.boot: phase=hardware-initializing
+I (889) prd.board: target=waveshare_esp32_s3_lcd_2_8 validation=provisional
+I (889) prd.board: chip=ESP32-S3 rev=0.2 cores=2 reset=usb
+I (890) prd.board: flash_detected=16777216 expected=16777216 result=pass
+I (890) prd.board: psram_detected=8388608 expected=8388608 result=pass
+W (891) prd.board: usb_console=native_usb_serial_jtag result=unvalidated
+I (891) prd.boot: phase=starting-services
+I (892) prd.app: application task queue_slots=12 event_bytes=360 scenarios=on
+I (892) prd.boot: phase=ready
+I (893) prd.app: task=prd_app stack_bytes=12288 free_low_bytes=6980 used_peak_bytes=5308 headroom=56%
+I (893) prd.app: fixture catalogue: 21 presentations
+I (894) prd.app: fixture[0]=boot-starting rev=1 layer=system-lifecycle subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (895) prd.app: fixture[1]=setup-required rev=4 layer=recovery-or-provisioning subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (896) prd.app: fixture[2]=setup-active rev=5 layer=recovery-or-provisioning subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (897) prd.app: fixture[3]=validating-configuration rev=5 layer=recovery-or-provisioning subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (899) prd.app: fixture[4]=setup-failed rev=5 layer=recovery-or-provisioning subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (900) prd.app: fixture[5]=acquiring-printer-state rev=6 layer=subject-presentation subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (901) prd.app: fixture[6]=ready rev=8 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (903) prd.app: fixture[7]=preparing rev=8 layer=subject-presentation subject=preparing condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (904) prd.app: fixture[8]=printing rev=9 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (906) prd.app: fixture[9]=paused rev=9 layer=subject-presentation subject=paused condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (907) prd.app: fixture[10]=completed rev=9 layer=subject-presentation subject=completed condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (909) prd.app: fixture[11]=stopped rev=9 layer=subject-presentation subject=stopped condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (910) prd.app: fixture[12]=printer-unavailable rev=11 layer=subject-presentation subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (912) prd.app: fixture[13]=authentication-required rev=6 layer=access-condition subject=acquiring-state condition=none confidence=unavailable access=authentication-required modal=none ring=no horizon=no telemetry=no stale=no
+I (913) prd.app: fixture[14]=unsupported-interface rev=6 layer=access-condition subject=acquiring-state condition=none confidence=unavailable access=unsupported-interface modal=none ring=no horizon=no telemetry=no stale=no
+I (915) prd.app: fixture[15]=firmware-updating rev=10 layer=exclusive-operation subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (917) prd.app: fixture[16]=factory-resetting rev=11 layer=exclusive-operation subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (918) prd.app: fixture[17]=recovery-mode rev=5 layer=recovery-or-provisioning subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (919) prd.app: fixture[18]=device-fault rev=4 layer=device-fault subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (921) prd.app: fixture[19]=settings-modal rev=10 layer=modal-surface subject=printing condition=none confidence=current access=none modal=settings ring=yes horizon=no telemetry=yes stale=no
+I (922) prd.app: fixture[20]=factory-reset-confirmation rev=10 layer=modal-surface subject=printing condition=none confidence=current access=none modal=factory-reset-confirmation ring=yes horizon=no telemetry=yes stale=no
+I (923) prd.app: scenario loaded=cold-boot-to-ready gen=0 steps=8
+I (924) prd.app: initial rev=4 layer=subject-presentation subject=acquiring-state condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (924) prd.app: initial values
+I (925) prd.app: task=prd_app stack_bytes=12288 free_low_bytes=4420 used_peak_bytes=7868 headroom=35%
+I (927) prd.button: button ready gpio=0 active=low pull_up=external hw_debounce=no debounce_ms=25 long_ms=1500 very_long_ms=8000 isr=iram level=released
+I (928) prd.app: task=main stack_bytes=3584 free_low_bytes=1916 used_peak_bytes=1668 headroom=53%
+I (1025) prd.app: step 1/8 cold-boot-to-ready "boot starting"
+I (1026) prd.app: step 2/8 cold-boot-to-ready "hardware validated"
+I (1026) prd.app: step 3/8 cold-boot-to-ready "storage ready"
+I (1026) prd.app: step 4/8 cold-boot-to-ready "configuration valid"
+I (1027) prd.app: step 5/8 cold-boot-to-ready "boot complete"
+I (1027) prd.app: step 6/8 cold-boot-to-ready "wifi connected"
+I (1028) prd.app: step 7/8 cold-boot-to-ready "printer connected"
+I (1028) prd.app: step 8/8 cold-boot-to-ready "printer ready"
+I (1028) prd.app: state rev=12 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (1029) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (1029) prd.app: scenario complete=cold-boot-to-ready steps_applied=8 rev=12
+I (7030) prd.app: scenario loaded=first-setup-to-ready gen=1 steps=12
+I (7130) prd.app: step 1/12 first-setup-to-ready "boot starting"
+I (7131) prd.app: step 2/12 first-setup-to-ready "hardware validated"
+I (7131) prd.app: step 3/12 first-setup-to-ready "storage ready"
+I (7131) prd.app: step 4/12 first-setup-to-ready "no configuration"
+I (7132) prd.app: step 5/12 first-setup-to-ready "boot complete"
+I (7132) prd.app: state rev=15 layer=recovery-or-provisioning subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (7133) prd.app: state values
+I (8033) prd.app: step 6/12 first-setup-to-ready "setup active"
+I (8033) prd.app: state rev=16 layer=recovery-or-provisioning subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (8034) prd.app: state values
+I (9034) prd.app: step 7/12 first-setup-to-ready "validating configuration"
+I (9034) prd.app: state rev=17 layer=recovery-or-provisioning subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (9035) prd.app: state values
+I (10035) prd.app: step 8/12 first-setup-to-ready "configuration saved"
+I (10035) prd.app: state rev=18 layer=subject-presentation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=yes telemetry=yes stale=yes
+I (10036) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (10136) prd.app: step 9/12 first-setup-to-ready "wifi connected"
+I (10136) prd.app: state rev=19 layer=subject-presentation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=yes telemetry=yes stale=yes
+I (10137) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (10237) prd.app: step 10/12 first-setup-to-ready "probing printer"
+I (10237) prd.app: state rev=20 layer=subject-presentation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=yes telemetry=yes stale=yes
+I (10238) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (10927) prd.app: button idle level=released total=0
+I (10927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (10928) prd.app: heartbeat rev=20
+I (11038) prd.app: step 11/12 first-setup-to-ready "printer connected"
+I (11038) prd.app: state rev=21 layer=subject-presentation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=yes telemetry=yes stale=yes
+I (11039) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (11139) prd.app: step 12/12 first-setup-to-ready "printer ready"
+I (11139) prd.app: state rev=22 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (11140) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (11140) prd.app: scenario complete=first-setup-to-ready steps_applied=20 rev=22
+I (17141) prd.app: scenario loaded=full-print-cycle gen=2 steps=19
+I (17241) prd.app: step 1/19 full-print-cycle "boot starting"
+I (17242) prd.app: step 2/19 full-print-cycle "hardware validated"
+I (17242) prd.app: step 3/19 full-print-cycle "storage ready"
+I (17243) prd.app: step 4/19 full-print-cycle "configuration valid"
+I (17243) prd.app: step 5/19 full-print-cycle "boot complete"
+I (17243) prd.app: step 6/19 full-print-cycle "wifi connected"
+I (17244) prd.app: step 7/19 full-print-cycle "printer connected"
+I (17244) prd.app: step 8/19 full-print-cycle "printer ready"
+I (17244) prd.app: state rev=28 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (17245) prd.app: state values printer=Workshop nozzle=22 bed=22
+I (18145) prd.app: step 9/19 full-print-cycle "heating"
+I (18145) prd.app: state rev=29 layer=subject-presentation subject=preparing condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (18146) prd.app: state values printer=Workshop nozzle=145 bed=45
+I (19146) prd.app: step 10/19 full-print-cycle "printing"
+I (19146) prd.app: state rev=30 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=yes stale=no
+I (19147) prd.app: state values printer=Workshop nozzle=215 bed=60
+I (19247) prd.app: step 11/19 full-print-cycle "job 5%"
+I (19247) prd.app: state rev=31 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (19248) prd.app: state values printer=Workshop job=CORE One.gcode progress=5% remaining=6840s layer=12/250 nozzle=215 bed=60
+I (20149) prd.app: step 12/19 full-print-cycle "job 40%"
+I (20149) prd.app: state rev=32 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (20150) prd.app: state values printer=Workshop job=CORE One.gcode progress=40% remaining=4320s layer=100/250 nozzle=215 bed=60
+I (20927) prd.app: button idle level=released total=0
+I (20927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (20928) prd.app: heartbeat rev=32
+I (21151) prd.app: step 13/19 full-print-cycle "paused"
+I (21151) prd.app: state rev=33 layer=subject-presentation subject=paused condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (21152) prd.app: state values printer=Workshop job=CORE One.gcode progress=40% remaining=4320s layer=100/250 nozzle=215 bed=60
+I (22153) prd.app: step 14/19 full-print-cycle "resumed"
+I (22153) prd.app: state rev=34 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (22154) prd.app: state values printer=Workshop job=CORE One.gcode progress=40% remaining=4320s layer=100/250 nozzle=215 bed=60
+I (22255) prd.app: step 15/19 full-print-cycle "job 80%"
+I (22255) prd.app: state rev=35 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (22256) prd.app: state values printer=Workshop job=CORE One.gcode progress=80% remaining=1440s layer=200/250 nozzle=215 bed=60
+I (23157) prd.app: step 16/19 full-print-cycle "job 100%"
+I (23157) prd.app: state rev=36 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (23158) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=215 bed=60
+I (23259) prd.app: step 17/19 full-print-cycle "completed"
+I (23259) prd.app: state rev=37 layer=subject-presentation subject=completed condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (23260) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=215 bed=60
+I (25161) prd.app: step 18/19 full-print-cycle "job cleared by printer"
+I (25161) prd.app: state rev=38 layer=subject-presentation subject=completed condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (25162) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=215 bed=60
+I (26163) prd.app: step 19/19 full-print-cycle "settled to ready"
+I (26163) prd.app: state rev=39 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (26164) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=22 bed=22
+I (26165) prd.app: scenario complete=full-print-cycle steps_applied=39 rev=39
+I (30927) prd.app: button idle level=released total=0
+I (30927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (30928) prd.app: heartbeat rev=39
+I (32165) prd.app: scenario loaded=printing-to-stopped gen=3 steps=13
+I (32265) prd.app: step 1/13 printing-to-stopped "boot starting"
+I (32266) prd.app: step 2/13 printing-to-stopped "hardware validated"
+I (32266) prd.app: step 3/13 printing-to-stopped "storage ready"
+I (32267) prd.app: step 4/13 printing-to-stopped "configuration valid"
+I (32267) prd.app: step 5/13 printing-to-stopped "boot complete"
+I (32267) prd.app: step 6/13 printing-to-stopped "wifi connected"
+I (32268) prd.app: step 7/13 printing-to-stopped "printer connected"
+I (32268) prd.app: step 8/13 printing-to-stopped "printer ready"
+I (32269) prd.app: state rev=44 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (32269) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=22 bed=22
+I (33170) prd.app: step 9/13 printing-to-stopped "heating"
+I (33170) prd.app: state rev=45 layer=subject-presentation subject=preparing condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (33171) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=145 bed=45
+I (34172) prd.app: step 10/13 printing-to-stopped "printing"
+I (34172) prd.app: state rev=46 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (34173) prd.app: state values printer=Workshop job=CORE One.gcode progress=100% remaining=0s layer=250/250 nozzle=215 bed=60
+I (34274) prd.app: step 11/13 printing-to-stopped "job 34%"
+I (34275) prd.app: state rev=47 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (34275) prd.app: state values printer=Workshop job=CORE One.gcode progress=34% remaining=4752s layer=86/250 nozzle=215 bed=60
+I (36176) prd.app: step 12/13 printing-to-stopped "stopped"
+I (36176) prd.app: state rev=48 layer=subject-presentation subject=stopped condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (36177) prd.app: state values printer=Workshop job=CORE One.gcode progress=34% remaining=4752s layer=86/250 nozzle=200 bed=60
+I (40178) prd.app: step 13/13 printing-to-stopped "settled to ready"
+I (40178) prd.app: state rev=49 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (40179) prd.app: state values printer=Workshop job=CORE One.gcode progress=34% remaining=4752s layer=86/250 nozzle=22 bed=22
+I (40180) prd.app: scenario complete=printing-to-stopped steps_applied=52 rev=49
+I (40927) prd.app: button idle level=released total=0
+I (40927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (40928) prd.app: heartbeat rev=49
+I (46180) prd.app: scenario loaded=confidence-decay gen=4 steps=14
+I (46280) prd.app: step 1/14 confidence-decay "boot starting"
+I (46281) prd.app: step 2/14 confidence-decay "hardware validated"
+I (46281) prd.app: step 3/14 confidence-decay "storage ready"
+I (46282) prd.app: step 4/14 confidence-decay "configuration valid"
+I (46282) prd.app: step 5/14 confidence-decay "boot complete"
+I (46282) prd.app: step 6/14 confidence-decay "wifi connected"
+I (46283) prd.app: step 7/14 confidence-decay "printer connected"
+I (46283) prd.app: step 8/14 confidence-decay "printer ready"
+I (46284) prd.app: state rev=54 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (46284) prd.app: state values printer=Workshop job=CORE One.gcode progress=34% remaining=4752s layer=86/250 nozzle=22 bed=22
+I (47185) prd.app: step 9/14 confidence-decay "printing"
+I (47185) prd.app: state rev=55 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (47186) prd.app: state values printer=Workshop job=CORE One.gcode progress=34% remaining=4752s layer=86/250 nozzle=215 bed=60
+I (47287) prd.app: step 10/14 confidence-decay "job 62%"
+I (47287) prd.app: state rev=56 layer=subject-presentation subject=printing condition=none confidence=current access=none modal=none ring=yes horizon=no telemetry=yes stale=no
+I (47288) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% remaining=2736s layer=156/250 nozzle=215 bed=60
+I (50927) prd.app: button idle level=released total=0
+I (50927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (50928) prd.app: heartbeat rev=56
+I (52189) prd.app: step 11/14 confidence-decay "confidence degraded"
+I (52189) prd.app: state rev=57 layer=subject-presentation subject=printing condition=none confidence=degraded access=none modal=none ring=yes horizon=no telemetry=yes stale=yes
+I (52190) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% remaining=2736s layer=156/250 nozzle=215 bed=60
+I (60927) prd.app: button idle level=released total=0
+I (60927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (60928) prd.app: heartbeat rev=57
+I (60991) prd.app: task=prd_app stack_bytes=12288 free_low_bytes=4420 used_peak_bytes=7868 headroom=35%
+I (66191) prd.app: step 12/14 confidence-decay "printer stopped answering"
+I (66191) prd.app: state rev=58 layer=subject-presentation subject=printing condition=none confidence=degraded access=none modal=none ring=yes horizon=no telemetry=yes stale=yes
+I (66192) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% remaining=2736s layer=156/250 nozzle=215 bed=60
+I (70927) prd.app: button idle level=released total=0
+I (70927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (70928) prd.app: heartbeat rev=58
+I (76193) prd.app: step 13/14 confidence-decay "state stale"
+I (76193) prd.app: state rev=58 layer=subject-presentation subject=printing condition=none confidence=degraded access=none modal=none ring=yes horizon=no telemetry=yes stale=yes
+I (76194) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% remaining=2736s layer=156/250 nozzle=215 bed=60
+I (80927) prd.app: button idle level=released total=0
+I (80927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (80928) prd.app: heartbeat rev=58
+I (90927) prd.app: button idle level=released total=0
+I (90927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (90928) prd.app: heartbeat rev=58
+I (100927) prd.app: button idle level=released total=0
+I (100927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (100928) prd.app: heartbeat rev=58
+I (110927) prd.app: button idle level=released total=0
+I (110927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (110928) prd.app: heartbeat rev=58
+I (116195) prd.app: step 14/14 confidence-decay "state expired"
+I (116195) prd.app: state rev=59 layer=subject-presentation subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (116196) prd.app: state values printer=Workshop
+I (116196) prd.app: scenario complete=confidence-decay steps_applied=66 rev=59
+I (120927) prd.app: button idle level=released total=0
+I (120927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (120928) prd.app: heartbeat rev=59
+I (120996) prd.app: task=prd_app stack_bytes=12288 free_low_bytes=4420 used_peak_bytes=7868 headroom=35%
+I (122196) prd.app: scenario loaded=authentication-recovery gen=5 steps=11
+I (122296) prd.app: step 1/11 authentication-recovery "boot starting"
+I (122297) prd.app: step 2/11 authentication-recovery "hardware validated"
+I (122297) prd.app: step 3/11 authentication-recovery "storage ready"
+I (122298) prd.app: step 4/11 authentication-recovery "configuration valid"
+I (122298) prd.app: step 5/11 authentication-recovery "boot complete"
+I (122298) prd.app: step 6/11 authentication-recovery "wifi connected"
+I (122299) prd.app: step 7/11 authentication-recovery "api key rejected"
+I (122299) prd.app: state rev=63 layer=access-condition subject=printing condition=none confidence=unavailable access=authentication-required modal=none ring=no horizon=no telemetry=no stale=no
+I (122300) prd.app: state values printer=Workshop
+I (123200) prd.app: step 8/11 authentication-recovery "api key corrected"
+I (123200) prd.app: state rev=64 layer=subject-presentation subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (123201) prd.app: state values printer=Workshop
+I (123301) prd.app: step 9/11 authentication-recovery "probing printer"
+I (123301) prd.app: state rev=65 layer=subject-presentation subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (123302) prd.app: state values printer=Workshop
+I (124202) prd.app: step 10/11 authentication-recovery "printer connected"
+I (124202) prd.app: state rev=66 layer=subject-presentation subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (124203) prd.app: state values printer=Workshop
+I (124303) prd.app: step 11/11 authentication-recovery "printer ready"
+I (124303) prd.app: state rev=67 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (124304) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (124305) prd.app: scenario complete=authentication-recovery steps_applied=77 rev=67
+I (130305) prd.app: scenario loaded=firmware-update-lifecycle gen=6 steps=16
+I (130405) prd.app: step 1/16 firmware-update-lifecycle "boot starting"
+I (130406) prd.app: step 2/16 firmware-update-lifecycle "hardware validated"
+I (130406) prd.app: step 3/16 firmware-update-lifecycle "storage ready"
+I (130407) prd.app: step 4/16 firmware-update-lifecycle "configuration valid"
+I (130407) prd.app: step 5/16 firmware-update-lifecycle "boot complete"
+I (130407) prd.app: step 6/16 firmware-update-lifecycle "wifi connected"
+I (130408) prd.app: step 7/16 firmware-update-lifecycle "printer connected"
+I (130408) prd.app: step 8/16 firmware-update-lifecycle "printer ready"
+I (130409) prd.app: state rev=73 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (130409) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (130927) prd.app: button idle level=released total=0
+I (130927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (130928) prd.app: heartbeat rev=73
+I (131310) prd.app: step 9/16 firmware-update-lifecycle "checking for update"
+I (131310) prd.app: state rev=74 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (131311) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (132311) prd.app: step 10/16 firmware-update-lifecycle "update available"
+I (132311) prd.app: state rev=75 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (132312) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (133312) prd.app: step 11/16 firmware-update-lifecycle "downloading 20%"
+I (133312) prd.app: state rev=76 layer=exclusive-operation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (133313) prd.app: state values printer=Workshop update=20%
+I (134313) prd.app: step 12/16 firmware-update-lifecycle "downloading 70%"
+I (134313) prd.app: state rev=77 layer=exclusive-operation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (134314) prd.app: state values printer=Workshop update=70%
+I (135314) prd.app: step 13/16 firmware-update-lifecycle "verifying image"
+I (135314) prd.app: state rev=78 layer=exclusive-operation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (135315) prd.app: state values printer=Workshop update=100%
+I (136315) prd.app: step 14/16 firmware-update-lifecycle "installing 40%"
+I (136315) prd.app: state rev=79 layer=exclusive-operation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (136316) prd.app: state values printer=Workshop update=40%
+I (137316) prd.app: step 15/16 firmware-update-lifecycle "installing 95%"
+I (137316) prd.app: state rev=80 layer=exclusive-operation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (137317) prd.app: state values printer=Workshop update=95%
+I (138317) prd.app: step 16/16 firmware-update-lifecycle "reboot required"
+I (138317) prd.app: state rev=81 layer=subject-presentation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=yes telemetry=yes stale=yes
+I (138318) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (138318) prd.app: scenario complete=firmware-update-lifecycle steps_applied=93 rev=81
+I (140927) prd.app: button idle level=released total=0
+I (140927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (140928) prd.app: heartbeat rev=81
+I (144319) prd.app: scenario loaded=recovery-and-device-fault gen=7 steps=11
+I (144419) prd.app: step 1/11 recovery-and-device-fault "boot starting"
+I (144420) prd.app: step 2/11 recovery-and-device-fault "hardware validated"
+I (144420) prd.app: step 3/11 recovery-and-device-fault "storage ready"
+I (144421) prd.app: step 4/11 recovery-and-device-fault "configuration valid"
+I (144421) prd.app: step 5/11 recovery-and-device-fault "boot complete"
+I (144421) prd.app: step 6/11 recovery-and-device-fault "wifi connected"
+I (144422) prd.app: step 7/11 recovery-and-device-fault "printer connected"
+I (144422) prd.app: step 8/11 recovery-and-device-fault "printer ready"
+I (144423) prd.app: state rev=86 layer=subject-presentation subject=ready condition=none confidence=current access=none modal=none ring=no horizon=yes telemetry=yes stale=no
+I (144423) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (145324) prd.app: step 9/11 recovery-and-device-fault "recovery mode"
+I (145324) prd.app: state rev=87 layer=recovery-or-provisioning subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (145325) prd.app: state values printer=Workshop
+I (149325) prd.app: step 10/11 recovery-and-device-fault "recovery cleared"
+I (149325) prd.app: state rev=88 layer=subject-presentation subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=yes telemetry=yes stale=yes
+I (149326) prd.app: state values printer=Workshop job=CORE One.gcode progress=62% layer=156/250 nozzle=22 bed=22
+I (150326) prd.app: step 11/11 recovery-and-device-fault "device fault"
+I (150326) prd.app: state rev=89 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (150327) prd.app: state values printer=Workshop
+I (150327) prd.app: scenario complete=recovery-and-device-fault steps_applied=104 rev=89
+I (150927) prd.app: button idle level=released total=0
+I (150927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (150928) prd.app: heartbeat rev=89
+I (156327) prd.app: scenario loaded=modal-over-operational-subject gen=8 steps=14
+I (156427) prd.app: step 1/14 modal-over-operational-subject "boot starting"
+I (156428) prd.app: step 2/14 modal-over-operational-subject "hardware validated"
+I (156428) prd.app: step 3/14 modal-over-operational-subject "storage ready"
+I (156429) prd.app: step 4/14 modal-over-operational-subject "configuration valid"
+I (156429) prd.app: step 5/14 modal-over-operational-subject "boot complete"
+I (156429) prd.app: step 6/14 modal-over-operational-subject "wifi connected"
+I (156430) prd.app: step 7/14 modal-over-operational-subject "printer connected"
+I (156430) prd.app: step 8/14 modal-over-operational-subject "printer ready"
+I (156431) prd.app: state rev=94 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (156431) prd.app: state values printer=Workshop
+I (157332) prd.app: step 9/14 modal-over-operational-subject "printing"
+I (157332) prd.app: state rev=95 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (157333) prd.app: state values printer=Workshop
+I (157433) prd.app: step 10/14 modal-over-operational-subject "job 62%"
+I (157433) prd.app: state rev=96 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (157434) prd.app: state values printer=Workshop
+I (158334) prd.app: step 11/14 modal-over-operational-subject "settings opened"
+I (158334) prd.app: state rev=97 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (158335) prd.app: state values printer=Workshop
+I (160927) prd.app: button idle level=released total=0
+I (160927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (160928) prd.app: heartbeat rev=97
+I (161335) prd.app: step 12/14 modal-over-operational-subject "settings closed"
+I (161335) prd.app: state rev=97 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (161336) prd.app: state values printer=Workshop
+I (162336) prd.app: step 13/14 modal-over-operational-subject "reset confirmation"
+I (162336) prd.app: state rev=98 layer=device-fault subject=printing condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (162337) prd.app: state values printer=Workshop
+I (165337) prd.app: step 14/14 modal-over-operational-subject "confirmation dismissed"
+I (165337) prd.app: state rev=98 layer=device-fault subject=printing condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (165338) prd.app: state values printer=Workshop
+I (165338) prd.app: scenario complete=modal-over-operational-subject steps_applied=118 rev=98
+I (170927) prd.app: button idle level=released total=0
+I (170927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (170928) prd.app: heartbeat rev=98
+I (171339) prd.app: scenario loaded=cold-boot-to-ready gen=9 steps=8
+I (171439) prd.app: step 1/8 cold-boot-to-ready "boot starting"
+I (171440) prd.app: step 2/8 cold-boot-to-ready "hardware validated"
+I (171440) prd.app: step 3/8 cold-boot-to-ready "storage ready"
+I (171441) prd.app: step 4/8 cold-boot-to-ready "configuration valid"
+I (171441) prd.app: step 5/8 cold-boot-to-ready "boot complete"
+I (171441) prd.app: step 6/8 cold-boot-to-ready "wifi connected"
+I (171442) prd.app: step 7/8 cold-boot-to-ready "printer connected"
+I (171442) prd.app: step 8/8 cold-boot-to-ready "printer ready"
+I (171443) prd.app: state rev=103 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (171443) prd.app: state values printer=Workshop
+I (171443) prd.app: scenario complete=cold-boot-to-ready steps_applied=126 rev=103
+I (177444) prd.app: scenario loaded=first-setup-to-ready gen=10 steps=12
+I (177544) prd.app: step 1/12 first-setup-to-ready "boot starting"
+I (177545) prd.app: step 2/12 first-setup-to-ready "hardware validated"
+I (177545) prd.app: step 3/12 first-setup-to-ready "storage ready"
+I (177545) prd.app: step 4/12 first-setup-to-ready "no configuration"
+I (177546) prd.app: step 5/12 first-setup-to-ready "boot complete"
+I (177546) prd.app: state rev=106 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (177547) prd.app: state values
+I (178447) prd.app: step 6/12 first-setup-to-ready "setup active"
+I (178447) prd.app: state rev=107 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (178448) prd.app: state values
+I (179448) prd.app: step 7/12 first-setup-to-ready "validating configuration"
+I (179448) prd.app: state rev=108 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (179449) prd.app: state values
+I (180449) prd.app: step 8/12 first-setup-to-ready "configuration saved"
+I (180449) prd.app: state rev=109 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (180450) prd.app: state values printer=Workshop
+I (180550) prd.app: step 9/12 first-setup-to-ready "wifi connected"
+I (180550) prd.app: state rev=110 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (180551) prd.app: state values printer=Workshop
+I (180651) prd.app: step 10/12 first-setup-to-ready "probing printer"
+I (180651) prd.app: state rev=111 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (180652) prd.app: state values printer=Workshop
+I (180927) prd.app: button idle level=released total=0
+I (180927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (180928) prd.app: heartbeat rev=111
+I (181052) prd.app: task=prd_app stack_bytes=12288 free_low_bytes=4420 used_peak_bytes=7868 headroom=35%
+I (181452) prd.app: step 11/12 first-setup-to-ready "printer connected"
+I (181452) prd.app: state rev=112 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (181453) prd.app: state values printer=Workshop
+I (181553) prd.app: step 12/12 first-setup-to-ready "printer ready"
+I (181553) prd.app: state rev=113 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (181554) prd.app: state values printer=Workshop
+I (181554) prd.app: scenario complete=first-setup-to-ready steps_applied=138 rev=113
+I (187555) prd.app: scenario loaded=full-print-cycle gen=11 steps=19
+I (187655) prd.app: step 1/19 full-print-cycle "boot starting"
+I (187656) prd.app: step 2/19 full-print-cycle "hardware validated"
+I (187656) prd.app: step 3/19 full-print-cycle "storage ready"
+I (187657) prd.app: step 4/19 full-print-cycle "configuration valid"
+I (187657) prd.app: step 5/19 full-print-cycle "boot complete"
+I (187657) prd.app: step 6/19 full-print-cycle "wifi connected"
+I (187658) prd.app: step 7/19 full-print-cycle "printer connected"
+I (187658) prd.app: step 8/19 full-print-cycle "printer ready"
+I (187658) prd.app: state rev=119 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (187659) prd.app: state values printer=Workshop
+I (188559) prd.app: step 9/19 full-print-cycle "heating"
+I (188559) prd.app: state rev=120 layer=device-fault subject=preparing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (188560) prd.app: state values printer=Workshop
+I (189560) prd.app: step 10/19 full-print-cycle "printing"
+I (189560) prd.app: state rev=121 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (189561) prd.app: state values printer=Workshop
+I (189661) prd.app: step 11/19 full-print-cycle "job 5%"
+I (189661) prd.app: state rev=122 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (189662) prd.app: state values printer=Workshop
+I (190562) prd.app: step 12/19 full-print-cycle "job 40%"
+I (190562) prd.app: state rev=123 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (190563) prd.app: state values printer=Workshop
+I (190927) prd.app: button idle level=released total=0
+I (190927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (190928) prd.app: heartbeat rev=123
+I (191563) prd.app: step 13/19 full-print-cycle "paused"
+I (191563) prd.app: state rev=124 layer=device-fault subject=paused condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (191564) prd.app: state values printer=Workshop
+I (192564) prd.app: step 14/19 full-print-cycle "resumed"
+I (192564) prd.app: state rev=125 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (192565) prd.app: state values printer=Workshop
+I (192665) prd.app: step 15/19 full-print-cycle "job 80%"
+I (192665) prd.app: state rev=126 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (192666) prd.app: state values printer=Workshop
+I (193566) prd.app: step 16/19 full-print-cycle "job 100%"
+I (193566) prd.app: state rev=127 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (193567) prd.app: state values printer=Workshop
+I (193667) prd.app: step 17/19 full-print-cycle "completed"
+I (193667) prd.app: state rev=128 layer=device-fault subject=completed condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (193668) prd.app: state values printer=Workshop
+I (195568) prd.app: step 18/19 full-print-cycle "job cleared by printer"
+I (195568) prd.app: state rev=129 layer=device-fault subject=completed condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (195569) prd.app: state values printer=Workshop
+I (196569) prd.app: step 19/19 full-print-cycle "settled to ready"
+I (196569) prd.app: state rev=130 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (196570) prd.app: state values printer=Workshop
+I (196570) prd.app: scenario complete=full-print-cycle steps_applied=157 rev=130
+I (200927) prd.app: button idle level=released total=0
+I (200927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (200928) prd.app: heartbeat rev=130
+I (202571) prd.app: scenario loaded=printing-to-stopped gen=12 steps=13
+I (202671) prd.app: step 1/13 printing-to-stopped "boot starting"
+I (202672) prd.app: step 2/13 printing-to-stopped "hardware validated"
+I (202672) prd.app: step 3/13 printing-to-stopped "storage ready"
+I (202673) prd.app: step 4/13 printing-to-stopped "configuration valid"
+I (202673) prd.app: step 5/13 printing-to-stopped "boot complete"
+I (202673) prd.app: step 6/13 printing-to-stopped "wifi connected"
+I (202674) prd.app: step 7/13 printing-to-stopped "printer connected"
+I (202674) prd.app: step 8/13 printing-to-stopped "printer ready"
+I (202675) prd.app: state rev=135 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (202675) prd.app: state values printer=Workshop
+I (203575) prd.app: step 9/13 printing-to-stopped "heating"
+I (203575) prd.app: state rev=136 layer=device-fault subject=preparing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (203576) prd.app: state values printer=Workshop
+I (204576) prd.app: step 10/13 printing-to-stopped "printing"
+I (204576) prd.app: state rev=137 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (204577) prd.app: state values printer=Workshop
+I (204677) prd.app: step 11/13 printing-to-stopped "job 34%"
+I (204677) prd.app: state rev=138 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (204678) prd.app: state values printer=Workshop
+I (206578) prd.app: step 12/13 printing-to-stopped "stopped"
+I (206578) prd.app: state rev=139 layer=device-fault subject=stopped condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (206579) prd.app: state values printer=Workshop
+I (210579) prd.app: step 13/13 printing-to-stopped "settled to ready"
+I (210579) prd.app: state rev=140 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (210580) prd.app: state values printer=Workshop
+I (210580) prd.app: scenario complete=printing-to-stopped steps_applied=170 rev=140
+I (210927) prd.app: button idle level=released total=0
+I (210927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (210928) prd.app: heartbeat rev=140
+I (216581) prd.app: scenario loaded=confidence-decay gen=13 steps=14
+I (216681) prd.app: step 1/14 confidence-decay "boot starting"
+I (216682) prd.app: step 2/14 confidence-decay "hardware validated"
+I (216682) prd.app: step 3/14 confidence-decay "storage ready"
+I (216683) prd.app: step 4/14 confidence-decay "configuration valid"
+I (216683) prd.app: step 5/14 confidence-decay "boot complete"
+I (216683) prd.app: step 6/14 confidence-decay "wifi connected"
+I (216684) prd.app: step 7/14 confidence-decay "printer connected"
+I (216684) prd.app: step 8/14 confidence-decay "printer ready"
+I (216685) prd.app: state rev=145 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (216685) prd.app: state values printer=Workshop
+I (217585) prd.app: step 9/14 confidence-decay "printing"
+I (217585) prd.app: state rev=146 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (217586) prd.app: state values printer=Workshop
+I (217686) prd.app: step 10/14 confidence-decay "job 62%"
+I (217686) prd.app: state rev=147 layer=device-fault subject=printing condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (217687) prd.app: state values printer=Workshop
+I (220927) prd.app: button idle level=released total=0
+I (220927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (220928) prd.app: heartbeat rev=147
+I (222587) prd.app: step 11/14 confidence-decay "confidence degraded"
+I (222587) prd.app: state rev=148 layer=device-fault subject=printing condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (222588) prd.app: state values printer=Workshop
+I (230927) prd.app: button idle level=released total=0
+I (230927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (230928) prd.app: heartbeat rev=148
+I (236588) prd.app: step 12/14 confidence-decay "printer stopped answering"
+I (236588) prd.app: state rev=149 layer=device-fault subject=printing condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (236589) prd.app: state values printer=Workshop
+I (240927) prd.app: button idle level=released total=0
+I (240927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (240928) prd.app: heartbeat rev=149
+I (241089) prd.app: task=prd_app stack_bytes=12288 free_low_bytes=4420 used_peak_bytes=7868 headroom=35%
+I (246589) prd.app: step 13/14 confidence-decay "state stale"
+I (246589) prd.app: state rev=149 layer=device-fault subject=printing condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (246590) prd.app: state values printer=Workshop
+I (250927) prd.app: button idle level=released total=0
+I (250927) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+D (250928) prd.app: heartbeat rev=149
+I (254808) prd.app: task=prd_button stack_bytes=4096 free_low_bytes=3112 used_peak_bytes=984 headroom=75%
+I (254808) prd.app: button event=short-press total=1 short=1 long=0 very_long=0
+I (254809) prd.app: button stats raw_edges=2 raw_dropped=0 events=1 events_dropped=0
+I (254809) prd.app: task=prd_button_in stack_bytes=6144 free_low_bytes=2876 used_peak_bytes=3268 headroom=46%
+I (254909) prd.app: control=step applied=yes step=14/14 "state expired"
+I (254909) prd.app: state rev=151 layer=device-fault subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (254910) prd.app: state values printer=Workshop
+I (254910) prd.app: scenario complete=confidence-decay steps_applied=184 rev=151
+I (258462) prd.app: task=prd_button stack_bytes=4096 free_low_bytes=1544 used_peak_bytes=2552 headroom=37%
+I (258462) prd.app: button event=long-press total=2 short=1 long=1 very_long=0
+I (258463) prd.app: button stats raw_edges=4 raw_dropped=0 events=2 events_dropped=0
+I (258463) prd.app: task=prd_button_in stack_bytes=6144 free_low_bytes=2876 used_peak_bytes=3268 headroom=46%
+I (258563) prd.app: control=pause paused=yes
+D (260928) prd.app: heartbeat rev=152
+I (262641) prd.app: task=prd_button stack_bytes=4096 free_low_bytes=1544 used_peak_bytes=2552 headroom=37%
+I (262641) prd.app: button event=long-press total=3 short=1 long=2 very_long=0
+I (262642) prd.app: button stats raw_edges=6 raw_dropped=0 events=3 events_dropped=0
+I (262642) prd.app: task=prd_button_in stack_bytes=6144 free_low_bytes=2876 used_peak_bytes=3268 headroom=46%
+I (262742) prd.app: control=pause paused=no
+I (262742) prd.app: scenario loaded=authentication-recovery gen=14 steps=11
+I (262842) prd.app: step 1/11 authentication-recovery "boot starting"
+I (262843) prd.app: step 2/11 authentication-recovery "hardware validated"
+I (262843) prd.app: step 3/11 authentication-recovery "storage ready"
+I (262843) prd.app: step 4/11 authentication-recovery "configuration valid"
+I (262844) prd.app: step 5/11 authentication-recovery "boot complete"
+I (262844) prd.app: step 6/11 authentication-recovery "wifi connected"
+I (262845) prd.app: step 7/11 authentication-recovery "api key rejected"
+I (262845) prd.app: state rev=156 layer=device-fault subject=printing condition=none confidence=unavailable access=authentication-required modal=none ring=no horizon=no telemetry=no stale=no
+I (262846) prd.app: state values printer=Workshop
+I (263746) prd.app: step 8/11 authentication-recovery "api key corrected"
+I (263746) prd.app: state rev=157 layer=device-fault subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (263747) prd.app: state values printer=Workshop
+I (263847) prd.app: step 9/11 authentication-recovery "probing printer"
+I (263847) prd.app: state rev=158 layer=device-fault subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (263848) prd.app: state values printer=Workshop
+I (264748) prd.app: step 10/11 authentication-recovery "printer connected"
+I (264748) prd.app: state rev=159 layer=device-fault subject=printing condition=none confidence=unavailable access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (264749) prd.app: state values printer=Workshop
+I (264849) prd.app: step 11/11 authentication-recovery "printer ready"
+I (264849) prd.app: state rev=160 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (264850) prd.app: state values printer=Workshop
+I (264850) prd.app: scenario complete=authentication-recovery steps_applied=195 rev=160
+I (270851) prd.app: scenario loaded=firmware-update-lifecycle gen=15 steps=16
+D (270928) prd.app: heartbeat rev=160
+I (270951) prd.app: step 1/16 firmware-update-lifecycle "boot starting"
+I (270952) prd.app: step 2/16 firmware-update-lifecycle "hardware validated"
+I (270952) prd.app: step 3/16 firmware-update-lifecycle "storage ready"
+I (270953) prd.app: step 4/16 firmware-update-lifecycle "configuration valid"
+I (270953) prd.app: step 5/16 firmware-update-lifecycle "boot complete"
+I (270954) prd.app: step 6/16 firmware-update-lifecycle "wifi connected"
+I (270954) prd.app: step 7/16 firmware-update-lifecycle "printer connected"
+I (270954) prd.app: step 8/16 firmware-update-lifecycle "printer ready"
+I (270955) prd.app: state rev=164 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (270955) prd.app: state values printer=Workshop
+I (271652) prd.app: task=prd_button stack_bytes=4096 free_low_bytes=1544 used_peak_bytes=2552 headroom=37%
+I (271652) prd.app: button event=very-long-press total=4 short=1 long=2 very_long=1
+I (271653) prd.app: button stats raw_edges=7 raw_dropped=0 events=4 events_dropped=0
+I (271654) prd.app: task=prd_button_in stack_bytes=6144 free_low_bytes=2876 used_peak_bytes=3268 headroom=46%
+I (271753) prd.app: control=restart gen=16
+I (271753) prd.app: step 1/16 firmware-update-lifecycle "boot starting"
+I (271754) prd.app: state rev=165 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (271754) prd.app: state values printer=Workshop
+I (271854) prd.app: step 2/16 firmware-update-lifecycle "hardware validated"
+I (271855) prd.app: step 3/16 firmware-update-lifecycle "storage ready"
+I (271855) prd.app: step 4/16 firmware-update-lifecycle "configuration valid"
+I (271856) prd.app: step 5/16 firmware-update-lifecycle "boot complete"
+I (271856) prd.app: step 6/16 firmware-update-lifecycle "wifi connected"
+I (271856) prd.app: step 7/16 firmware-update-lifecycle "printer connected"
+I (271857) prd.app: step 8/16 firmware-update-lifecycle "printer ready"
+I (271857) prd.app: state rev=166 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (271858) prd.app: state values printer=Workshop
+I (272758) prd.app: step 9/16 firmware-update-lifecycle "checking for update"
+I (272758) prd.app: state rev=167 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (272759) prd.app: state values printer=Workshop
+I (273759) prd.app: step 10/16 firmware-update-lifecycle "update available"
+I (273759) prd.app: state rev=168 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (273760) prd.app: state values printer=Workshop
+I (274760) prd.app: step 11/16 firmware-update-lifecycle "downloading 20%"
+I (274760) prd.app: state rev=169 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (274761) prd.app: state values printer=Workshop update=20%
+I (275761) prd.app: step 12/16 firmware-update-lifecycle "downloading 70%"
+I (275761) prd.app: state rev=170 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (275762) prd.app: state values printer=Workshop update=70%
+I (276762) prd.app: step 13/16 firmware-update-lifecycle "verifying image"
+I (276762) prd.app: state rev=171 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (276763) prd.app: state values printer=Workshop update=100%
+I (277763) prd.app: step 14/16 firmware-update-lifecycle "installing 40%"
+I (277763) prd.app: state rev=172 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (277764) prd.app: state values printer=Workshop update=40%
+I (278764) prd.app: step 15/16 firmware-update-lifecycle "installing 95%"
+I (278764) prd.app: state rev=173 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (278765) prd.app: state values printer=Workshop update=95%
+I (279765) prd.app: step 16/16 firmware-update-lifecycle "reboot required"
+I (279765) prd.app: state rev=174 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (279766) prd.app: state values printer=Workshop
+I (279766) prd.app: scenario complete=firmware-update-lifecycle steps_applied=219 rev=174
+D (280928) prd.app: heartbeat rev=174
+I (281654) prd.app: button idle level=released total=4
+I (281654) prd.app: button stats raw_edges=8 raw_dropped=0 events=4 events_dropped=0
+I (285766) prd.app: scenario loaded=recovery-and-device-fault gen=17 steps=11
+I (285866) prd.app: step 1/11 recovery-and-device-fault "boot starting"
+I (285867) prd.app: step 2/11 recovery-and-device-fault "hardware validated"
+I (285867) prd.app: step 3/11 recovery-and-device-fault "storage ready"
+I (285868) prd.app: step 4/11 recovery-and-device-fault "configuration valid"
+I (285868) prd.app: step 5/11 recovery-and-device-fault "boot complete"
+I (285869) prd.app: step 6/11 recovery-and-device-fault "wifi connected"
+I (285869) prd.app: step 7/11 recovery-and-device-fault "printer connected"
+I (285869) prd.app: step 8/11 recovery-and-device-fault "printer ready"
+I (285870) prd.app: state rev=176 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (285870) prd.app: state values printer=Workshop
+I (286771) prd.app: step 9/11 recovery-and-device-fault "recovery mode"
+I (286771) prd.app: state rev=177 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (286772) prd.app: state values printer=Workshop
+I (290772) prd.app: step 10/11 recovery-and-device-fault "recovery cleared"
+I (290772) prd.app: state rev=178 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (290773) prd.app: state values printer=Workshop
+D (290928) prd.app: heartbeat rev=178
+I (291654) prd.app: button idle level=released total=4
+I (291654) prd.app: button stats raw_edges=8 raw_dropped=0 events=4 events_dropped=0
+I (291773) prd.app: step 11/11 recovery-and-device-fault "device fault"
+I (291773) prd.app: state rev=178 layer=device-fault subject=ready condition=none confidence=degraded access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (291774) prd.app: state values printer=Workshop
+I (291774) prd.app: scenario complete=recovery-and-device-fault steps_applied=230 rev=178
+I (297775) prd.app: scenario loaded=modal-over-operational-subject gen=18 steps=14
+I (297875) prd.app: step 1/14 modal-over-operational-subject "boot starting"
+I (297876) prd.app: step 2/14 modal-over-operational-subject "hardware validated"
+I (297876) prd.app: step 3/14 modal-over-operational-subject "storage ready"
+I (297877) prd.app: step 4/14 modal-over-operational-subject "configuration valid"
+I (297877) prd.app: step 5/14 modal-over-operational-subject "boot complete"
+I (297877) prd.app: step 6/14 modal-over-operational-subject "wifi connected"
+I (297878) prd.app: step 7/14 modal-over-operational-subject "printer connected"
+I (297878) prd.app: step 8/14 modal-over-operational-subject "printer ready"
+I (297879) prd.app: state rev=183 layer=device-fault subject=ready condition=none confidence=current access=none modal=none ring=no horizon=no telemetry=no stale=no
+I (297879) prd.app: state values printer=Workshop

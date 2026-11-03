@@ -1,0 +1,119 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+menu "Prusa Remote Display display"
+
+    config PRD_DISPLAY_TEST_PATTERNS
+        bool "Compile display validation test patterns"
+        default n
+        help
+            Compiles the static display-validation patterns used during
+            Milestone 1 Phase C bring-up (corner markers, colour bars,
+            checkerboard, gradient, flat colours).
+
+            These are diagnostics, not product UI. Enable only in the
+            hardware-validation profile; the debug and release profiles must
+            leave this off so no validation code reaches a product image.
+
+            Selected by sdkconfig.defaults.hardware-validation rather than an
+            environment variable, so the setting is visible in the generated
+            sdkconfig and cannot silently disappear from a build.
+
+    choice PRD_DISPLAY_TUNING_MODE
+        prompt "Panel tuning mode"
+        default PRD_DISPLAY_TUNING_VENDOR_GAMMA_ONLY
+        help
+            Which initialisation the display component applies after ESP-IDF's
+            generic ST7789 init.
+
+            Gamma-only is the accepted default for this board (Milestone 1
+            Phase C1). The remaining modes exist solely to reproduce the A/B
+            comparison and are selectable only when the hardware-validation
+            test patterns are compiled in, so a debug or release image cannot
+            pick a rejected experimental mode.
+
+        config PRD_DISPLAY_TUNING_VENDOR_GAMMA_ONLY
+            bool "Gamma-only: PVGAMCTRL (E0h) + NVGAMCTRL (E1h) - ACCEPTED DEFAULT"
+            help
+                Applies the panel-specific gamma tables and nothing else.
+                Phase C1 showed this is the entire benefit of the vendor
+                sequence: it improves the accent colour and the black level
+                with no side effects.
+
+        config PRD_DISPLAY_TUNING_GENERIC
+            bool "A - generic ESP-IDF init only (A/B control)"
+            depends on PRD_DISPLAY_TEST_PATTERNS
+            help
+                Retained only as the Phase C1 control. Leaves the panel on
+                power-on defaults: dull accent and an elevated black level.
+
+        config PRD_DISPLAY_TUNING_VENDOR_EXACT
+            bool "B - vendor sequence byte-for-byte (REJECTED)"
+            depends on PRD_DISPLAY_TEST_PATTERNS
+            help
+                REJECTED in Phase C1: corrupts the accent colour and flips
+                orientation. Reproduces the vendor's 0xD0 length-1 defect
+                uncorrected. Kept only so the A/B result can be reproduced.
+
+        config PRD_DISPLAY_TUNING_VENDOR_ANALOGUE_GAMMA
+            bool "D - vendor analogue/power/VCOM + gamma (REJECTED)"
+            depends on PRD_DISPLAY_TEST_PATTERNS
+            help
+                REJECTED in Phase C1: same corruption as mode B even with the
+                0xD0 parameter length corrected against the datasheet. Kept
+                only so the A/B result can be reproduced.
+
+    endchoice
+
+    choice PRD_DISPLAY_VALIDATION_FLOW
+        prompt "Display validation flow"
+        depends on PRD_DISPLAY_TEST_PATTERNS
+        default PRD_DISPLAY_FLOW_PATTERN_CYCLE
+        help
+            Which bring-up flow the hardware-validation image runs. Modelled as
+            a choice rather than independent booleans so exactly one is ever
+            active: during Phase C a configuration that silently failed to take
+            effect cost real bench time, and overlapping flags are the same
+            class of fault.
+
+        config PRD_DISPLAY_FLOW_PATTERN_CYCLE
+            bool "Cycle the static test patterns (default)"
+            help
+                The general-purpose display check from Phase C: every static
+                pattern in turn at the validated SPI clock.
+
+        config PRD_DISPLAY_COLOUR_AB
+            bool "Hold the static colour comparison chart"
+            help
+                Draws the Phase C1 comparison chart once and holds it, so the
+                panel can be photographed under stable conditions.
+
+        config PRD_DISPLAY_CLOCK_SWEEP
+            bool "Sweep SPI clock frequencies"
+            help
+                A repeating sweep over the candidate SPI clock frequencies,
+                re-initialising the panel at each step. Used to establish the
+                highest stable clock and, because each step is a full
+                init/deinit, to exercise repeated initialisation.
+
+        config PRD_DISPLAY_BRIGHTNESS_TEST
+            bool "Cycle the backlight brightness steps and fades"
+            help
+                Milestone 1 Phase D: holds a static pattern and walks the
+                backlight through off, the minimum useful level, 10/25/50/75/100
+                %, then a smooth fade up and a smooth fade down. Used to
+                validate polarity, true full-off, monotonicity, the usable
+                low-brightness floor and fade smoothness.
+
+        config PRD_DISPLAY_BACKLIGHT_FREQ_SWEEP
+            bool "Sweep backlight PWM frequencies"
+            help
+                Milestone 1 Phase D: re-times the LEDC timer through the
+                candidate PWM frequencies without touching the panel, holding
+                each at a moderate and then a low duty cycle. Used to select the
+                production frequency on visible flicker, phone-camera banding
+                and audible noise.
+
+    endchoice
+
+endmenu

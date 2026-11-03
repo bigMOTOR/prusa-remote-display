@@ -1,0 +1,85 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# Static-analysis policy, Firmware Repository Bootstrap Specification v0.3 §12.2.
+#
+# The six groups below are the specification's initial enabled set. Every
+# exclusion is documented, as §12.2 requires: "every disabled check shall be
+# documented."
+#
+# SCOPE. §12.2 requires clang-tidy to run on host-compatible code only and to
+# analyse no ESP-IDF source or third-party dependency. The scope is therefore the
+# ten component translation units that the host test build compiles, driven from
+# that build's compile database. It deliberately excludes the host test sources
+# themselves: measured over the current suite they produce 118 diagnostics, 80 of
+# them readability-magic-numbers, because a fixture's expected values *are*
+# literals, plus 9 bugprone-unchecked-optional-access false positives where
+# clang-tidy does not recognise GoogleTest's ASSERT_TRUE as terminating control
+# flow. Including them would force disabling checks that carry real signal in
+# component code, which is the wrong trade.
+---
+Checks: >
+  bugprone-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  modernize-*,
+  clang-analyzer-*,
+  -modernize-use-trailing-return-type,
+  -portability-avoid-pragma-once,
+  -readability-magic-numbers
+
+# Every finding fails the check script and CI (§12.3 rule 1: project code builds
+# warning-free; §12.5: analysis failures shall fail CI). There is no "warning but
+# passing" tier — a finding is either fixed, or suppressed locally with a reason.
+WarningsAsErrors: '*'
+
+# Project component headers only. Without this, every diagnostic inside the
+# macOS SDK, ESP-IDF or GoogleTest headers reached through an include would be
+# reported, which §12.2 forbids.
+HeaderFilterRegex: 'firmware/components/[^/]+/(include|src)/'
+
+# ---------------------------------------------------------------------------
+# Documented exclusions
+# ---------------------------------------------------------------------------
+#
+# -modernize-use-trailing-return-type
+#     28 findings, every one of them a request to rewrite `int f()` as
+#     `auto f() -> int`. The codebase uses leading return types consistently and
+#     the accepted sources specify no trailing-return style. This is a formatting
+#     preference wearing a modernize- prefix; adopting it would rewrite every
+#     function signature in the repository for no semantic gain.
+#
+# -portability-avoid-pragma-once
+#     `#pragma once` is used in every project header by deliberate convention.
+#     The check exists for exotic toolchains; both compilers this project
+#     supports — xtensa-esp-elf GCC 14 for the target and Apple/Homebrew Clang
+#     for host tests — implement it. Switching to include guards would touch
+#     every header to guard against a portability problem the project does not
+#     have.
+#
+# -readability-magic-numbers
+#     Embedded code is dense with hardware-derived constants, and the project's
+#     convention is already to name anything with meaning (kBrightnessGamma,
+#     kPercentQ8One, kBandRows, the LEDC and SPI constants). What remains are
+#     values that are self-evident in place — 100 for a percentage, 0.5 for
+#     round-half-up — and the check has no way to tell those from a genuine
+#     unexplained constant. Left enabled it would produce steady noise that
+#     trains reviewers to ignore the tool.
+#
+# ---------------------------------------------------------------------------
+# Local suppressions
+# ---------------------------------------------------------------------------
+#
+# Four findings are suppressed at their call sites rather than disabled here,
+# each with a NOLINT carrying its reason (§12.3 rule 4). All four are in
+# hardware-validated code — the Phase D brightness curve and the Phase F
+# transfer tracker — and acting on them would edit behaviour that was signed off
+# on the physical unit:
+#
+#   display/src/brightness_curve.cpp   bugprone-incorrect-roundings,
+#                                      modernize-use-auto,
+#                                      readability-use-std-min-max (x2)
+#   display/src/transfer_tracker.cpp   readability-use-std-min-max
+#
+# The checks stay enabled so new code is still held to them.

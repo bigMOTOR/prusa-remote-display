@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+# Managed dependencies for the network component (Bootstrap Spec §7.7).
+#
+# The version is pinned exactly, not as a range: Architecture Spec §22 requires all
+# dependencies to be pinned and Bootstrap Spec §7.7 forbids floating Git branches, so a
+# rebuild months from now resolves to the same advertiser that was validated on the bench.
+# Rationale for mDNS itself is in docs/decisions/0007-persistent-lan-management-interface.md.
+#
+# ⬅️ WHY A MANAGED COMPONENT AND NOT A BUILT-IN. Architecture Spec §22 lists "built-in NVS,
+# Wi-Fi, OTA and mDNS facilities" among the expected dependencies, so no policy question
+# arises about using mDNS — but in ESP-IDF v5.x mDNS is no longer bundled in the framework
+# tree. It ships from the registry as espressif/mdns, which is why it needs a pin at all.
+#
+# LICENCE: Apache-2.0, verified from the licence text the registry serves for this exact
+# version rather than from its metadata, which reports only "Custom". Apache-2.0 inbound to
+# GPL-3.0-only is compatible; it is recorded in THIRD_PARTY_NOTICES.md as a build-time
+# dependency, on the same footing as LVGL. Nothing from it is redistributed in this
+# repository: managed_components/ is git-ignored and fetched at build time.
+#
+# mDNS is declared here rather than in main or at project level because network is the only
+# component that includes its headers. Declaring it on the component that uses it keeps the
+# dependency direction honest: nothing else can reach mDNS by accident through a transitive
+# requirement, which is the same rule the ui component's LVGL pin follows.
+dependencies:
+  espressif/mdns:
+    version: "==1.11.3"

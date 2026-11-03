@@ -1,0 +1,252 @@
+# First boot after flashing hardware-validation profile
+# Firmware: 0.1.0-dev  git=88d7b3e095b4  dirty=false  profile=hardware-validation  idf=v5.5.4
+# Captured over native USB Serial/JTAG after an RTS-triggered reset.
+# Normalisation applied to the raw capture: ANSI colour escapes, CR of CRLF
+# line endings, and trailing whitespace removed. No reported value altered;
+# content otherwise verbatim.
+
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x15 (USB_UART_CHIP_RESET),boot:0x2a (SPI_FAST_FLASH_BOOT)
+Saved PC:0x40377d96
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce2820,len:0x16a4
+load:0x403c8700,len:0xe80
+load:0x403cb700,len:0x31e0
+entry 0x403c8948
+I (24) boot: ESP-IDF v5.5.4 2nd stage bootloader
+I (24) boot: compile time Aug  1 2026 16:17:20
+I (25) boot: Multicore bootloader
+I (25) boot: chip revision: v0.2
+I (25) boot: efuse block revision: v1.4
+I (25) qio_mode: Enabling default flash chip QIO
+I (26) boot.esp32s3: Boot SPI Speed : 80MHz
+I (26) boot.esp32s3: SPI Mode       : QIO
+I (26) boot.esp32s3: SPI Flash Size : 16MB
+I (26) boot: Enabling RNG early entropy source...
+I (26) boot: Partition Table:
+I (26) boot: ## Label            Usage          Type ST Offset   Length
+I (27) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (27) boot:  1 nvs_keys         NVS keys         01 04 0000f000 00001000
+I (28) boot:  2 otadata          OTA data         01 00 00010000 00002000
+I (28) boot:  3 phy_init         RF data          01 01 00012000 00001000
+I (28) boot:  4 factory_cfg      Unknown data     01 40 00013000 0000d000
+I (29) boot:  5 ota_0            OTA app          00 10 00020000 00680000
+I (29) boot:  6 ota_1            OTA app          00 11 006a0000 00680000
+I (30) boot:  7 coredump         Unknown data     01 03 00d20000 00100000
+I (30) boot:  8 assets           Unknown data     01 41 00e20000 001e0000
+I (30) boot: End of partition table
+I (31) esp_image: segment 0: paddr=00020020 vaddr=3c050020 size=12764h ( 75620) map
+I (42) esp_image: segment 1: paddr=0003278c vaddr=3fc93d00 size=03fa0h ( 16288) load
+I (46) esp_image: segment 2: paddr=00036734 vaddr=40374000 size=098e4h ( 39140) load
+I (53) esp_image: segment 3: paddr=00040020 vaddr=42000020 size=49fdch (303068) map
+I (99) esp_image: segment 4: paddr=0008a004 vaddr=4037d8e4 size=0636ch ( 25452) load
+I (104) esp_image: segment 5: paddr=00090378 vaddr=50000000 size=00020h (    32) load
+I (111) boot: Loaded app from partition at offset 0x20000
+I (111) boot: Disabling RNG early entropy source...
+V (112) mmap: after coalescing, 1 regions are left
+D (112) octal_psram: exp_data: 0x5a6b7c8d
+D (112) octal_psram: ref_data: 0x5a6b7c8d
+I (112) octal_psram: vendor id    : 0x0d (AP)
+I (112) octal_psram: dev id       : 0x02 (generation 3)
+I (113) octal_psram: density      : 0x03 (64 Mbit)
+I (113) octal_psram: good-die     : 0x01 (Pass)
+I (113) octal_psram: Latency      : 0x01 (Fixed)
+I (114) octal_psram: VCC          : 0x01 (3V)
+I (114) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (114) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (114) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (115) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (115) octal_psram: DriveStrength: 0x00 (1/1)
+I (115) MSPI Timing: Enter psram timing tuning
+V MSPI Timing: config_idx: 0, good
+V MSPI Timing: config_idx: 1, bad
+V MSPI Timing: config_idx: 2, bad
+V MSPI Timing: config_idx: 3, good
+V MSPI Timing: config_idx: 4, good
+V MSPI Timing: config_idx: 5, good
+V MSPI Timing: config_idx: 6, good
+V MSPI Timing: config_idx: 7, bad
+V MSPI Timing: config_idx: 8, bad
+V MSPI Timing: config_idx: 9, good
+V MSPI Timing: config_idx: 10, good
+V MSPI Timing: config_idx: 11, good
+V MSPI Timing: config_idx: 12, good
+V MSPI Timing: config_idx: 13, bad
+D MSPI Timing: test nums: 1, test result: [id][good/bad][good_times]:
+D MSPI Timing: [0][good][1]
+D MSPI Timing: [1][bad][0]
+D MSPI Timing: [2][bad][0]
+D MSPI Timing: [3][good][1]
+D MSPI Timing: [4][good][1]
+D MSPI Timing: [5][good][1]
+D MSPI Timing: [6][good][1]
+D MSPI Timing: [7][bad][0]
+D MSPI Timing: [8][bad][0]
+D MSPI Timing: [9][good][1]
+D MSPI Timing: [10][good][1]
+D MSPI Timing: [11][good][1]
+D MSPI Timing: [12][good][1]
+D MSPI Timing: [13][bad][0]
+D MSPI Timing: tuning success, best point is index 5
+D MSPI Timing: PSRAM timing tuning index: 5
+I (120) esp_psram: Found 8MB PSRAM device
+I (121) esp_psram: Speed: 80MHz
+V (121) mmap: found laddr is 0x70000
+V (121) esp_psram: 8bit-aligned-region: actual_mapped_len is 0x800000 bytes
+V (121) esp_psram: 8bit-aligned-range: 0x800000 B, starting from: 0x3c070000
+I (122) cpu_start: Multicore app
+D (122) cpu_start: Pro cpu up
+D (122) cpu_start: Starting app cpu, entry point is 0x403753a0
+D (0) cpu_start: App cpu up
+V CACHE_ERR: illegal error intr clr & ena mask is: 0x3f
+V CACHE_ERR: core 1 access error intr clr & ena mask is: 0x1f
+I (555) esp_psram: SPI SRAM memory test OK
+D (563) clk: RTC_SLOW_CLK calibration value: 3762074
+V CACHE_ERR: illegal error intr clr & ena mask is: 0x3f
+V CACHE_ERR: core 0 access error intr clr & ena mask is: 0x1f
+D (564) cpu_start: calling init function: 0x42002304 on core: 0
+D (564) cpu_start: calling init function: 0x42003238 on core: 0
+I (564) cpu_start: Pro cpu start user code
+I (565) cpu_start: cpu freq: 160000000 Hz
+D (565) cpu_start: calling init function: 0x42002254 on core: 0
+I (565) app_init: Application information:
+I (565) app_init: Project name:     prusa_remote_display
+I (566) app_init: App version:      0.1.0-dev
+I (566) app_init: ELF file SHA256:  47b0e97375f2293c...
+I (566) app_init: ESP-IDF:          v5.5.4
+D (566) cpu_start: calling init function: 0x42002318 on core: 0
+I (567) efuse_init: Min chip rev:     v0.0
+I (567) efuse_init: Max chip rev:     v0.99
+I (567) efuse_init: Chip rev:         v0.2
+D (567) cpu_start: calling init function: 0x42004c54 on core: 0
+V (567) memory_layout: reserved range is 0x3c06269c - 0x3c0626cc
+D (568) memory_layout: Checking 7 reserved memory ranges:
+D (568) memory_layout: Reserved memory range 0x3c000000 - 0x3e000000
+D (568) memory_layout: Reserved memory range 0x3fc84000 - 0x3fc93d00
+D (568) memory_layout: Reserved memory range 0x3fc93d00 - 0x3fc9a3b0
+D (569) memory_layout: Reserved memory range 0x3fceee34 - 0x3fcf0000
+D (569) memory_layout: Reserved memory range 0x40374000 - 0x40383d00
+D (569) memory_layout: Reserved memory range 0x600fe000 - 0x600fe000
+D (569) memory_layout: Reserved memory range 0x600fffe8 - 0x60100000
+D (570) memory_layout: Building list of available memory regions:
+V (570) memory_layout: Examining memory region 0x3fc88000 - 0x3fc90000
+V (570) memory_layout: Region 0x3fc88000 - 0x3fc90000 inside of reserved 0x3fc84000 - 0x3fc93d00
+V (571) memory_layout: Examining memory region 0x3fc90000 - 0x3fca0000
+V (571) memory_layout: Start of region 0x3fc90000 - 0x3fca0000 overlaps reserved 0x3fc84000 - 0x3fc93d00
+V (571) memory_layout: Start of region 0x3fc93d00 - 0x3fca0000 overlaps reserved 0x3fc93d00 - 0x3fc9a3b0
+D (572) memory_layout: Available memory region 0x3fc9a3b0 - 0x3fca0000
+V (572) memory_layout: Examining memory region 0x3fca0000 - 0x3fcb0000
+D (572) memory_layout: Available memory region 0x3fca0000 - 0x3fcb0000
+V (573) memory_layout: Examining memory region 0x3fcb0000 - 0x3fcc0000
+D (573) memory_layout: Available memory region 0x3fcb0000 - 0x3fcc0000
+V (573) memory_layout: Examining memory region 0x3fcc0000 - 0x3fcd0000
+D (574) memory_layout: Available memory region 0x3fcc0000 - 0x3fcd0000
+V (574) memory_layout: Examining memory region 0x3fcd0000 - 0x3fce0000
+D (574) memory_layout: Available memory region 0x3fcd0000 - 0x3fce0000
+V (574) memory_layout: Examining memory region 0x3fce0000 - 0x3fce9710
+D (575) memory_layout: Available memory region 0x3fce0000 - 0x3fce9710
+V (575) memory_layout: Examining memory region 0x3fce9710 - 0x3fcf0000
+V (575) memory_layout: End of region 0x3fce9710 - 0x3fcf0000 overlaps reserved 0x3fceee34 - 0x3fcf0000
+D (576) memory_layout: Available memory region 0x3fce9710 - 0x3fceee34
+V (576) memory_layout: Examining memory region 0x3fcf0000 - 0x3fcf8000
+D (576) memory_layout: Available memory region 0x3fcf0000 - 0x3fcf8000
+V (577) memory_layout: Examining memory region 0x3c000000 - 0x3e000000
+V (577) memory_layout: Region 0x3c000000 - 0x3e000000 inside of reserved 0x3c000000 - 0x3e000000
+V (577) memory_layout: Examining memory region 0x600fe000 - 0x60100000
+V (577) memory_layout: End of region 0x600fe000 - 0x60100000 overlaps reserved 0x600fffe8 - 0x60100000
+D (578) memory_layout: Available memory region 0x600fe000 - 0x600fffe8
+I (578) heap_init: Initializing. RAM available for dynamic allocation:
+D (579) heap_init: New heap initialised at 0x3fc9a3b0
+I (579) heap_init: At 3FC9A3B0 len 0004F360 (316 KiB): RAM
+I (580) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+D (580) heap_init: New heap initialised at 0x3fcf0000
+I (580) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+D (580) heap_init: New heap initialised at 0x600fe000
+I (580) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+D (581) cpu_start: calling init function: 0x420088a0 on core: 0
+D (581) cpu_start: calling init function: 0x42007ce0 on core: 0
+D (581) cpu_start: calling init function: 0x42008e64 on core: 0
+I (830) esp_psram: Adding pool of 8192K of PSRAM memory to heap allocator
+D (830) cpu_start: calling init function: 0x42003284 on core: 0
+V (831) intr_alloc: esp_intr_alloc_intrstatus (cpu 0): checking args
+V (831) intr_alloc: esp_intr_alloc_intrstatus (cpu 0): Args okay. Resulting flags 0x40E
+D (831) intr_alloc: Connected src 39 to int 1 (cpu 0)
+D (831) cpu_start: calling init function: 0x42003294 on core: 0
+D (832) cpu_start: calling init function: 0x42009650 on core: 0
+D (832) cpu_start: calling init function: 0x4200a7bc on core: 0
+D (832) cpu_start: calling init function: 0x42009888 on core: 0
+D (832) cpu_start: calling init function: 0x42007cec on core: 0
+D (833) cpu_start: calling init function: 0x420032a0 on core: 0
+V (833) memspi: raw_chip_id: 184020
+
+V (833) memspi: chip_id: 204018
+
+V (833) memspi: raw_chip_id: 184020
+
+V (834) memspi: chip_id: 204018
+
+D (834) spi_flash: trying chip: issi
+D (834) spi_flash: trying chip: gd
+D (834) spi_flash: trying chip: mxic
+D (834) spi_flash: trying chip: winbond
+D (834) spi_flash: trying chip: boya
+D (835) spi_flash: trying chip: th
+D (835) spi_flash: trying chip: mxic (opi)
+D (835) spi_flash: trying chip: generic
+I (835) spi_flash: detected chip: generic
+I (835) spi_flash: flash io: qio
+D (836) chip_generic: set_io_mode: status before 0x200
+V (836) chip_generic: set_io_mode: status update 0x200
+D (836) cpu_start: calling init function: 0x420023b4 on core: 0
+D (837) C++ init: Setting C++ exception emergency pool to 0.
+D (837) cpu_start: calling init function: 0x4204561c on core: 0
+D (837) cpu_start: calling init function: 0x42005c80 on core: 0
+I (838) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (838) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+D (839) cpu_start: calling init function: 0x4200a7c8 on core: 0
+I (839) esp_core_dump_flash: Init core dump to flash
+V (839) mmap: actual_mapped_len is 0x10000
+I (840) esp_core_dump_flash: Found partition 'coredump' @ d20000 1048576 bytes
+D (840) esp_core_dump_flash: Blank core dump partition!
+D (840) cpu_start: calling init function: 0x4200cb28 on core: 0
+I (841) nvs_sec_provider: NVS Encryption - Registering HMAC-based scheme...
+D (841) cpu_start: calling init function: 0x420032d4 on core: 0
+D (841) cpu_start: calling init function: 0x42008f20 on core: 0
+D (841) cpu_start: calling init function: 0x420032e0 on core: 0
+V (842) intr_alloc: esp_intr_alloc_intrstatus (cpu 0): checking args
+V (842) intr_alloc: esp_intr_alloc_intrstatus (cpu 0): Args okay. Resulting flags 0x40E
+D (842) intr_alloc: Connected src 79 to int 2 (cpu 0)
+D (843) app_start: Starting scheduler on CPU0
+V (843) intr_alloc: esp_intr_alloc_intrstatus (cpu 0): checking args
+V (843) intr_alloc: esp_intr_alloc_intrstatus (cpu 0): Args okay. Resulting flags 0x402
+D (843) intr_alloc: Connected src 57 to int 3 (cpu 0)
+V (843) intr_alloc: esp_intr_alloc_intrstatus (cpu 1): checking 3) main_task: Started on CPU00rgms[
+m
+V (843) intr_alloc: esp_intr_alloc_intrstatus (cpu 1): Args okay. Resulting flags 0x40E
+D (844) intr_alloc: Connected src 80 to int 0 (cpu 1)
+D (844) app_start: Starting scheduler on CPU1
+V (844) intr_alloc: esp_intr_alloc_intrstatus (cpu 1): checking args
+V (844) intr_alloc: esp_intr_alloc_intrstatus (cpu 1): Args okay. Resulting flags 0x402
+D (845) intr_alloc: Connected src 58 to int 1 (cpu 1)
+D (845) heap_init: New heap initialised at 0x3fce9710
+I (845) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+D (845) esp_psram: Allocating block of size 32768 bytes
+V (846) intr_alloc: esp_intr_alloc_intrstatus (cpu 0): checking args
+V (847) intr_alloc: esp_intr_alloc_intrstatus (cpu 0): Args okay. Resulting flags 0xE
+D (847) intr_alloc: Connected src 52 to int 5 (cpu 0)
+I (847) main_task: Calling app_main()
+V (848) pthread: pthread_once: call init_routine 0x3fc94618
+V (848) pthread: pthread_once: call init_routine 0x3fc94610
+I (849) prd.app: Prusa Remote Display 0.1.0-dev
+I (850) prd.boot: version=0.1.0-dev git=88d7b3e095b4 dirty=false profile=hardware-validation idf=v5.5.4 board=waveshare_esp32_s3_lcd_2_8
+I (850) prd.boot: phase=initializing
+I (851) prd.board: target=waveshare_esp32_s3_lcd_2_8 validation=provisional
+I (851) prd.board: chip=ESP32-S3 rev=0.2 cores=2 reset=usb
+I (852) prd.board: flash_detected=16777216 expected=16777216 result=pass
+I (852) prd.board: psram_detected=8388608 expected=8388608 result=pass
+W (852) prd.board: usb_console=native_usb_serial_jtag result=unvalidated
+I (853) prd.boot: phase=ready
+D (10853) prd.app: heartbeat
+D (20853) prd.app: heartbeat

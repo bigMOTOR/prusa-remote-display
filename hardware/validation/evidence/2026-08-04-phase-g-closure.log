@@ -1,0 +1,165 @@
+# Milestone 1 Phase G — closure verification of the committed tree
+#
+# Board: Waveshare ESP32-S3-LCD-2.8 (non-touch, SKU 30223)
+# Commit: c6b574e, dirty=false — the first validation run of a clean tree
+# Profile: hardware-validation - ESP-IDF v5.5.4 - LVGL 9.5.0
+# Date: 2026-08-04
+#
+# Purpose: confirm the committed repository state still works after the
+# Phase F commit. Every figure below is compared against the Phase F run.
+#
+# FILTERED per Bootstrap Spec 16.8: esp_driver_spi / spi_bus_lock per-transfer
+# chatter and the boot register dump removed. No machine paths, usernames,
+# serial numbers, credentials, network names or printer payloads.
+#
+# PART 1 — boot of the committed image
+
+I (24) boot: ESP-IDF v5.5.4 2nd stage bootloader
+I (188) boot: Loaded app from partition at offset 0x20000
+I (952) prd.app: Prusa Remote Display 0.1.0-dev
+I (953) prd.boot: version=0.1.0-dev git=c6b574efadfa dirty=false profile=hardware-validation idf=v5.5.4 board=waveshare_esp32_s3_lcd_2_8
+I (953) prd.boot: phase=initializing
+I (954) prd.board: target=waveshare_esp32_s3_lcd_2_8 validation=provisional
+I (954) prd.board: chip=ESP32-S3 rev=0.2 cores=2 reset=usb
+I (955) prd.board: flash_detected=16777216 expected=16777216 result=pass
+I (955) prd.board: psram_detected=8388608 expected=8388608 result=pass
+W (956) prd.board: usb_console=native_usb_serial_jtag result=unvalidated
+I (956) prd.boot: phase=ready
+I (956) prd.app: raised esp_driver_spi log level to warning for the render soak
+I (959) prd.display: backlight ledc ok gpio=5 timer=0 channel=0 clk=xtal freq_hz=5000 resolution_bits=12 max_duty=4096 active=high startup_percent=50 output=disabled duty=0
+I (965) prd.button: button ready gpio=0 active=low pull_up=external hw_debounce=no debounce_ms=25 long_ms=1500 very_long_ms=8000 level=released
+I (965) prd.app: button validation active — press to classify
+I (1085) prd.display: tuning=C-vendor-gamma-only applying, exact bytes follow
+I (1086) prd.display: tx cmd=0xE0 params=D0 0D 14 0D 0D 09 38 44 4E 3A 17 18 2F 30
+I (1088) prd.display: tx cmd=0xE1 params=D0 09 0F 08 07 14 37 44 4D 38 15 16 2C 2E
+I (1091) prd.display: tuning=C-vendor-gamma-only active
+I (1091) prd.display: init ok host=SPI2 clock_hz=40000000 native=240x320 transformed=320x240 invert=on swap_xy=on mirror_x=on mirror_y=off
+I (1099) prd.ui: lvgl display 320x240 rgb565+swap partial buffers=2x25600B rows=40 placement=internal_dma
+I (1108) prd.ui: validation scene built: arc4px_rounded large48 small14 counter50ms swatch_f77f2f clipped_right_edge
+
+
+# PART 2 — renderer, 6.9 minutes
+
+V (1139) spi_master: TX 0x3fcbddc0, len 1, is_ptr_ext 0, use_psr[0;32mI (1139) prd.app: task=prd_aum:i _0v, aalli gnsmetnta:c k1bytes=8192 free_low_bytes=2932 u, sneeedd__maplleoca:k _0 bfyrotes=5260 headroom=35%
+I (16169) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (31171) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (61141) prd.app: ui/display cross-check agree ui_submitted=1206 ui_completed=1205 panel_submitted=1206 panel_completed=1205 completion_lag=0 in_flight=1 peak_in_flight=1 panel_spurious=0 panel_wait_timeouts=0
+I (76176) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (91178) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (120982) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (136184) prd.ui: flush submitted=2706 completed=2706 outstanding=0 waits_blocked=284 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2858 us_max=8188 swap_us_mean=57
+I (151186) prd.ui: flush submitted=3006 completed=3005 outstanding=1 waits_blocked=310 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2860 us_max=8188 swap_us_mean=57
+I (166188) prd.ui: flush submitted=3306 completed=3305 outstanding=1 waits_blocked=339 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2862 us_max=8188 swap_us_mean=57
+I (166189) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (166190) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (170990) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (180992) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (181158) prd.app: ui/display cross-check agree ui_submitted=3606 ui_completed=3605 panel_submitted=3606 panel_completed=3605 completion_lag=0 in_flight=1 peak_in_flight=1 panel_spurious=0 panel_wait_timeouts=0
+I (181159) prd.app: task=prd_ui_val stack_bytes=8192 free_low_bytes=2932 used_peak_bytes=5260 headroom=35%
+I (181190) prd.ui: flush submitted=3606 completed=3606 outstanding=0 waits_blocked=375 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2863 us_max=8188 swap_us_mean=57
+I (181191) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (181192) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (190993) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (196192) prd.ui: flush submitted=3906 completed=3905 outstanding=1 waits_blocked=400 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2864 us_max=8188 swap_us_mean=57
+I (196193) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (196194) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (200995) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (210996) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (211162) prd.app: ui/display cross-check agree ui_submitted=4206 ui_completed=4205 panel_submitted=4206 panel_completed=4205 completion_lag=0 in_flight=1 peak_in_flight=1 panel_spurious=0 panel_wait_timeouts=0
+I (211163) prd.app: task=prd_ui_val stack_bytes=8192 free_low_bytes=2932 used_peak_bytes=5260 headroom=35%
+I (211194) prd.ui: flush submitted=4206 completed=4206 outstanding=0 waits_blocked=430 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2865 us_max=8188 swap_us_mean=57
+I (211195) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (211196) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (220997) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (226196) prd.ui: flush submitted=4506 completed=4506 outstanding=0 waits_blocked=459 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2865 us_max=8188 swap_us_mean=57
+I (226197) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (226198) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (230998) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (240999) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+[0;32mI (241167) prd.app: ui/display cross-check agree ui_submitted=4806 ui_completed=4805 panel_submitted=4806 panel_completed=4805 completion_lag=0 in_flight=1 peak_in_flight=1 panel_spurious=0 panel_wait_timeouts=0
+I (241168) prd.app: task=prd_ui_val stack_bytes=8192 free_low_bytes=2932 used_peak_bytes=5260 headroom=35%
+I (241199) prd.ui: flush submitted=4806 completed=4806 outstanding=0 waits_blocked=491 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2866 us_max=8188 swap_us_mean=57
+I (241200) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (241201) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (251001) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (256201) prd.ui: flush submitted=5106 completed=5106 outstanding=0 waits_blocked=519 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2866 us_max=8188 swap_us_mean=57
+I (256202) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (256203) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (261003) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (271004) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (271172) prd.app: ui/display cross-check agree ui_submitted=5406 ui_completed=5405 panel_submitted=5406 panel_completed=5405 completion_lag=0 in_flight=1 peak_in_flight=1 panel_spurious=0 panel_wait_timeouts=0
+I (271173) prd.app: task=prd_ui_val stack_bytes=8192 free_low_bytes=2932 used_peak_bytes=5260 headroom=35%
+I (271204) prd.ui: flush submitted=5406 completed=5406 outstanding=0 waits_blocked=548 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2866 us_max=8188 swap_us_mean=57
+I (271205) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (271206) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (281006) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (286206) prd.ui: flush submitted=5706 completed=5706 outstanding=0 waits_blocked=582 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2867 us_max=8188 swap_us_mean=57
+I (286207) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (286208) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (291008) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (301010) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (301176) prd.app: ui/display cross-check agree ui_submitted=6006 ui_completed=6005 panel_submitted=6006 panel_completed=6005 completion_lag=0 in_flight=1 peak_in_flight=1 panel_spurious=0 panel_wait_timeouts=0
+I (301177) prd.app: task=prd_ui_val stack_bytes=8192 free_low_bytes=2932 used_peak_bytes=5260 headroom=35%
+I (301208) prd.ui: flush submitted=6006 completed=6006 outstanding=0 waits_blocked=608 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2867 us_max=8188 swap_us_mean=57
+I (301209) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (301210) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (311011) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (316210) prd.ui: flush submitted=6306 completed=6305 outstanding=1 waits_blocked=636 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2868 us_max=8188 swap_us_mean=57
+I (316211) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (316212) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (321013) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (331014) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (331180) prd.app: ui/display cross-check agree ui_submitted=6606 ui_completed=6605 panel_submitted=6606 panel_completed=6605 completion_lag=0 in_flight=1 peak_in_flight=1 panel_spurious=0 panel_wait_timeouts=0
+I (331181) prd.app: task=prd_ui_val stack_bytes=8192 free_low_bytes=2932 used_peak_bytes=5260 headroom=35%
+I (331212) prd.ui: flush submitted=6606 completed=6606 outstanding=0 waits_blocked=673 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2869 us_max=8188 swap_us_mean=57
+I (331213) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (331214) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (341015) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (346214) prd.ui: flush submitted=6906 completed=6905 outstanding=1 waits_blocked=699 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2870 us_max=8188 swap_us_mean=57
+I (346215) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (346216) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (351016) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (361017) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (361185) prd.app: ui/display cross-check agree ui_submitted=7206 ui_completed=7205 panel_submitted=7206 panel_completed=7205 completion_lag=0 in_flight=1 peak_in_flight=1 panel_spurious=0 panel_wait_timeouts=0
+I (361186) prd.app: task=prd_ui_val stack_bytes=8192 free_low_bytes=2932 used_peak_bytes=5260 headroom=35%
+I (361217) prd.ui: flush submitted=7206 completed=7206 outstanding=0 waits_blocked=725 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2869 us_max=8188 swap_us_mean=57
+I (361218) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (361219) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (371019) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (376218) prd.ui: flush submitted=7506 completed=7505 outstanding=1 waits_blocked=753 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2869 us_max=8188 swap_us_mean=57
+I (376219) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (376220) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (381021) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (391023) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (391189) prd.app: ui/display cross-check agree ui_submitted=7806 ui_completed=7805 panel_submitted=7806 panel_completed=7805 completion_lag=0 in_flight=1 peak_in_flight=1 panel_spurious=0 panel_wait_timeouts=0
+I (391190) prd.app: task=prd_ui_val stack_bytes=8192 free_low_bytes=2932 used_peak_bytes=5260 headroom=35%
+I (391221) prd.ui: flush submitted=7806 completed=7806 outstanding=0 waits_blocked=780 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2869 us_max=8188 swap_us_mean=57
+I (391222) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (391223) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (401024) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (406223) prd.ui: flush submitted=8106 completed=8106 outstanding=0 waits_blocked=807 failures=0 spurious=0 recovered=0 deadline_misses=0 abandoned=0 us_min=2646 us_mean=2870 us_max=8188 swap_us_mean=57
+I (406224) prd.ui: memory lvgl_used=7320/63644 lvgl_peak=9884 lvgl_frag=1% internal_free=195887 internal_min=195075 internal_largest=122868 psram_free=8385732
+I (406225) prd.app: task=prd_ui stack_bytes=8192 free_low_bytes=3860 used_peak_bytes=4332 headroom=47%
+I (411025) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+
+
+# PART 3 — button gesture classification on the committed build
+
+I (10967) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (10967) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (20969) prd.app: button stats raw_edges=0 raw_dropped=0 events=0 events_dropped=0
+I (20969) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (25380) prd.app: button event=short-press total=1 short=1 long=0 very_long=0
+I (25381) prd.app: button stats raw_edges=2 raw_dropped=0 events=1 events_dropped=0
+I (25381) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (28779) prd.app: button event=long-press total=2 short=1 long=1 very_long=0
+I (28780) prd.app: button stats raw_edges=4 raw_dropped=0 events=2 events_dropped=0
+I (28780) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (38031) prd.app: button event=long-press total=3 short=1 long=2 very_long=0
+I (38032) prd.app: button stats raw_edges=6 raw_dropped=0 events=3 events_dropped=0
+I (38032) prd.app: task=prd_button_val stack_bytes=6144 free_low_bytes=2672 used_peak_bytes=3472 headroom=43%
+I (48032) prd.app: button stats raw_edges=6 raw_dropped=0 events=3 events_dropped=0
+
+# All three gesture classes reproduced. 8 raw edges for 4 presses (exactly two
+# per press, no bounce), 0 raw drops, 0 event drops. The renderer continued
+# throughout with every flush counter clean, so input and rendering coexist.
