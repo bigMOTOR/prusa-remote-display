@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Mykola Fiantsev
 # SPDX-License-Identifier: GPL-3.0-only
+# Refresh manual workflow registration in this repository.
 name: Publish browser installer
 on:
   workflow_dispatch:
