@@ -41,6 +41,20 @@ TEST(ReleaseBundleTests, AcceptsOnlyOneCoherentNewerCompatibleReleaseBundle) {
     EXPECT_EQ(decoded.candidate().image_size, candidate.image.size);
 }
 
+TEST(ReleaseBundleTests, FixedBootstrapCanAdvanceToStableButNotBrokenOlderRelease) {
+    const DeviceCompatibility bootstrap{"board", "esp32s3", "1.0.1-bootstrap.1", 1, 2000000};
+    const DeviceCompatibility stable{"board", "esp32s3", "1.0.1", 1, 2000000};
+    DecodedManifest decoded;
+    const auto fixed = manifest("1.0.1");
+    EXPECT_EQ(validate_release_bundle(release("v1.0.1", fixed.size()), fixed, bootstrap, decoded),
+              ReleaseBundleStatus::Accepted);
+    EXPECT_EQ(validate_release_bundle(release("v1.0.1", fixed.size()), fixed, stable, decoded),
+              ReleaseBundleStatus::NotNewer);
+    const auto old = manifest("1.0.0");
+    EXPECT_EQ(validate_release_bundle(release("v1.0.0", old.size()), old, bootstrap, decoded),
+              ReleaseBundleStatus::Incompatible);
+}
+
 TEST(ReleaseBundleTests, RefusesLengthTagImageCurrentAndCompatibilityMismatches) {
     const std::string body = manifest();
     const DeviceCompatibility device{"board", "esp32s3", "1.2.2", 1, 2000000};

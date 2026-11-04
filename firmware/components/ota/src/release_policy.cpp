@@ -26,13 +26,23 @@ constexpr std::string_view kCdnPrefix =
         value.find("/./") != std::string_view::npos) {
         return true;
     }
+    // Only the path gives an encoded slash routing meaning. GitHub's signed CDN
+    // query legitimately includes %2F in MIME types and signatures. Keep every
+    // other structural rejection over the complete URL, including the query.
+    const auto path_end = value.find('?');
+    for (const char raw : value) {
+        const auto character = static_cast<unsigned char>(raw);
+        if (character <= 0x20U || character == 0x7fU) {
+            return true;
+        }
+    }
     for (std::size_t index = 0; index + 2 < value.size(); ++index) {
         if (value[index] != '%') {
             continue;
         }
         const char first = value[index + 1];
         const char second = value[index + 2];
-        if ((first == '2' && (second == 'f' || second == 'F')) ||
+        if ((index < path_end && first == '2' && (second == 'f' || second == 'F')) ||
             (first == '5' && (second == 'c' || second == 'C'))) {
             return true;
         }
