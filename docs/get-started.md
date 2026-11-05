@@ -14,8 +14,8 @@ and choose **Without Touch Function**. The board model is
 **ESP32-S3-LCD-2.8, non-touch**. You can buy it from any seller; check the
 exact model and option before ordering. The non-touch board is the tested
 configuration. The touch version has not been tested with this firmware or
-enclosure; compatibility has not been established. Other ESP32 boards remain
-outside the supported configuration. Printer testing covers
+enclosure, so compatibility has not been established. Only the non-touch board
+is currently supported. Printer testing covers
 the **Prusa CORE One** with local PrusaLink access; MK4S and MINI have not been tested.
 
 You will need a USB data cable for installation, USB power for everyday use and

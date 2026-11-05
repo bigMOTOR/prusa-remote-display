@@ -25,10 +25,10 @@ The board manufacturer's page covers both touch and non-touch options; its
 $19.99–25.99 listing range is a conservative family-price allowance, **not an
 exact quote for the selected non-touch variant**. Select **Without Touch
 Function** and check the final price. The word “touch” in the family-page URL
-does not change the recommended board for this tested build. You may buy the
+does not change the supported board for this tested build. You may buy the
 exact non-touch model from another seller. The touch version has not been tested
-with this firmware or enclosure; compatibility has not been established. Other
-ESP32 boards remain outside the supported configuration.
+with this firmware or enclosure, so compatibility has not been established. Only
+the non-touch board is currently supported.
 
 The $6 print allowance is **0.2 kg × $29.99/kg, rounded up**. It is a buying
 allowance for PLA, waste and small retries, not a measured or sliced model
