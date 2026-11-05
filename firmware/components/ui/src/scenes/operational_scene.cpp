@@ -622,6 +622,10 @@ void OperationalScene::apply(const app_model::Presentation& presentation,
     if (presentation.stale_indicator && unknown_progress_) {
         destination.values[OperationalPose::ThirdY] -= theme::kSpace1;
     }
+    // Owner-accepted two-line age composition lifts the degraded Preparing text stack.
+    if (presentation.stale_indicator && content.form == kEnergyPreparing && !printer_condition_) {
+        destination.values[OperationalPose::TitleY] -= 6.0;
+    }
     if (printer_condition_) {
         destination.values[OperationalPose::TitleY] = theme::kPrinterErrorTitleY;
         destination.values[OperationalPose::TitleSize] = theme::kPrinterErrorTitleSize;
@@ -715,6 +719,8 @@ void OperationalScene::apply(const app_model::Presentation& presentation,
         // The recovery's two row phases use a different alpha mapping. Rebase from actual
         // painted opacity when reversing, not from that mapping's internal coordinate.
         OperationalPose seed;
+        seed.values[OperationalPose::ThirdY] =
+            stale_motion_.current().values[OperationalPose::ThirdY];
         seed.values[OperationalPose::AppearanceAlpha] =
             presentation.stale_indicator ? painted : (painted + 255.0) / 2.0;
         stale_motion_ = OperationalMotion{};
@@ -725,6 +731,18 @@ void OperationalScene::apply(const app_model::Presentation& presentation,
         stale_observed_at_ = presentation.stale_observed_at;
     }
     OperationalPose indicator;
+    const bool ready = content_.form == kEnergyReady && !printer_condition_;
+    const bool open_outcome =
+        content_.form == kEnergyPreparing || content_.form == kEnergyCompleted;
+    const auto age_y = content_.form == kEnergyPreparing && !printer_condition_
+                           ? theme::kStalePreparingY - 6
+                       : printer_condition_              ? theme::kPrinterErrorAgeY
+                       : ready                           ? theme::kStaleReadyY - 6
+                       : content_.form == kEnergyStopped ? theme::kStaleIndicatorY - 6
+                       : open_outcome                    ? theme::kStalePreparingY
+                                                         : theme::kStaleIndicatorY;
+    // Reuse the confidence motion for age placement; truthful copy changes immediately.
+    indicator.values[OperationalPose::ThirdY] = age_y;
     indicator.values[OperationalPose::AppearanceAlpha] = stale_target_ ? 255.0 : 0.0;
     stale_motion_.target(indicator); // Same target (including age updates) never restarts motion.
     paint_stale(lv_tick_get());
@@ -747,7 +765,10 @@ bool OperationalScene::step(const bool panel_visible, const std::uint32_t now) {
 
 void OperationalScene::paint_stale(const std::uint32_t now) {
     const double alpha = stale_motion_.current().values[OperationalPose::AppearanceAlpha];
-    const auto text = format::observation_age(stale_observed_at_, now);
+    const auto text =
+        format::observation_age(stale_observed_at_, now,
+                                printer_condition_ ? format::ObservationAgeLayout::Compact
+                                                   : format::ObservationAgeLayout::TwoLine);
     if (text != stale_text_) {
         stale_text_ = text;
         lv_label_set_text(stale_indicator_, stale_text_.c_str());
@@ -759,13 +780,12 @@ void OperationalScene::paint_stale(const std::uint32_t now) {
         lv_obj_set_style_text_font(stale_indicator_, font, LV_PART_MAIN);
     }
     const auto centre = ready ? theme::kDisplayWidth / 2 : theme::kRingCentreX;
+    if (lv_obj_get_style_text_align(stale_indicator_, LV_PART_MAIN) != LV_TEXT_ALIGN_CENTER) {
+        lv_obj_set_style_text_align(stale_indicator_, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    }
     lv_obj_update_layout(stale_indicator_);
-    const bool open_outcome =
-        content_.form == kEnergyPreparing || content_.form == kEnergyCompleted;
-    const auto age_y = printer_condition_ ? theme::kPrinterErrorAgeY
-                       : ready            ? theme::kStaleReadyY
-                       : open_outcome     ? theme::kStalePreparingY
-                                          : theme::kStaleIndicatorY;
+    const auto age_y = static_cast<std::int32_t>(
+        std::lround(stale_motion_.current().values[OperationalPose::ThirdY]));
     lv_obj_set_pos(stale_indicator_, centre - lv_obj_get_width(stale_indicator_) / 2, age_y);
     // On recovery the restored estimate can share this row. Retire the old confidence text
     // before revealing that estimate; never overprint two different statements.

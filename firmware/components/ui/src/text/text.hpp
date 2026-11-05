@@ -287,6 +287,11 @@ enum class TextId : std::uint8_t {
     // Owner-selected Printing remaining-time patterns (hours/minutes, then direction).
     RemainingMinutes = 54,
     RemainingHoursMinutes = 55,
+
+    // Elapsed observation age uses fixed abbreviated units; newline is layout, not a glyph.
+    ObservationAgeSeconds = 56,
+    ObservationAgeMinutes = 57,
+    ObservationUpdated = 58,
 };
 
 // ⛔ FIVE IDS FOR TWO SENTENCES, DELIBERATELY. FactoryResetRestartDisplay, StorageRestartDisplay,
@@ -294,7 +299,7 @@ enum class TextId : std::uint8_t {
 // entries so the four causes can be reworded independently — sharing one id would mean a change
 // written for one fault silently rewording three others, which is the "a sentence is a claim about
 // every route that emits it" rule applied to the catalogue itself.
-inline constexpr std::size_t kTextIdCount = 56;
+inline constexpr std::size_t kTextIdCount = 59;
 
 // The English string. Never empty, and always within the generated glyph subset —
 // both properties are asserted at compile time in text.cpp.

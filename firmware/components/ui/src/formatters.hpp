@@ -48,10 +48,13 @@ using UpdateVersionText = app_model::BoundedString<48>;
 // establish a job, progress, or a new operational energy.
 [[nodiscard]] NameText error_context(const app_model::Presentation& presentation);
 
-// Whole elapsed seconds from the last successful status, not from scene entry.
+enum class ObservationAgeLayout : std::uint8_t { TwoLine, Compact };
+
+// Whole elapsed seconds/minutes from the last successful status, not from scene entry.
 // uint32 milliseconds matches LVGL's monotonic boot clock, including its wrap.
 [[nodiscard]] NameText observation_age(std::optional<app_model::Timestamp> observed,
-                                       std::uint32_t now_ms);
+                                       std::uint32_t now_ms,
+                                       ObservationAgeLayout layout = ObservationAgeLayout::TwoLine);
 
 // Whole degrees and the degree sign, per §17.7 ("whole-degree display for
 // temperatures"). Rounds to nearest rather than truncating: a bed reported at
@@ -74,7 +77,8 @@ using UpdateVersionText = app_model::BoundedString<48>;
 // one separator and the full supplied version. Empty input remains absent.
 [[nodiscard]] UpdateVersionText firmware_version(const app_model::BoundedString<32>& version);
 
-// Remaining or elapsed duration as H:MM (owner decision D9).
+// Elapsed duration as H:MM (owner decision D9). Remaining time uses
+// remaining_duration() after the owner's later compact h/m decision.
 //
 // NO SECONDS, EVER. §17.7 requires "no rapid text jitter from small estimate
 // changes", and a seconds field on a value the printer revises every two seconds is

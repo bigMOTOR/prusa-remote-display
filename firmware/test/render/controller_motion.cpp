@@ -143,14 +143,14 @@ Labels labels() {
     labels(lv_screen_active(), result);
     return result;
 }
-lv_obj_t* label_named(lv_obj_t* object, const char* text) {
-    if (lv_obj_has_flag(object, LV_OBJ_FLAG_HIDDEN))
+lv_obj_t* label_named(lv_obj_t* object, const char* text, bool include_hidden = false) {
+    if (!include_hidden && lv_obj_has_flag(object, LV_OBJ_FLAG_HIDDEN))
         return nullptr;
     if (lv_obj_check_type(object, &lv_label_class) &&
         std::string(lv_label_get_text(object)) == text)
         return object;
     for (std::uint32_t i = 0; i < lv_obj_get_child_count(object); ++i)
-        if (auto* found = label_named(lv_obj_get_child(object, i), text))
+        if (auto* found = label_named(lv_obj_get_child(object, i), text, include_hidden))
             return found;
     return nullptr;
 }
@@ -252,6 +252,82 @@ int main(int argc, char** argv) {
         tick(0);
         tick(ui::theme::kOperationalMotionMs);
     };
+    const std::array<app_model::Presentation, 7> age_states{
+        states[0], states[1], states[2], states[3], states[4], states[5], unknown};
+    const char* age_names[] = {"Ready",     "Preparing", "Printing", "Paused",
+                               "Completed", "Stopped",   "Unknown"};
+    auto check_entry_overlap = [&](lv_obj_t* age = nullptr) {
+        if (age == nullptr) {
+            age = label_named(lv_screen_active(), "Last update\n20 sec ago");
+        }
+        if (age == nullptr) {
+            age = label_named(lv_screen_active(), "Last update\n21 sec ago");
+        }
+        if (age == nullptr) {
+            age = label_named(lv_screen_active(), "Updated 20 sec ago");
+        }
+        if (age == nullptr) {
+            age = label_named(lv_screen_active(), "Updated 21 sec ago");
+        }
+        if (age == nullptr) {
+            return;
+        }
+        const auto with_age = pixels;
+        lv_obj_add_flag(age, LV_OBJ_FLAG_HIDDEN);
+        lv_refr_now(display);
+        for (std::size_t pixel = 0; pixel < pixels.size(); ++pixel) {
+            require(with_age[pixel] == pixels[pixel] || pixels[pixel] == pixels[0],
+                    "intermediate age ink never overprints existing foreground");
+            if (with_age[pixel] != pixels[pixel]) {
+                for (int dy = 1 - ui::theme::kSpace1; dy < ui::theme::kSpace1; ++dy) {
+                    for (int dx = 1 - ui::theme::kSpace1; dx < ui::theme::kSpace1; ++dx) {
+                        const int x = static_cast<int>(pixel % 320) + dx;
+                        const int y = static_cast<int>(pixel / 320) + dy;
+                        if (x >= 0 && x < 320 && y >= 0 && y < 240) {
+                            require(pixels[y * 320 + x] == pixels[0],
+                                    "intermediate age ink keeps four-pixel breathing room");
+                        }
+                    }
+                }
+            }
+        }
+        lv_obj_remove_flag(age, LV_OBJ_FLAG_HIDDEN);
+        lv_refr_now(display);
+    };
+    auto check_age_clearance = [&](lv_obj_t* age, const char* name) {
+        // Actual glyph pixels, not just label boxes: removing only age must expose background,
+        // never arc, retained terminal record, title or pause bars under its ink.
+        bool passed = true;
+        const auto with_age = pixels;
+        lv_obj_add_flag(age, LV_OBJ_FLAG_HIDDEN);
+        lv_refr_now(display);
+        for (std::size_t pixel = 0; pixel < pixels.size(); ++pixel) {
+            if (with_age[pixel] != pixels[pixel]) {
+                // Owner rejected touching-looking rows even though no pixels overlapped.
+                // Reserve one space.2 around actual age ink against ALL other foreground.
+                for (int dy = 1 - ui::theme::kSpace2; dy < ui::theme::kSpace2; ++dy) {
+                    for (int dx = 1 - ui::theme::kSpace2; dx < ui::theme::kSpace2; ++dx) {
+                        const int x = static_cast<int>(pixel % 320) + dx;
+                        const int y = static_cast<int>(pixel / 320) + dy;
+                        if (x >= 0 && x < 320 && y >= 0 && y < 240) {
+                            if (pixels[y * 320 + x] != pixels[0] && passed) {
+                                std::fprintf(stderr, "CROWDED %s age=%zu,%zu other=%d,%d\n", name,
+                                             pixel % 320, pixel / 320, x, y);
+                            }
+                            passed = passed && pixels[y * 320 + x] == pixels[0];
+                        }
+                    }
+                }
+            }
+            if (with_age[pixel] != pixels[pixel] && pixels[pixel] != pixels[0]) {
+                std::fprintf(stderr, "COLLISION %s x=%zu y=%zu\n", name, pixel % 320, pixel / 320);
+            }
+            passed = passed && (with_age[pixel] == pixels[pixel] || pixels[pixel] == pixels[0]);
+        }
+        lv_obj_remove_flag(age, LV_OBJ_FLAG_HIDDEN);
+        lv_refr_now(display);
+        return passed;
+    };
     if (argc == 3 && std::string(argv[2]) == "--recovery") {
         app_store::Store recovery(test::printing_device(at(0)));
         auto apply = [&](const app_model::Event& event) {
@@ -279,13 +355,12 @@ int main(int argc, char** argv) {
         require(labels().count("1h18m left") == 0, "stale remaining cannot appear live");
         const auto age_text = ui::format::observation_age(at(0), lv_tick_get());
         auto* age = label_named(lv_screen_active(), age_text.c_str());
-        require(age != nullptr && age_text.view().find("Reconnecting:") == 0,
+        require(age != nullptr && age_text.view().find("Last update\n") == 0,
                 "native controller shows reconnecting with explicit old-data age");
         require(lv_obj_get_x(age) >= ui::theme::kRegionOperational.x &&
                     lv_obj_get_x(age) + lv_obj_get_width(age) <=
                         ui::theme::kRegionOperational.right(),
                 "reconnecting age fits operational region");
-        save(out + "/Reconnecting.rgb565");
         for (const auto subject :
              {app_model::PrinterState::Paused, app_model::PrinterState::Finished,
               app_model::PrinterState::Ready}) {
@@ -317,7 +392,7 @@ int main(int argc, char** argv) {
                 "recovery starts from degraded printing");
         const auto stale_labels = labels();
         require(std::any_of(stale_labels.begin(), stale_labels.end(),
-                            [](const auto& label) { return label.find("Reconnecting:") == 0; }),
+                            [](const auto& label) { return label.find("Last update\n") == 0; }),
                 "recovery starts with reconnecting age");
         app_model::ConnectionObservation success;
         success.phase = app_model::ConnectionPhase::Connected;
@@ -332,9 +407,199 @@ int main(int argc, char** argv) {
         require(labels().count("1h18m left") == 1, "successful recovery restores estimate");
         const auto recovered_labels = labels();
         require(std::none_of(recovered_labels.begin(), recovered_labels.end(),
-                             [](const auto& label) { return label.find("Reconnecting:") == 0; }),
+                             [](const auto& label) { return label.find("Last update\n") == 0; }),
                 "recovery retires stale row");
-        save(out + "/Recovered.rgb565");
+        bool all_age_clearances_pass = true;
+        // Same fixtures and pixel guards as the default corpus, with only settled frames retained.
+        for (const unsigned i : {1U, 2U, 3U, 4U, 5U, 6U, 0U}) {
+            settle(age_states[i]);
+            const auto paused_record_opacity =
+                i == 3
+                    ? lv_obj_get_style_text_opa(label_named(lv_screen_active(), "78"), LV_PART_MAIN)
+                    : LV_OPA_TRANSP;
+            const auto energy = ui::controller::operational_form_report().energy;
+            auto stale = age_states[i];
+            stale.confidence = app_model::Confidence::Degraded;
+            stale.stale_indicator = true;
+            stale.at_visual_rest = false;
+            stale.stale_observed_at = at(static_cast<std::int64_t>(lv_tick_get()) - 20000);
+            stale.nozzle = {};
+            stale.bed = {};
+            stale.remaining = {};
+            if (i != 4 && i != 5) {
+                stale.layers = {};
+            }
+            ui::controller::apply(stale);
+            tick(0);
+            std::set<std::uint64_t> motion{digest()};
+            for (unsigned ms = 16; ms <= 1104; ms += 16) {
+                tick(16);
+                motion.insert(digest());
+                check_entry_overlap();
+                if (i == 3) {
+                    auto* record = label_named(lv_screen_active(), "78");
+                    require(record != nullptr, "Paused retains its actual percentage");
+                    require(lv_obj_get_y(record) >= ui::theme::kPauseTop +
+                                                        ui::theme::kPauseBarHeight +
+                                                        ui::theme::kSpace1,
+                            "retained Paused record stays below the pause mark throughout entry");
+                    require(lv_obj_get_style_text_opa(record, LV_PART_MAIN) ==
+                                paused_record_opacity,
+                            "retained Paused record never disappears to mask a collision");
+                }
+                require(ui::controller::operational_form_report().energy == energy,
+                        "confidence cannot change operational energy");
+            }
+            require(motion.size() > 8, "age entry uses actual controller motion in every layout");
+            age = label_named(lv_screen_active(), "Last update\n21 sec ago");
+            require(age != nullptr && lv_obj_get_style_text_opa(age, LV_PART_MAIN) == LV_OPA_COVER,
+                    "age reaches readable full opacity");
+            save(out + "/Age-" + age_names[i] + ".rgb565");
+            const bool clearance = check_age_clearance(age, age_names[i]);
+            all_age_clearances_pass = clearance && all_age_clearances_pass;
+            std::printf("AGE %s full-opacity,8px,4pxentry,retainedtruth,motion %s\n", age_names[i],
+                        clearance ? "PASS" : "FAIL");
+            ui::controller::apply(age_states[i]);
+            tick(0);
+            for (unsigned ms = 16; ms <= 1104; ms += 16) {
+                tick(16);
+                check_entry_overlap();
+            }
+            require(labels().count("Last update\n21 sec ago") == 0, "recovery retires age copy");
+        }
+        for (const auto condition :
+             {app_model::SubjectCondition::Error, app_model::SubjectCondition::Attention}) {
+            const app_model::PrinterState forms[] = {
+                app_model::PrinterState::Ready,    app_model::PrinterState::Preparing,
+                app_model::PrinterState::Printing, app_model::PrinterState::Paused,
+                app_model::PrinterState::Finished, app_model::PrinterState::Stopped};
+            for (unsigned i = 0; i < states.size(); ++i) {
+                auto reachable = [&](const bool conditioned, const bool stale) {
+                    const auto observed = at(static_cast<std::int64_t>(lv_tick_get()) - 20000);
+                    auto state = test::with_printer_state(test::printing_device(observed), forms[i],
+                                                          observed, 2);
+                    if (conditioned) {
+                        state =
+                            test::with_printer_state(state,
+                                                     condition == app_model::SubjectCondition::Error
+                                                         ? app_model::PrinterState::Error
+                                                         : app_model::PrinterState::Attention,
+                                                     observed, 3);
+                    }
+                    if (stale) {
+                        state = app_model::reduce(
+                            state, app_model::Event::confidence_aged(at(lv_tick_get())));
+                    }
+                    return app_model::project(state);
+                };
+                auto alert = reachable(true, false);
+                settle(alert);
+                alert = reachable(true, true);
+                require(alert.confidence == app_model::Confidence::Degraded &&
+                            alert.stale_indicator && !alert.nozzle.current.known &&
+                            !alert.nozzle.target.known && !alert.bed.current.known &&
+                            !alert.bed.target.known && !alert.chamber.current.known &&
+                            !alert.remaining.known && !alert.elapsed.known,
+                        "real reducer/projection withdraws stale measurements");
+                ui::controller::apply(alert);
+                std::set<std::uint64_t> condition_motion{digest()};
+                for (unsigned t = 0; t <= 1120; t += 16) {
+                    tick(t == 0 ? 0 : 16);
+                    condition_motion.insert(digest());
+                    check_entry_overlap();
+                }
+                require(condition_motion.size() > 8, "condition age uses actual controller motion");
+                auto* alert_age = label_named(lv_screen_active(), "Updated 21 sec ago");
+                save(out + "/Condition-" + std::to_string(static_cast<unsigned>(condition)) + "-" +
+                     names[i] + ".rgb565");
+                if (alert_age != nullptr && condition == app_model::SubjectCondition::Error &&
+                    i == 1) {
+                    std::fprintf(
+                        stderr, "CONDITION Preparing age x=%d y=%d w=%d h=%d opacity=%u\n",
+                        lv_obj_get_x(alert_age), lv_obj_get_y(alert_age),
+                        lv_obj_get_width(alert_age), lv_obj_get_height(alert_age),
+                        static_cast<unsigned>(lv_obj_get_style_text_opa(alert_age, LV_PART_MAIN)));
+                }
+                require(alert_age != nullptr &&
+                            lv_obj_get_style_text_opa(alert_age, LV_PART_MAIN) == LV_OPA_COVER,
+                        "settled condition age is fully readable, not hidden to avoid collision");
+                auto* mark = label_named(lv_screen_active(), "!");
+                require(mark != nullptr &&
+                            lv_obj_get_style_text_opa(mark, LV_PART_MAIN) == LV_OPA_COVER,
+                        "settled condition symbol is fully visible");
+                const auto context = ui::format::error_context(alert);
+                auto* context_label = label_named(lv_screen_active(), context.c_str());
+                require(context_label != nullptr &&
+                            lv_obj_get_style_text_opa(context_label, LV_PART_MAIN) ==
+                                ui::theme::opacity(ui::theme::Opacity::High),
+                        "settled condition context reaches its full role opacity");
+                // BB3 condition lanes use the original 4px/no-overprint helper and full opacity.
+                // The strict 8px settled check remains binding for the seven normal age layouts.
+                std::printf("CONDITION %u %s original4px,full-opacity,context,mark,motion PASS\n",
+                            static_cast<unsigned>(condition), names[i]);
+                // Both already-stale layouts must move through actual controller ticks.
+                for (const bool into_condition : {false, true}) {
+                    auto destination = reachable(into_condition, true);
+                    const auto layout = into_condition ? ui::format::ObservationAgeLayout::Compact
+                                                       : ui::format::ObservationAgeLayout::TwoLine;
+                    auto* old_age =
+                        label_named(lv_screen_active(),
+                                    ui::format::observation_age(
+                                        alert.stale_observed_at, lv_tick_get(),
+                                        into_condition ? ui::format::ObservationAgeLayout::TwoLine
+                                                       : ui::format::ObservationAgeLayout::Compact)
+                                        .c_str());
+                    require(old_age != nullptr, "stale transition starts with visible age");
+                    const auto old_y = lv_obj_get_y(old_age);
+                    ui::controller::apply(destination);
+                    tick(0);
+                    const auto new_text = ui::format::observation_age(destination.stale_observed_at,
+                                                                      lv_tick_get(), layout);
+                    auto* new_age = label_named(lv_screen_active(), new_text.c_str(), true);
+                    require(new_age != nullptr && lv_obj_get_y(new_age) == old_y,
+                            "stale layout transition preserves painted age placement at entry");
+                    std::set<std::uint64_t> frames{digest()};
+                    for (unsigned t = 0; t <= 1120; t += 16) {
+                        tick(t == 0 ? 0 : 16);
+                        frames.insert(digest());
+                        const auto current_text = ui::format::observation_age(
+                            destination.stale_observed_at, lv_tick_get(), layout);
+                        check_entry_overlap(label_named(lv_screen_active(), current_text.c_str()));
+                        const auto visible = labels();
+                        require(std::none_of(visible.begin(), visible.end(),
+                                             [&](const auto& text) {
+                                                 return text.find(into_condition ? "Last update\n"
+                                                                                 : "Updated ") == 0;
+                                             }),
+                                "stale layouts never expose old and new age copy together");
+                        require(visible.count(condition == app_model::SubjectCondition::Error
+                                                  ? "Printer error"
+                                                  : "Attention") == (into_condition ? 1U : 0U),
+                                "stale transition changes condition title truthfully");
+                        if (into_condition) {
+                            require(visible.count(ui::format::error_context(destination).c_str()) ==
+                                        1,
+                                    "stale condition retains truthful current subject context");
+                        }
+                    }
+                    require(frames.size() > 8, "both stale layout directions have real motion");
+                    std::printf("STALE_PAIR %u %s into_condition=%u frames=%zu PASS\n",
+                                static_cast<unsigned>(condition), names[i], into_condition,
+                                frames.size());
+                    alert = destination;
+                }
+                alert = reachable(true, false);
+                ui::controller::apply(alert);
+                for (unsigned t = 0; t <= 1120; t += 16) {
+                    tick(t == 0 ? 0 : 16);
+                    const auto age_text =
+                        ui::format::observation_age(alert.stale_observed_at, lv_tick_get(),
+                                                    ui::format::ObservationAgeLayout::Compact);
+                    check_entry_overlap(label_named(lv_screen_active(), age_text.c_str()));
+                }
+            }
+        }
+        require(all_age_clearances_pass, "every normal age has eight-pixel clearance");
         std::puts("recovery controller: actual store/reducer, 15s boundary, stale age, priority, "
                   "motion PASS");
         return 0;
@@ -856,10 +1121,6 @@ int main(int argc, char** argv) {
         tick(1100);
     }
     std::puts("REACHABLE 3 Store/projection recoveries; Off clock; interrupted appearance pixels");
-    const std::array<app_model::Presentation, 7> age_states{
-        states[0], states[1], states[2], states[3], states[4], states[5], unknown};
-    const char* age_names[] = {"Ready",     "Preparing", "Printing", "Paused",
-                               "Completed", "Stopped",   "Unknown"};
     // Count real LVGL flush callbacks, not just the controller's motion-request bool.
     // Explicit refresh still does no work when there are no invalidated areas.
     for (const auto& p : age_states) {
@@ -872,38 +1133,6 @@ int main(int argc, char** argv) {
         require(flush_count == before, "resting current scene performs zero display flushes");
     }
     std::puts("IDLE current: zero flush callbacks in seven settled layouts over 2s each");
-    auto check_entry_overlap = [&](lv_obj_t* age = nullptr) {
-        if (age == nullptr) {
-            age = label_named(lv_screen_active(), "Reconnecting: 20 s old");
-        }
-        if (age == nullptr) {
-            age = label_named(lv_screen_active(), "Reconnecting: 21 s old");
-        }
-        if (age == nullptr) {
-            return;
-        }
-        const auto with_age = pixels;
-        lv_obj_add_flag(age, LV_OBJ_FLAG_HIDDEN);
-        lv_refr_now(display);
-        for (std::size_t pixel = 0; pixel < pixels.size(); ++pixel) {
-            require(with_age[pixel] == pixels[pixel] || pixels[pixel] == pixels[0],
-                    "intermediate age ink never overprints existing foreground");
-            if (with_age[pixel] != pixels[pixel]) {
-                for (int dy = 1 - ui::theme::kSpace1; dy < ui::theme::kSpace1; ++dy) {
-                    for (int dx = 1 - ui::theme::kSpace1; dx < ui::theme::kSpace1; ++dx) {
-                        const int x = static_cast<int>(pixel % 320) + dx;
-                        const int y = static_cast<int>(pixel / 320) + dy;
-                        if (x >= 0 && x < 320 && y >= 0 && y < 240) {
-                            require(pixels[y * 320 + x] == pixels[0],
-                                    "intermediate age ink keeps four-pixel breathing room");
-                        }
-                    }
-                }
-            }
-        }
-        lv_obj_remove_flag(age, LV_OBJ_FLAG_HIDDEN);
-        lv_refr_now(display);
-    };
     for (unsigned i = 0; i < age_states.size(); ++i) {
         settle(age_states[i]);
         const auto paused_record_opacity =
@@ -942,45 +1171,14 @@ int main(int argc, char** argv) {
             require(ui::controller::operational_form_report().energy == energy,
                     "confidence cannot change operational energy");
         }
-        require(labels().count("Reconnecting: 21 s old") == 1,
+        require(labels().count("Last update\n21 sec ago") == 1,
                 "age counts from successful status while controller ticks");
         require(labels().count("Not current") == 0, "rejected indicator gone");
-        auto* age = label_named(lv_screen_active(), "Reconnecting: 21 s old");
+        auto* age = label_named(lv_screen_active(), "Last update\n21 sec ago");
         require(age != nullptr && lv_obj_get_style_text_opa(age, LV_PART_MAIN) == LV_OPA_COVER,
                 "age reaches readable full opacity");
-        // Actual glyph pixels, not just label boxes: removing only age must expose background,
-        // never arc, retained terminal record, title or pause bars under its ink.
-        const auto with_age = pixels;
-        lv_obj_add_flag(age, LV_OBJ_FLAG_HIDDEN);
-        lv_refr_now(display);
-        for (std::size_t pixel = 0; pixel < pixels.size(); ++pixel) {
-            if (with_age[pixel] != pixels[pixel]) {
-                // Owner rejected touching-looking rows even though no pixels overlapped.
-                // Reserve one space.2 around actual age ink against ALL other foreground.
-                for (int dy = 1 - ui::theme::kSpace2; dy < ui::theme::kSpace2; ++dy) {
-                    for (int dx = 1 - ui::theme::kSpace2; dx < ui::theme::kSpace2; ++dx) {
-                        const int x = static_cast<int>(pixel % 320) + dx;
-                        const int y = static_cast<int>(pixel / 320) + dy;
-                        if (x >= 0 && x < 320 && y >= 0 && y < 240) {
-                            if (pixels[y * 320 + x] != pixels[0]) {
-                                std::fprintf(stderr, "CROWDED %s age=%zu,%zu other=%d,%d\n",
-                                             age_names[i], pixel % 320, pixel / 320, x, y);
-                            }
-                            require(pixels[y * 320 + x] == pixels[0],
-                                    "age has eight-pixel clearance from other foreground");
-                        }
-                    }
-                }
-            }
-            if (with_age[pixel] != pixels[pixel] && pixels[pixel] != pixels[0]) {
-                std::fprintf(stderr, "COLLISION %s x=%zu y=%zu\n", age_names[i], pixel % 320,
-                             pixel / 320);
-            }
-            require(with_age[pixel] == pixels[pixel] || pixels[pixel] == pixels[0],
-                    "age ink does not overprint any existing foreground");
-        }
-        lv_obj_remove_flag(age, LV_OBJ_FLAG_HIDDEN);
-        lv_refr_now(display);
+        require(check_age_clearance(age, age_names[i]),
+                "age has eight-pixel clearance and never overprints existing foreground");
         // 1104ms since the anchor: no second boundary occurs in the next 500ms.
         const auto before = flush_count;
         for (unsigned ms = 0; ms < 500; ms += 20) {
@@ -1001,7 +1199,7 @@ int main(int argc, char** argv) {
             save(out + "/Age-" + age_names[i] + "-recovery-" + std::to_string(ms) + ".rgb565");
             check_entry_overlap();
         }
-        require(label_named(lv_screen_active(), "Reconnecting: 22 s old") == nullptr,
+        require(label_named(lv_screen_active(), "Last update\n22 sec ago") == nullptr,
                 "recovery retires age copy");
     }
     // Check the real painted opacity when either fade reverses before settlement.
@@ -1017,19 +1215,19 @@ int main(int argc, char** argv) {
             ui::controller::apply(aged);
             tick(0);
             tick(elapsed);
-            auto* label = label_named(lv_screen_active(), "Reconnecting: 20 s old");
+            auto* label = label_named(lv_screen_active(), "Last update\n20 sec ago");
             const auto before = label ? lv_obj_get_style_text_opa(label, LV_PART_MAIN) : 0;
             ui::controller::apply(current);
             tick(0);
-            label = label_named(lv_screen_active(), "Reconnecting: 20 s old");
+            label = label_named(lv_screen_active(), "Last update\n20 sec ago");
             const auto after = label ? lv_obj_get_style_text_opa(label, LV_PART_MAIN) : 0;
             require(before == after, "geometry-gated recovery reversal keeps painted opacity");
             tick(180);
-            label = label_named(lv_screen_active(), "Reconnecting: 20 s old");
+            label = label_named(lv_screen_active(), "Last update\n20 sec ago");
             const auto recovering = label ? lv_obj_get_style_text_opa(label, LV_PART_MAIN) : 0;
             ui::controller::apply(aged);
             tick(0);
-            label = label_named(lv_screen_active(), "Reconnecting: 20 s old");
+            label = label_named(lv_screen_active(), "Last update\n20 sec ago");
             const auto reentered = label ? lv_obj_get_style_text_opa(label, LV_PART_MAIN) : 0;
             require(recovering == reentered,
                     "geometry-gated repeated loss reversal keeps painted opacity");
@@ -1045,7 +1243,7 @@ int main(int argc, char** argv) {
     ui::controller::apply(aged_ready);
     tick(0);
     tick(550);
-    auto* fading_age = label_named(lv_screen_active(), "Reconnecting: 20 s old");
+    auto* fading_age = label_named(lv_screen_active(), "Last update\n20 sec ago");
     require(fading_age != nullptr, "age is already visible during appearance");
     const auto half_opacity = lv_obj_get_style_text_opa(fading_age, LV_PART_MAIN);
     require(half_opacity > 0 && half_opacity < 255, "age appearance is genuinely intermediate");
@@ -1065,22 +1263,22 @@ int main(int argc, char** argv) {
             "Off retains last painted opacity");
     ui::controller::note_panel_visible(true);
     tick(0);
-    require(labels().count("Reconnecting: 25 s old") == 1,
+    require(labels().count("Last update\n25 sec ago") == 1,
             "wake uses actual current age, not the frozen display clock");
     tick(1100);
     require(!tick(1000), "settled age seconds require no continuous animation cadence");
-    require(labels().count("Reconnecting: 27 s old") == 1,
+    require(labels().count("Last update\n27 sec ago") == 1,
             "age updates without a new model presentation");
     auto modal = aged_ready;
     modal.modal_surface = app_model::ModalSurface::FactoryResetConfirmation;
     ui::controller::apply(
         modal); // Rendering only: no button/reducer reset operation is dispatched.
     tick(0);
-    require(labels().count("Reconnecting: 27 s old") == 0,
+    require(labels().count("Last update\n27 sec ago") == 0,
             "higher-priority surface cannot retain the confidence label");
     ui::controller::apply(states[0]);
     tick(1200);
-    require(labels().count("Reconnecting: 27 s old") == 0,
+    require(labels().count("Last update\n27 sec ago") == 0,
             "return to fresh Ready cannot resurrect a hidden confidence label");
     std::puts("AGE 7 layouts: timed appearance/recovery; last-status age; invariant energy");
     // Printer-condition rendering uses the same controller and actual LVGL pool.
@@ -1159,7 +1357,7 @@ int main(int argc, char** argv) {
             check_entry_overlap();
             save(out + "/Error-" + names[i] + "-aged-" + std::to_string(t) + ".rgb565");
         }
-        auto* age = label_named(lv_screen_active(), "Reconnecting: 21 s old");
+        auto* age = label_named(lv_screen_active(), "Updated 21 sec ago");
         require(age != nullptr && lv_obj_get_style_text_opa(age, LV_PART_MAIN) == LV_OPA_COVER,
                 "settled error age is fully readable, not hidden to avoid collision");
         auto* mark = label_named(lv_screen_active(), "!");
@@ -1176,8 +1374,8 @@ int main(int argc, char** argv) {
         ui::controller::apply(error);
         for (unsigned t = 0; t <= 1120; t += 16) {
             tick(t == 0 ? 0 : 16);
-            const auto age_text =
-                ui::format::observation_age(error.stale_observed_at, lv_tick_get());
+            const auto age_text = ui::format::observation_age(
+                error.stale_observed_at, lv_tick_get(), ui::format::ObservationAgeLayout::Compact);
             check_entry_overlap(label_named(lv_screen_active(), age_text.c_str()));
             save(out + "/Error-" + names[i] + "-age-recovery-" + std::to_string(t) + ".rgb565");
         }
@@ -1306,7 +1504,7 @@ int main(int argc, char** argv) {
                 check_entry_overlap();
                 save(out + "/Attention-" + names[i] + "-aged-" + std::to_string(t) + ".rgb565");
             }
-            auto* age = label_named(lv_screen_active(), "Reconnecting: 21 s old");
+            auto* age = label_named(lv_screen_active(), "Updated 21 sec ago");
             require(age != nullptr && lv_obj_get_style_text_opa(age, LV_PART_MAIN) == LV_OPA_COVER,
                     "settled error age is fully readable, not hidden to avoid collision");
             auto* mark = label_named(lv_screen_active(), "!");
@@ -1325,7 +1523,8 @@ int main(int argc, char** argv) {
             for (unsigned t = 0; t <= 1120; t += 16) {
                 tick(t == 0 ? 0 : 16);
                 const auto age_text =
-                    ui::format::observation_age(error.stale_observed_at, lv_tick_get());
+                    ui::format::observation_age(error.stale_observed_at, lv_tick_get(),
+                                                ui::format::ObservationAgeLayout::Compact);
                 check_entry_overlap(label_named(lv_screen_active(), age_text.c_str()));
                 save(out + "/Attention-" + names[i] + "-age-recovery-" + std::to_string(t) +
                      ".rgb565");

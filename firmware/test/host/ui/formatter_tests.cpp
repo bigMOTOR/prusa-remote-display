@@ -61,19 +61,59 @@ TEST(PrinterErrorContextTests, DoesNotDiscloseAJobForUnknownSubjectOrUnavailable
 // --- Absence (UI Design Decision 003, Production UI §9) --------------------
 TEST(ObservationAgeTests, UsesLastStatusRatherThanSceneEntryAndWholeSeconds) {
     EXPECT_EQ(observation_age(std::chrono::milliseconds{1234}, 21234).view(),
-              "Reconnecting: 20 s old");
+              "Last update\n20 sec ago");
     EXPECT_EQ(observation_age(std::chrono::milliseconds{1234}, 22233).view(),
-              "Reconnecting: 20 s old");
+              "Last update\n20 sec ago");
     EXPECT_EQ(observation_age(std::chrono::milliseconds{1234}, 22234).view(),
-              "Reconnecting: 21 s old");
+              "Last update\n21 sec ago");
 }
 
 TEST(ObservationAgeTests, ClockWrapFutureAndAbsenceAreSafe) {
     EXPECT_EQ(observation_age(std::chrono::milliseconds{UINT32_MAX - 999}, 1000).view(),
-              "Reconnecting: 2 s old");
+              "Last update\n2 sec ago");
     EXPECT_EQ(observation_age(std::chrono::milliseconds{1001}, 1000).view(),
-              "Reconnecting: 0 s old");
+              "Last update\n0 sec ago");
     EXPECT_TRUE(observation_age(std::nullopt, 10000).empty());
+}
+
+TEST(ObservationAgeTests, FloorsSecondsAndSwitchesToWholeMinutesAtSixtySeconds) {
+    for (const auto& sample : std::array<std::pair<std::uint32_t, const char*>, 8>{
+             {{0, "Last update\n0 sec ago"},
+              {59999, "Last update\n59 sec ago"},
+              {60000, "Last update\n1 min ago"},
+              {61000, "Last update\n1 min ago"},
+              {119999, "Last update\n1 min ago"},
+              {120000, "Last update\n2 min ago"},
+              {3600000, "Last update\n60 min ago"},
+              {3660000, "Last update\n61 min ago"}}}) {
+        EXPECT_EQ(observation_age(std::chrono::milliseconds{0}, sample.first).view(),
+                  sample.second);
+    }
+}
+
+TEST(ObservationAgeTests, CompactConditionCopySharesBoundariesWrapFutureAndAbsence) {
+    for (const auto& sample :
+         std::array<std::pair<std::uint32_t, const char*>, 8>{{{0, "Updated 0 sec ago"},
+                                                               {59999, "Updated 59 sec ago"},
+                                                               {60000, "Updated 1 min ago"},
+                                                               {61000, "Updated 1 min ago"},
+                                                               {119999, "Updated 1 min ago"},
+                                                               {120000, "Updated 2 min ago"},
+                                                               {3600000, "Updated 60 min ago"},
+                                                               {3660000, "Updated 61 min ago"}}}) {
+        EXPECT_EQ(observation_age(std::chrono::milliseconds{0}, sample.first,
+                                  ObservationAgeLayout::Compact)
+                      .view(),
+                  sample.second);
+    }
+    EXPECT_EQ(observation_age(std::chrono::milliseconds{UINT32_MAX - 999}, 1000,
+                              ObservationAgeLayout::Compact)
+                  .view(),
+              "Updated 2 sec ago");
+    EXPECT_EQ(observation_age(std::chrono::milliseconds{1001}, 1000, ObservationAgeLayout::Compact)
+                  .view(),
+              "Updated 0 sec ago");
+    EXPECT_TRUE(observation_age(std::nullopt, 10000, ObservationAgeLayout::Compact).empty());
 }
 
 //

@@ -469,7 +469,8 @@ TEST(OperationalContentTests, PreparingsSubtitleCannotReturnWithoutAMachineSuppl
     // active; neither is reachable as Preparing's subtitle.
     // The owner-selected remaining-time templates add two entries for Printing estimates;
     // they cannot invent a Preparing activity or make its third line visible.
-    EXPECT_EQ(kTextIdCount, 56U) << "a catalogue entry was added; if it is a Preparing subtitle, "
+    // Observation-age templates and the compact heading qualify freshness, never Preparing activity.
+    EXPECT_EQ(kTextIdCount, 59U) << "a catalogue entry was added; if it is a Preparing subtitle, "
                                     "API Research Report §16.4 has to have been superseded first";
 
     for (std::size_t index = 0; index < kTextIdCount; ++index) {
