@@ -12,8 +12,10 @@ your printer over Wi-Fi.
 Use the official [Waveshare ESP32-S3-LCD-2.8 product page](https://www.waveshare.com/product/mcu-tools/development-boards/esp32-s3-touch-lcd-2.8.htm)
 and choose **Without Touch Function**. The board model is
 **ESP32-S3-LCD-2.8, non-touch**. You can buy it from any seller; check the
-exact model and option before ordering. The touch version
-and other ESP32 boards are not interchangeable with it. Printer testing covers
+exact model and option before ordering. The non-touch board is the tested
+configuration. The touch version has not been tested with this firmware or
+enclosure; compatibility has not been established. Other ESP32 boards remain
+outside the supported configuration. Printer testing covers
 the **Prusa CORE One** with local PrusaLink access; MK4S and MINI have not been tested.
 
 You will need a USB data cable for installation, USB power for everyday use and

@@ -3,9 +3,11 @@
 
 # Installation, updates and recovery
 
-This guide is for the **Waveshare ESP32-S3-LCD-2.8, non-touch** display board.
-Other ESP32 boards and the touch model are not interchangeable. Installation
-changes the display, not your printer. You should not need to compile firmware.
+This guide is for the **Waveshare ESP32-S3-LCD-2.8, non-touch** display board,
+the tested configuration. The touch version has not been tested with this
+firmware or enclosure; compatibility has not been established. Other ESP32
+boards remain outside the supported configuration. Installation changes the
+display, not your printer. You should not need to compile firmware.
 For parts, assembly and printer setup, start with [Get started](get-started.md).
 
 Use Chrome or Edge (Safari and Firefox are not supported). Use the firmware

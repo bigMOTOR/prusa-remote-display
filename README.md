@@ -57,8 +57,10 @@ button for two seconds and release to open settings.
 
 ## What you need
 
-- The **Waveshare ESP32-S3-LCD-2.8, non-touch** board. The touch model and other
-  ESP32 boards are not interchangeable with it.
+- The **Waveshare ESP32-S3-LCD-2.8, non-touch** board, the tested configuration.
+  The touch version has not been tested with this firmware or enclosure;
+  compatibility has not been established. Other ESP32 boards remain outside
+  the supported configuration.
 - A **Prusa CORE One** with local PrusaLink access. MK4S and MINI compatibility
   has not been established.
 - **2.4 GHz Wi-Fi** that lets the display reach the printer on your local network.

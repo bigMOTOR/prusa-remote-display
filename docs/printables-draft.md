@@ -23,7 +23,9 @@ Use the **Waveshare ESP32-S3-LCD-2.8, non-touch** board. On the
 [official Waveshare product page](https://www.waveshare.com/product/mcu-tools/development-boards/esp32-s3-touch-lcd-2.8.htm),
 select **Without Touch Function**. Any seller is fine; the exact non-touch
 model matters. The family-page URL says “touch”, but the selected option must
-be non-touch. The touch model and other ESP32 boards are not interchangeable.
+be non-touch for this tested build. The touch version has not been tested with
+this firmware or enclosure; compatibility has not been established. Other ESP32
+boards remain outside the supported configuration.
 
 | Part | Quantity | Details |
 | --- | ---: | --- |
