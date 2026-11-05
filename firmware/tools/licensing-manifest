@@ -151,6 +151,9 @@ require | .clang-tidy | GPL-3.0-only
 require | .editorconfig | GPL-3.0-only
 require | .gitignore | GPL-3.0-only
 require | .github/workflows/*.yml | GPL-3.0-only
+require | .github/ISSUE_TEMPLATE/bug.yml | GPL-3.0-only
+require | .github/ISSUE_TEMPLATE/i-built-one.yml | GPL-3.0-only
+require | .github/ISSUE_TEMPLATE/config.yml | GPL-3.0-only
 require | firmware/tools/licensing-manifest | GPL-3.0-only
 require | firmware/*.c | GPL-3.0-only
 require | firmware/*.h | GPL-3.0-only

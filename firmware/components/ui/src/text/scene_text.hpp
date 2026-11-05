@@ -27,7 +27,7 @@ namespace prd::ui::text {
 
 // UI Design Decision 001's centre stack: the progress percentage with its unit, then the
 // state title, then the remaining duration. The duration and the percentage's digits are
-// formatter output and have no catalogue entry — see the separation note in text.hpp.
+// formatter output; the duration formatter uses the accepted remaining-time templates.
 inline constexpr TextId kPrintingStateTitle = TextId::StatePrinting;
 inline constexpr TextId kPrintingPercentUnit = TextId::UnitPercent;
 

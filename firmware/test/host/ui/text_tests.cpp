@@ -104,6 +104,8 @@ constexpr std::array<TextId, kTextIdCount> kEveryId{
     TextId::UpdateFirmwareLabel,
     TextId::UpdateAvailableTitle,
     TextId::UpdateHoldForSettings,
+    TextId::RemainingMinutes,
+    TextId::RemainingHoursMinutes,
 };
 
 } // namespace
@@ -308,11 +310,11 @@ TEST(SceneTextTests, EveryIdThePrintingSceneUsesResolves) {
 }
 
 TEST(SceneTextTests, TheStateTitleIsNotAFormattedValue) {
-    // State titles remain literal. The accepted age message is the single bounded template;
-    // only the formatter inserts its number, never the catalogue or a state-title consumer.
+    // State titles remain literal. Only the formatter fills the explicitly accepted
+    // age, subject-context and remaining-time templates.
     for (const auto id : kEveryId) {
         if (id == TextId::StaleIndicator) {
-            EXPECT_EQ(lookup(id), "Last update %lu s ago");
+            EXPECT_EQ(lookup(id), "Reconnecting: %lu s old");
             continue;
         }
         if (id == TextId::CurrentSubject || id == TextId::CurrentSubjectProgress) {
@@ -321,6 +323,11 @@ TEST(SceneTextTests, TheStateTitleIsNotAFormattedValue) {
         }
         if (id == TextId::LastSubject || id == TextId::LastSubjectProgress) {
             EXPECT_EQ(lookup(id), id == TextId::LastSubject ? "Last: %s" : "Last: %s / %s%%");
+            continue;
+        }
+        if (id == TextId::RemainingMinutes || id == TextId::RemainingHoursMinutes) {
+            EXPECT_EQ(lookup(id),
+                      id == TextId::RemainingMinutes ? "%s%lum left" : "%s%luh%02lum left");
             continue;
         }
         EXPECT_EQ(lookup(id).find('%'), lookup(id) == "%" ? 0U : std::string_view::npos)

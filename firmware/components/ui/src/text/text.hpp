@@ -24,9 +24,9 @@
 //     in. There is no runtime language selection, no translation, no plural-rule
 //     engine, no locale file, no persisted preference and no third-party library.
 //   - not a formatter. Numbers, temperatures, durations and layer counts are formatted
-//     by ui/src/formatters.cpp and never pass through here. The two are separate on
-//     purpose: a number's presentation is a §17.7 rule, and a word's is a catalogue
-//     entry. Nothing in this file interpolates a value into a string.
+//     by ui/src/formatters.cpp. Qualified values may use catalogue templates for their
+//     words and units; the formatter alone supplies the numeric arguments. Nothing
+//     in this file interpolates a value into a string.
 //   - not dynamic. lookup() returns a view of a string with static storage duration.
 //     Nothing here allocates, and there is no state to initialise.
 //
@@ -283,6 +283,10 @@ enum class TextId : std::uint8_t {
     UpdateFirmwareLabel = 51,
     UpdateAvailableTitle = 52,
     UpdateHoldForSettings = 53,
+
+    // Owner-selected Printing remaining-time patterns (hours/minutes, then direction).
+    RemainingMinutes = 54,
+    RemainingHoursMinutes = 55,
 };
 
 // ⛔ FIVE IDS FOR TWO SENTENCES, DELIBERATELY. FactoryResetRestartDisplay, StorageRestartDisplay,
@@ -290,7 +294,7 @@ enum class TextId : std::uint8_t {
 // entries so the four causes can be reworded independently — sharing one id would mean a change
 // written for one fault silently rewording three others, which is the "a sentence is a claim about
 // every route that emits it" rule applied to the catalogue itself.
-inline constexpr std::size_t kTextIdCount = 54;
+inline constexpr std::size_t kTextIdCount = 56;
 
 // The English string. Never empty, and always within the generated glyph subset —
 // both properties are asserted at compile time in text.cpp.

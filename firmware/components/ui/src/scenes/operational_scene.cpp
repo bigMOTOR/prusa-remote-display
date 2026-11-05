@@ -1080,8 +1080,8 @@ void OperationalScene::apply_third_line(const app_model::Presentation& presentat
     // activity that wins it. When a real machine-supplied activity arrives, it is tested above
     // the estimate, and this comment is the specification for that change.
     if (content.show_remaining) {
-        const auto remaining = format::approximate_duration(presentation.remaining,
-                                                            presentation.remaining_is_approximate);
+        const auto remaining = format::remaining_duration(presentation.remaining,
+                                                          presentation.remaining_is_approximate);
         lv_label_set_text(third_line_, remaining.c_str());
         lv_obj_remove_flag(third_line_, LV_OBJ_FLAG_HIDDEN);
         return;

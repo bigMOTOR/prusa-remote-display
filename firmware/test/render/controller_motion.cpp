@@ -12,6 +12,7 @@
 #include <set>
 #include <string>
 
+#include "../host/support/state_builders.hpp"
 #include "app_model/presentation.hpp"
 #include "app_store/store.hpp"
 #include "controller.hpp"
@@ -187,7 +188,9 @@ prd::app_model::Timestamp at(std::int64_t ms) {
 
 int main(int argc, char** argv) {
     using namespace prd;
-    require(argc == 2, "output directory");
+    require(argc == 2 || (argc == 3 && (std::string(argv[2]) == "--remaining" ||
+                                        std::string(argv[2]) == "--recovery")),
+            "output directory [--remaining|--recovery]");
     const std::string out = argv[1];
     lv_init();
     require(ui::fonts::verify(), "every generated font fits its actual reserved line box");
@@ -249,6 +252,171 @@ int main(int argc, char** argv) {
         tick(0);
         tick(ui::theme::kOperationalMotionMs);
     };
+    if (argc == 3 && std::string(argv[2]) == "--recovery") {
+        app_store::Store recovery(test::printing_device(at(0)));
+        auto apply = [&](const app_model::Event& event) {
+            require(recovery.dispatch(event).accepted, "recovery event accepted by store");
+            ui::controller::apply(app_model::project(recovery.state()));
+        };
+        settle(app_model::project(recovery.state()));
+        app_model::ConnectionObservation failed;
+        failed.phase = app_model::ConnectionPhase::PrinterUnavailable;
+        apply(app_model::Event::connection_observed(at(9000), failed));
+        tick(9000 - lv_tick_get());
+        require(labels().count("1h18m left") == 1, "one timeout retains current observation");
+        apply(app_model::Event::confidence_aged(at(15000)));
+        tick(15000 - lv_tick_get());
+        require(labels().count("1h18m left") == 1, "exact 15-second boundary remains current");
+        apply(app_model::Event::confidence_aged(at(15001)));
+        tick(1);
+        const auto entry = digest();
+        std::set<std::uint64_t> transition{entry};
+        for (unsigned ms = 16; ms <= 1104; ms += 16) {
+            tick(16);
+            transition.insert(digest());
+        }
+        require(transition.size() > 8, "reconnecting entry uses actual controller motion");
+        require(labels().count("1h18m left") == 0, "stale remaining cannot appear live");
+        const auto age_text = ui::format::observation_age(at(0), lv_tick_get());
+        auto* age = label_named(lv_screen_active(), age_text.c_str());
+        require(age != nullptr && age_text.view().find("Reconnecting:") == 0,
+                "native controller shows reconnecting with explicit old-data age");
+        require(lv_obj_get_x(age) >= ui::theme::kRegionOperational.x &&
+                    lv_obj_get_x(age) + lv_obj_get_width(age) <=
+                        ui::theme::kRegionOperational.right(),
+                "reconnecting age fits operational region");
+        save(out + "/Reconnecting.rgb565");
+        for (const auto subject :
+             {app_model::PrinterState::Paused, app_model::PrinterState::Finished,
+              app_model::PrinterState::Ready}) {
+            auto outcome =
+                test::with_printer_state(test::printing_device(at(0)), subject, at(1000), 2);
+            outcome =
+                app_model::reduce(outcome, app_model::Event::confidence_aged(at(lv_tick_get())));
+            const auto p = app_model::project(outcome);
+            settle(p);
+            require(labels().count("1h18m left") == 0, "stale outcome has no live estimate");
+            require(label_named(
+                        lv_screen_active(),
+                        ui::format::observation_age(p.stale_observed_at, lv_tick_get()).c_str()) !=
+                        nullptr,
+                    "stale outcome retains reconnecting age");
+        }
+        auto attention = test::with_printer_state(test::printing_device(at(0)),
+                                                  app_model::PrinterState::Attention, at(1000), 2);
+        attention =
+            app_model::reduce(attention, app_model::Event::confidence_aged(at(lv_tick_get())));
+        settle(app_model::project(attention));
+        require(labels().count("Attention") == 1, "real attention retains title priority");
+        const auto degraded = app_model::project(recovery.state());
+        settle(degraded);
+        require(degraded.confidence == app_model::Confidence::Degraded &&
+                    degraded.subject == app_model::SubjectState::Printing &&
+                    labels().count("Printing") == 1 && labels().count("Attention") == 0 &&
+                    labels().count("1h18m left") == 0,
+                "recovery starts from degraded printing");
+        const auto stale_labels = labels();
+        require(std::any_of(stale_labels.begin(), stale_labels.end(),
+                            [](const auto& label) { return label.find("Reconnecting:") == 0; }),
+                "recovery starts with reconnecting age");
+        app_model::ConnectionObservation success;
+        success.phase = app_model::ConnectionPhase::Connected;
+        const auto now = at(lv_tick_get());
+        apply(app_model::Event::connection_observed(now, success));
+        apply(app_model::Event::printer_snapshot(
+            now, test::printer_snapshot(app_model::PrinterState::Printing, 2)));
+        tick(0);
+        const auto recovery_entry = digest();
+        tick(ui::theme::kOperationalMotionMs);
+        require(digest() != recovery_entry, "recovery uses actual visible motion");
+        require(labels().count("1h18m left") == 1, "successful recovery restores estimate");
+        const auto recovered_labels = labels();
+        require(std::none_of(recovered_labels.begin(), recovered_labels.end(),
+                             [](const auto& label) { return label.find("Reconnecting:") == 0; }),
+                "recovery retires stale row");
+        save(out + "/Recovered.rgb565");
+        std::puts("recovery controller: actual store/reducer, 15s boundary, stale age, priority, "
+                  "motion PASS");
+        return 0;
+    }
+    // Focused mode reuses this suite's real controller/tick path without retaining
+    // the unrelated whole-family frame corpus.
+    if (argc == 3) {
+        auto printing = states[2];
+        printing.progress = {true, 29};
+        printing.remaining = {true, 9720};
+        printing.remaining_is_approximate = false;
+        settle(printing);
+        require(labels().count("2h42m left") == 1 && labels().count("2:42") == 0,
+                "Printing uses explicit units and direction");
+        save(out + "/Printing.rgb565");
+        auto* estimate = label_named(lv_screen_active(), "2h42m left");
+        require(estimate != nullptr &&
+                    lv_obj_get_width(estimate) < ui::theme::kRegionOperational.width,
+                "accepted estimate fits its operational region");
+        for (const auto duration : {3600U, 3599U, 0U, 59U, 60U, 97500U, UINT32_MAX}) {
+            printing.remaining.seconds = duration;
+            settle(printing);
+            const auto expected = ui::format::remaining_duration(printing.remaining, false);
+            estimate = label_named(lv_screen_active(), expected.c_str());
+            require(estimate != nullptr &&
+                        lv_obj_get_width(estimate) < ui::theme::kRegionOperational.width,
+                    "boundary estimate remains complete and within the operational region");
+        }
+        printing.remaining = {true, 9720};
+        printing.remaining_is_approximate = true;
+        settle(printing);
+        require(labels().count("~2h42m left") == 1, "approximate marker reaches actual label");
+        auto missing = printing;
+        missing.remaining = {};
+        settle(missing);
+        require(labels().count("~2h42m left") == 0, "missing estimate disappears");
+        auto unmeasured = printing;
+        unmeasured.progress = {};
+        settle(unmeasured);
+        require(labels().count("~2h42m left") == 1 && labels().count("Progress unavailable") == 0,
+                "known estimate outranks unknown-progress copy");
+        unmeasured.remaining = {};
+        settle(unmeasured);
+        require(labels().count("Progress unavailable") == 1, "absence copy remains truthful");
+        auto paused = printing;
+        paused.subject = app_model::SubjectState::Paused;
+        settle(printing);
+        const auto start = digest();
+        ui::controller::apply(paused);
+        tick(0);
+        std::set<std::uint64_t> frames{start};
+        for (unsigned t = 16; t <= 1104; t += 16) {
+            tick(16);
+            frames.insert(digest());
+            if (t == 560)
+                save(out + "/Printing-Paused-0560.rgb565");
+        }
+        require(frames.size() > 8, "duration exit retains actual animated controller path");
+        require(labels().count("~2h42m left") == 0 && labels().count("Paused") == 1,
+                "Paused cannot show a countdown even with supplied remaining data");
+        save(out + "/Paused.rgb565");
+        settle(printing);
+        require(labels().count("~2h42m left") == 1, "estimate reappears on resume");
+        auto attention = printing;
+        attention.subject_condition = app_model::SubjectCondition::Attention;
+        settle(attention);
+        require(labels().count("~2h42m left") == 0, "attention context outranks estimate");
+        auto stale = printing;
+        stale.confidence = app_model::Confidence::Degraded;
+        stale.stale_indicator = true;
+        stale.stale_observed_at = at(lv_tick_get() - 20000);
+        stale.remaining = {}; // projection withholds time-sensitive values on degradation
+        settle(stale);
+        require(labels().count("~2h42m left") == 0, "degraded projection carries no countdown");
+        require(label_named(
+                    lv_screen_active(),
+                    ui::format::observation_age(stale.stale_observed_at, lv_tick_get()).c_str()) !=
+                    nullptr,
+                "existing freshness indicator remains visible");
+        std::puts("remaining controller: boundaries, presence, priority, stale, real motion PASS");
+        return 0;
+    }
     for (unsigned a = 0; a < states.size(); ++a) {
         for (unsigned b = 0; b < states.size(); ++b) {
             if (a == b)
@@ -379,7 +547,7 @@ int main(int argc, char** argv) {
             "invalid progress has no sweep");
     require(unknown.remaining.known, "wrong-type progress fixture retains known estimate");
     const auto remaining =
-        ui::format::approximate_duration(unknown.remaining, unknown.remaining_is_approximate);
+        ui::format::remaining_duration(unknown.remaining, unknown.remaining_is_approximate);
     require(labels().count(remaining.c_str()) == 1 && labels().count("Progress unavailable") == 0,
             "unknown progress must not displace a supplied estimate");
     auto no_estimate = unknown;
@@ -706,10 +874,10 @@ int main(int argc, char** argv) {
     std::puts("IDLE current: zero flush callbacks in seven settled layouts over 2s each");
     auto check_entry_overlap = [&](lv_obj_t* age = nullptr) {
         if (age == nullptr) {
-            age = label_named(lv_screen_active(), "Last update 20 s ago");
+            age = label_named(lv_screen_active(), "Reconnecting: 20 s old");
         }
         if (age == nullptr) {
-            age = label_named(lv_screen_active(), "Last update 21 s ago");
+            age = label_named(lv_screen_active(), "Reconnecting: 21 s old");
         }
         if (age == nullptr) {
             return;
@@ -774,10 +942,10 @@ int main(int argc, char** argv) {
             require(ui::controller::operational_form_report().energy == energy,
                     "confidence cannot change operational energy");
         }
-        require(labels().count("Last update 21 s ago") == 1,
+        require(labels().count("Reconnecting: 21 s old") == 1,
                 "age counts from successful status while controller ticks");
         require(labels().count("Not current") == 0, "rejected indicator gone");
-        auto* age = label_named(lv_screen_active(), "Last update 21 s ago");
+        auto* age = label_named(lv_screen_active(), "Reconnecting: 21 s old");
         require(age != nullptr && lv_obj_get_style_text_opa(age, LV_PART_MAIN) == LV_OPA_COVER,
                 "age reaches readable full opacity");
         // Actual glyph pixels, not just label boxes: removing only age must expose background,
@@ -833,7 +1001,7 @@ int main(int argc, char** argv) {
             save(out + "/Age-" + age_names[i] + "-recovery-" + std::to_string(ms) + ".rgb565");
             check_entry_overlap();
         }
-        require(label_named(lv_screen_active(), "Last update 22 s ago") == nullptr,
+        require(label_named(lv_screen_active(), "Reconnecting: 22 s old") == nullptr,
                 "recovery retires age copy");
     }
     // Check the real painted opacity when either fade reverses before settlement.
@@ -849,19 +1017,19 @@ int main(int argc, char** argv) {
             ui::controller::apply(aged);
             tick(0);
             tick(elapsed);
-            auto* label = label_named(lv_screen_active(), "Last update 20 s ago");
+            auto* label = label_named(lv_screen_active(), "Reconnecting: 20 s old");
             const auto before = label ? lv_obj_get_style_text_opa(label, LV_PART_MAIN) : 0;
             ui::controller::apply(current);
             tick(0);
-            label = label_named(lv_screen_active(), "Last update 20 s ago");
+            label = label_named(lv_screen_active(), "Reconnecting: 20 s old");
             const auto after = label ? lv_obj_get_style_text_opa(label, LV_PART_MAIN) : 0;
             require(before == after, "geometry-gated recovery reversal keeps painted opacity");
             tick(180);
-            label = label_named(lv_screen_active(), "Last update 20 s ago");
+            label = label_named(lv_screen_active(), "Reconnecting: 20 s old");
             const auto recovering = label ? lv_obj_get_style_text_opa(label, LV_PART_MAIN) : 0;
             ui::controller::apply(aged);
             tick(0);
-            label = label_named(lv_screen_active(), "Last update 20 s ago");
+            label = label_named(lv_screen_active(), "Reconnecting: 20 s old");
             const auto reentered = label ? lv_obj_get_style_text_opa(label, LV_PART_MAIN) : 0;
             require(recovering == reentered,
                     "geometry-gated repeated loss reversal keeps painted opacity");
@@ -877,7 +1045,7 @@ int main(int argc, char** argv) {
     ui::controller::apply(aged_ready);
     tick(0);
     tick(550);
-    auto* fading_age = label_named(lv_screen_active(), "Last update 20 s ago");
+    auto* fading_age = label_named(lv_screen_active(), "Reconnecting: 20 s old");
     require(fading_age != nullptr, "age is already visible during appearance");
     const auto half_opacity = lv_obj_get_style_text_opa(fading_age, LV_PART_MAIN);
     require(half_opacity > 0 && half_opacity < 255, "age appearance is genuinely intermediate");
@@ -897,22 +1065,22 @@ int main(int argc, char** argv) {
             "Off retains last painted opacity");
     ui::controller::note_panel_visible(true);
     tick(0);
-    require(labels().count("Last update 25 s ago") == 1,
+    require(labels().count("Reconnecting: 25 s old") == 1,
             "wake uses actual current age, not the frozen display clock");
     tick(1100);
     require(!tick(1000), "settled age seconds require no continuous animation cadence");
-    require(labels().count("Last update 27 s ago") == 1,
+    require(labels().count("Reconnecting: 27 s old") == 1,
             "age updates without a new model presentation");
     auto modal = aged_ready;
     modal.modal_surface = app_model::ModalSurface::FactoryResetConfirmation;
     ui::controller::apply(
         modal); // Rendering only: no button/reducer reset operation is dispatched.
     tick(0);
-    require(labels().count("Last update 27 s ago") == 0,
+    require(labels().count("Reconnecting: 27 s old") == 0,
             "higher-priority surface cannot retain the confidence label");
     ui::controller::apply(states[0]);
     tick(1200);
-    require(labels().count("Last update 27 s ago") == 0,
+    require(labels().count("Reconnecting: 27 s old") == 0,
             "return to fresh Ready cannot resurrect a hidden confidence label");
     std::puts("AGE 7 layouts: timed appearance/recovery; last-status age; invariant energy");
     // Printer-condition rendering uses the same controller and actual LVGL pool.
@@ -991,7 +1159,7 @@ int main(int argc, char** argv) {
             check_entry_overlap();
             save(out + "/Error-" + names[i] + "-aged-" + std::to_string(t) + ".rgb565");
         }
-        auto* age = label_named(lv_screen_active(), "Last update 21 s ago");
+        auto* age = label_named(lv_screen_active(), "Reconnecting: 21 s old");
         require(age != nullptr && lv_obj_get_style_text_opa(age, LV_PART_MAIN) == LV_OPA_COVER,
                 "settled error age is fully readable, not hidden to avoid collision");
         auto* mark = label_named(lv_screen_active(), "!");
@@ -1138,7 +1306,7 @@ int main(int argc, char** argv) {
                 check_entry_overlap();
                 save(out + "/Attention-" + names[i] + "-aged-" + std::to_string(t) + ".rgb565");
             }
-            auto* age = label_named(lv_screen_active(), "Last update 21 s ago");
+            auto* age = label_named(lv_screen_active(), "Reconnecting: 21 s old");
             require(age != nullptr && lv_obj_get_style_text_opa(age, LV_PART_MAIN) == LV_OPA_COVER,
                     "settled error age is fully readable, not hidden to avoid collision");
             auto* mark = label_named(lv_screen_active(), "!");

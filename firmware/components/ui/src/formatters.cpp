@@ -257,6 +257,45 @@ ValueText approximate_duration(const app_model::DurationValue& value, const bool
     return text;
 }
 
+RemainingText remaining_duration(const app_model::DurationValue& value, const bool is_approximate) {
+    RemainingText result;
+    if (!value.known) {
+        return result;
+    }
+
+    const auto total_minutes = value.seconds / 60U;
+    const auto hours = static_cast<unsigned long>(total_minutes / 60U);
+    const auto minutes = static_cast<unsigned long>(total_minutes % 60U);
+    const char* const qualifier = is_approximate ? "~" : "";
+    std::array<char, RemainingText::capacity() + 1> buffer{};
+    const auto pattern = text::lookup(hours == 0 ? text::TextId::RemainingMinutes
+                                                 : text::TextId::RemainingHoursMinutes);
+    if (pattern.substr(0, 5) != "%s%lu") {
+        return result;
+    }
+    const auto tail = pattern.substr(5);
+    int written = 0;
+    // Catalogue fragments are data, never printf formats. Each %.*s is bounded by
+    // its fragment's size; numeric arguments match %lu on both host and target.
+    // NOLINTBEGIN(bugprone-suspicious-stringview-data-usage)
+    if (hours == 0) {
+        written = std::snprintf(buffer.data(), buffer.size(), "%s%lu%.*s", qualifier, minutes,
+                                static_cast<int>(tail.size()), tail.data());
+    } else {
+        const auto marker = tail.find("%02lu");
+        if (marker == std::string_view::npos) {
+            return result;
+        }
+        const auto suffix = tail.substr(marker + 5);
+        written = std::snprintf(buffer.data(), buffer.size(), "%s%lu%.*s%02lu%.*s", qualifier,
+                                hours, static_cast<int>(marker), tail.data(), minutes,
+                                static_cast<int>(suffix.size()), suffix.data());
+    }
+    // NOLINTEND(bugprone-suspicious-stringview-data-usage)
+    result.assign(accept(buffer.data(), buffer.size(), written));
+    return result;
+}
+
 ValueText layers(const app_model::LayerProgress& value) {
     ValueText text;
 

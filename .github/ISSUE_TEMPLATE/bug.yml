@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+name: Bug report
+description: Tell me what went wrong with your display.
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Thanks for helping! Please leave out Wi-Fi passwords and PrusaLink
+        credentials, including in photos and logs. For a question or build help,
+        you can open a blank issue instead.
+  - type: input
+    id: display-version
+    attributes:
+      label: Display firmware version
+      description: >-
+        Look for Firmware on the display's setup page (hold its button for two
+        seconds, release, then follow the connection details shown). If you
+        cannot check, "not sure" is fine.
+      placeholder: "e.g. 1.0.1, or not sure"
+  - type: input
+    id: printer
+    attributes:
+      label: Printer model and firmware
+      placeholder: "Printer model, firmware version; not sure is fine"
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: What did you expect, and how can I repeat it? Share what you know.
+    validations:
+      required: true
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Photos, screenshots or logs (optional)
+      description: Attach a picture or paste a short, redacted log if it helps.

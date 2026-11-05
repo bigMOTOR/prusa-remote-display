@@ -63,6 +63,9 @@ for MODE in 1 2; do
  "$CXX" "${SAN[@]}" "${DEFS[@]}" "${INC[@]}" -std=gnu++17 "$H/controller_motion.cpp" "$OUT"/*.o -o "$OUT/controller-tests"
  mkdir -p "$OUT/controller-frames"
  ASAN_OPTIONS=detect_leaks=0 "$OUT/controller-tests" "$OUT/controller-frames" > "$OUT/controller.log" 2>&1
+ mkdir -p "$OUT/controller-remaining-frames" "$OUT/controller-recovery-frames"
+ ASAN_OPTIONS=detect_leaks=0 "$OUT/controller-tests" "$OUT/controller-remaining-frames" --remaining > "$OUT/controller-remaining.log" 2>&1
+ ASAN_OPTIONS=detect_leaks=0 "$OUT/controller-tests" "$OUT/controller-recovery-frames" --recovery > "$OUT/controller-recovery.log" 2>&1
  mkdir -p "$OUT/access-frames"
  "$CXX" "${SAN[@]}" "${DEFS[@]}" "${INC[@]}" -std=gnu++17 "$H/access_scene.cpp" "$OUT"/*.o -o "$OUT/access-tests"
  ASAN_OPTIONS=detect_leaks=0 "$OUT/access-tests" "$OUT/access-frames" > "$OUT/access.log" 2>&1

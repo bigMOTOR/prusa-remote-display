@@ -39,6 +39,8 @@ namespace prd::ui::format {
 // task every time a value changes, and §21's budget rules out heap traffic in a
 // path that repeats.
 using ValueText = app_model::BoundedString<12>;
+// Full uint32 seconds, including the estimate marker: "~1193046h28m left".
+using RemainingText = app_model::BoundedString<17>;
 using NameText = app_model::BoundedString<32>;
 using UpdateVersionText = app_model::BoundedString<48>;
 
@@ -92,6 +94,12 @@ using UpdateVersionText = app_model::BoundedString<48>;
 // Longest output: "~999:59".
 [[nodiscard]] ValueText approximate_duration(const app_model::DurationValue& value,
                                              bool is_approximate);
+
+// Printing estimate with explicit units and direction, e.g. "2h42m left".
+// Below one hour: "42m left". Total hours never roll over at 24; minutes
+// truncate toward zero, including "0m left" in the final minute. Unknown stays absent.
+[[nodiscard]] RemainingText remaining_duration(const app_model::DurationValue& value,
+                                               bool is_approximate);
 
 // Layer as current/total, e.g. "87/240".
 //

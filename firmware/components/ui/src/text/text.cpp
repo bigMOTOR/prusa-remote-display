@@ -36,7 +36,7 @@ constexpr std::array<Entry, kTextIdCount> kEnglish{{
     {TextId::StatePaused, "Paused"},
     {TextId::StateCompleted, "Completed"},
     {TextId::StateStopped, "Stopped"},
-    {TextId::StaleIndicator, "Last update %lu s ago"},
+    {TextId::StaleIndicator, "Reconnecting: %lu s old"},
     {TextId::StateSetupRequired, "Setup required"},
     {TextId::StateSetupActive, "Join this network"},
     {TextId::SetupFieldNetwork, "Network"},
@@ -102,6 +102,8 @@ constexpr std::array<Entry, kTextIdCount> kEnglish{{
     {TextId::UpdateFirmwareLabel, "Firmware"},
     {TextId::UpdateAvailableTitle, "Update available"},
     {TextId::UpdateHoldForSettings, "Hold for settings"},
+    {TextId::RemainingMinutes, "%s%lum left"},
+    {TextId::RemainingHoursMinutes, "%s%luh%02lum left"},
 }};
 
 // --- Compile-time catalogue integrity --------------------------------------
