@@ -1,7 +1,9 @@
 <!-- SPDX-FileCopyrightText: 2026 Mykola Fiantsev -->
 <!-- SPDX-License-Identifier: CC-BY-4.0 -->
 
-# Enclosure guide illustrations
+# Guide media
+
+## Enclosure illustrations
 
 Copyright 2026 Mykola Fiantsev. Original documentation illustrations: CC-BY-4.0.
 These two existing PNGs were copied without modification from the saved
@@ -28,3 +30,27 @@ Saved original image paths: `artifacts/stage6-photo-v2-20261102/package/docs/med
 The receipt also records an LCD envelope used by other images; these two guide
 views omit electronics and do not use that envelope as a physical-fit certificate.
 Full documentation licence: [CC-BY-4.0](../../LICENSE-documentation).
+
+
+## Reference board photograph — 5 November 2026
+
+Copyright 2026 Mykola Fiantsev. Original documentation photograph: CC-BY-4.0;
+see the adjacent `reference-board-marking.jpg.license` SPDX sidecar.
+
+`reference-board-marking.jpg` is the exact 1200 × 1600 full-frame JPEG derivative
+of the owner's original `IMG_4447` photograph. The original remains outside this
+repository. The derivative uses neutral resizing and standard JPEG encoding;
+no crop, retouching, AI generation or added content. The reviewed derivative was copied
+byte-for-byte into this repository, not exported again for this documentation
+change.
+
+| Image | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `reference-board-marking.jpg` | 284620 | `b7741bc0463e16b129d2dbb40fce29764a27ad3e18b04f8073242aef7b54c3fd` |
+
+The QC sticker is lifted, exposing `ESP32-S3-Touch-LCD-2.8`; the small FPC socket
+beside the connected display cable is empty. The owner's order lists the
+non-touch option, SKU 30223 / ESP32-S3-LCD-2.8. This photograph does not establish
+the delivered SKU, the reason for the naming difference, identical PCBs/BOMs
+across variants or touch-version compatibility. See the
+[dated validation clarification](../../hardware/validation/waveshare-esp32-s3-lcd-2.8.md#clarification--5-november-2026).

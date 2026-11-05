@@ -27,6 +27,14 @@ be non-touch for this tested build. The touch version has not been tested with
 this firmware or enclosure, so compatibility has not been established. Only the
 non-touch board is currently supported.
 
+**Reference board marking.** Our tested unit was ordered as the non-touch option,
+SKU 30223 / ESP32-S3-LCD-2.8. Its PCB is marked ESP32-S3-Touch-LCD-2.8, and
+the small FPC socket beside the display cable is unconnected. We have not
+independently confirmed the reason for this naming difference or that the two
+versions share identical PCBs. Check the model and option listed on your order.
+This observation does not establish compatibility with the touch version,
+which remains untested and unsupported.
+
 | Part | Quantity | Details |
 | --- | ---: | --- |
 | Waveshare ESP32-S3-LCD-2.8, non-touch | 1 | Without Touch Function |

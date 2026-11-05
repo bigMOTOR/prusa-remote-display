@@ -124,6 +124,8 @@ require | LICENSING.md | CC-BY-4.0
 require | THIRD_PARTY_NOTICES.md | CC-BY-4.0
 except | docs/media/assembly-exploded.png | original CAD documentation illustration, CC-BY-4.0; exact copied PNG provenance in docs/media/README.md
 except | docs/media/cleanup-separated.png | original CAD documentation illustration, CC-BY-4.0; exact copied PNG provenance in docs/media/README.md
+except | docs/media/reference-board-marking.jpg | original documentation photograph, CC-BY-4.0; binary JPEG provenance in docs/media/README.md and adjacent SPDX .license sidecar
+require | docs/media/*.license | CC-BY-4.0
 require | docs/*.md | CC-BY-4.0
 require | firmware/README.md | CC-BY-4.0
 require | firmware/main/README.md | CC-BY-4.0

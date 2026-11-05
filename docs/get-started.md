@@ -18,6 +18,19 @@ enclosure, so compatibility has not been established. Only the non-touch board
 is currently supported. Printer testing covers
 the **Prusa CORE One** with local PrusaLink access; MK4S and MINI have not been tested.
 
+**Reference board marking.** Our tested unit was ordered as the non-touch option,
+SKU 30223 / ESP32-S3-LCD-2.8. Its PCB is marked ESP32-S3-Touch-LCD-2.8, and
+the small FPC socket beside the display cable is unconnected. We have not
+independently confirmed the reason for this naming difference or that the two
+versions share identical PCBs. Check the model and option listed on your order.
+This observation does not establish compatibility with the touch version,
+which remains untested and unsupported.
+
+![Reference unit with the QC sticker lifted, showing the PCB marking and empty small socket](media/reference-board-marking.jpg)
+
+*Reference unit ordered as SKU 30223. With the QC sticker lifted, the PCB reads
+ESP32-S3-Touch-LCD-2.8; the small socket beside the display cable is empty.*
+
 You will need a USB data cable for installation, USB power for everyday use and
 a 2.4 GHz Wi-Fi network that lets the display reach your printer.
 

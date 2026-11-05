@@ -113,7 +113,7 @@ zero dropped edges and zero dropped events across the validation runs.
 |---|---|
 | Product | Waveshare ESP32-S3-LCD-2.8 (non-touch variant) |
 | SKU | 30223 (box label) |
-| PCB silkscreen | `ESP32-S3-T…-LCD-2.8` / `240×320 Pixels` (shared-platform PCB — see note 1) |
+| PCB silkscreen | `ESP32-S3-Touch-LCD-2.8` / `240×320 Pixels` (full marking visible in the 5 November 2026 photograph — see note 1) |
 | Visible markings | QC sticker "16"; white label "2" on reverse side of board area |
 | MCU | ESP32-S3 (QFN56), revision v0.2, WiFi + BLE, 40 MHz crystal |
 | Module type | Bare chip on board (no shielded module can), embedded 8 MB PSRAM → ESP32-S3R8 |
@@ -121,31 +121,48 @@ zero dropped edges and zero dropped events across the validation runs.
 | Chip MAC | redacted (device identifier — see evidence policy) |
 | Host port (macOS) | `/dev/cu.usbmodem2101` |
 
-### Note 1 — variant identity (resolves former open flag)
+### Note 1 — variant identity
 
-The purchased unit is the **non-touch** variant, as required by Prototype
-Hardware Selection v0.1. The earlier apparent conflict — vendor documentation
-for SKU 30223 describing capacitive touch, speaker, IMU, RTC, TF card and
-battery — is explained by the product being **one PCB platform sold as a
-single listing with two "Version Options"**:
+The earlier validation record identified the purchased unit as the
+**non-touch** variant required by Prototype Hardware Selection v0.1 and recorded
+SKU 30223 from the box label. It also recorded a bare front polarizer, no bonded
+touch lens and no second ribbon. These remain historical physical observations;
+the new rear-board photographs do not independently recheck the front or box.
 
-- `ESP32-S3-LCD-2.8` — "without touch control" (SKU 30223, this unit)
+The original interpretation of vendor documentation was **one PCB platform sold
+as a single listing with two "Version Options"**:
+
+- `ESP32-S3-LCD-2.8` — "without touch control" (SKU 30223, the ordered option)
 - `ESP32-S3-Touch-LCD-2.8` — "with touch control"
 
-Consequences, all confirmed on this unit:
+The original record also noted that SKU 30223's official resources listed
+**no touch-controller datasheet** (only ST7789T3 and QMI8658), and that the cited
+schematic was filed under the touch sibling's name. The claim that both variants
+share identical PCBs was an interpretation of those vendor materials, not
+established by the current single-unit photographs and order.
 
-- the touch FPC connector next to the LCD ribbon is **present but empty**;
-- the panel has a bare polarizer with no bonded touch lens and no second ribbon;
-- SKU 30223's official resources list **no touch-controller datasheet**
-  (only ST7789T3 and QMI8658);
-- the PCB platform and schematic are shared with the touch variant, and the
-  schematic is filed under the touch sibling's name — **touch-related
-  circuitry is not populated on SKU 30223**.
+#### Clarification — 5 November 2026
 
-Vendor prose for this SKU must not be treated as a feature list for the
-non-touch variant. The schematic and the physical board are authoritative.
+With the QC sticker lifted, the [new full-frame photograph](../../docs/media/reference-board-marking.jpg)
+shows the complete `ESP32-S3-Touch-LCD-2.8` silkscreen. The small FPC socket beside
+the LCD ribbon, identified as L5 in the cited schematic, is **fitted but
+unconnected** on this unit. Population of other touch-related parts is not
+established by these photographs; the former broad statement that touch-related
+circuitry was not populated is withdrawn.
 
-### Peripherals present on the shared platform
+The owner's order lists the non-touch option, SKU 30223 / ESP32-S3-LCD-2.8.
+The reason for the naming difference and whether the variants share identical
+PCBs, revisions or BOMs have not been independently confirmed. Touch-version
+compatibility remains untested and unsupported. See the
+[photo provenance and licence](../../docs/media/README.md#reference-board-photograph--5-november-2026)
+and the [builder-facing note](../../docs/get-started.md#choose-the-right-parts).
+This clarification does not repeat or overturn the earlier front/box observations.
+
+Vendor prose must not be treated as a confirmed feature list for either variant.
+The cited schematic remains the source for the pin mapping below; physical
+validation in this record applies to the tested unit.
+
+### Peripherals recorded on the reference unit
 
 Not required, not initialized, and all outside MVP scope (Architecture Spec
 §2.2), but they occupy GPIOs and must be accounted for during Phase C–E pin
@@ -160,7 +177,7 @@ and UART headers; BOOT and RESET buttons; power LED.
 
 | Document | Location | Integrity |
 |---|---|---|
-| Schematic (shared platform) | `files.waveshare.com/wiki/ESP32-S3-LCD-2.8/ESP32-S3-Touch-LCD-2.8.pdf` | SHA-256 `837c1bd1abeab2bcc12575177ffb9c41ed58e82dfe3fc96d3fed8a21cdd73ace` (233,721 bytes) |
+| Schematic cited for this unit | `files.waveshare.com/wiki/ESP32-S3-LCD-2.8/ESP32-S3-Touch-LCD-2.8.pdf` | SHA-256 `837c1bd1abeab2bcc12575177ffb9c41ed58e82dfe3fc96d3fed8a21cdd73ace` (233,721 bytes) |
 | Display controller datasheet | ST7789T3 v1.0, linked from SKU 30223 resources page | SHA-256 `7a91ce95b3f743111b975f9189c97d99a8c6bcaa0ed026dcaaf6c2979adf9d17` (6,123,258 bytes). Exercised in Phase C1: §9.2.10, §9.2.21, §9.2.24 and §9.2.25 were used to decode the vendor initialisation sequence |
 
 The schematic is vendor-copyrighted and is **not redistributed in this
@@ -277,7 +294,7 @@ validation · **U** = unvalidated · **NP** = not populated on SKU 30223.
   6 SDA, 7 SDO, 8 GND, 9 VDD(3V3), 10 LEDA, 11–14 LEDK, 15–18 XL/YU/XR/YD`.
   Pins 15–18 are resistive-touch connections, unused by this product.
 - **L5** — touch FPC, 6-pin: `GND, RST, INT, SDA, SCL, VDD`. Fitted but empty
-  on SKU 30223.
+  on the reference unit; see the dated clarification in note 1.
 - **J8** — SH1.0 12-pin header: GND, D_N, D_P, GND, SCL, SDA, UART_TXD,
   UART_RXD, GPIO18, GPIO15, GND (+3V3/VBus). Matches the board silkscreen
   `IO15 IO18 RXD TXD SDA SCL 3V3 GND D+ D- VBus GND`.
