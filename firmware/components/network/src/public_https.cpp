@@ -152,7 +152,7 @@ std::string_view log_label(const PublicHttpsOutcome outcome) {
     }
     return "unknown";
 }
-
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): #8, retain reviewed flow.
 PublicHttpsResponse get_public_https(const PublicHttpsRequest& request) {
     PublicHttpsResponse response;
     if (!request_shape_valid(request) ||
