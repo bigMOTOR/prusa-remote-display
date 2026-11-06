@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+# SPDX-License-Identifier: GPL-3.0-only
+
+name: I built one
+description: Share your display build and what you learned.
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        I'd love to see your build! Please leave out Wi-Fi passwords and
+        PrusaLink credentials, including in photos. A photo is welcome, but
+        a few words are enough.
+  - type: input
+    id: setup
+    attributes:
+      label: Printer and display version
+      description: Printer model and display firmware version, if you know them.
+      placeholder: "e.g. CORE One, display 1.0.1; not sure is fine"
+  - type: textarea
+    id: story
+    attributes:
+      label: How did your build go?
+      description: A short story, a useful tip or something you're happy with.
+    validations:
+      required: true
+  - type: textarea
+    id: photos
+    attributes:
+      label: Build photos (optional)
+      description: You can attach photos here if you'd like.
+  - type: textarea
+    id: instructions
+    attributes:
+      label: Anything unclear in the instructions? (optional)
+      description: Tell me where you got stuck or what could be explained better.

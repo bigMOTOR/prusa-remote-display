@@ -131,7 +131,7 @@ NameText error_context(const app_model::Presentation& presentation) {
 }
 
 NameText observation_age(const std::optional<app_model::Timestamp> observed,
-                         const std::uint32_t now_ms) {
+                         const std::uint32_t now_ms, const ObservationAgeLayout layout) {
     NameText text;
     if (!observed.has_value()) {
         return text;
@@ -142,7 +142,12 @@ NameText observation_age(const std::optional<app_model::Timestamp> observed,
     // A future timestamp is not billions of seconds old. The presentable freshness
     // window is far below the half-range needed for unsigned monotonic ordering.
     const auto seconds = elapsed <= UINT32_MAX / 2 ? elapsed / 1000 : 0;
-    const auto pattern = text::lookup(text::TextId::StaleIndicator);
+    const bool compact = layout == ObservationAgeLayout::Compact;
+    const auto heading =
+        text::lookup(compact ? text::TextId::ObservationUpdated : text::TextId::StaleIndicator);
+    const auto pattern = text::lookup(seconds < 60 ? text::TextId::ObservationAgeSeconds
+                                                   : text::TextId::ObservationAgeMinutes);
+    const auto age = seconds < 60 ? seconds : seconds / 60;
     const auto marker = pattern.find("%lu");
     if (marker == std::string_view::npos) {
         return text;
@@ -152,8 +157,9 @@ NameText observation_age(const std::optional<app_model::Timestamp> observed,
     // Each %.*s is bounded: marker is within pattern, and the suffix uses its own size.
     // NOLINTBEGIN(bugprone-suspicious-stringview-data-usage)
     const int written = std::snprintf(
-        buffer.data(), buffer.size(), "%.*s%lu%.*s", static_cast<int>(marker), pattern.data(),
-        static_cast<unsigned long>(seconds), static_cast<int>(suffix.size()), suffix.data());
+        buffer.data(), buffer.size(), "%.*s%c%.*s%lu%.*s", static_cast<int>(heading.size()),
+        heading.data(), compact ? ' ' : '\n', static_cast<int>(marker), pattern.data(),
+        static_cast<unsigned long>(age), static_cast<int>(suffix.size()), suffix.data());
     // NOLINTEND(bugprone-suspicious-stringview-data-usage)
     text.assign(accept(buffer.data(), buffer.size(), written));
     return text;
@@ -255,6 +261,45 @@ ValueText approximate_duration(const app_model::DurationValue& value, const bool
     ValueText text;
     text.assign(marked);
     return text;
+}
+
+RemainingText remaining_duration(const app_model::DurationValue& value, const bool is_approximate) {
+    RemainingText result;
+    if (!value.known) {
+        return result;
+    }
+
+    const auto total_minutes = value.seconds / 60U;
+    const auto hours = static_cast<unsigned long>(total_minutes / 60U);
+    const auto minutes = static_cast<unsigned long>(total_minutes % 60U);
+    const char* const qualifier = is_approximate ? "~" : "";
+    std::array<char, RemainingText::capacity() + 1> buffer{};
+    const auto pattern = text::lookup(hours == 0 ? text::TextId::RemainingMinutes
+                                                 : text::TextId::RemainingHoursMinutes);
+    if (pattern.substr(0, 5) != "%s%lu") {
+        return result;
+    }
+    const auto tail = pattern.substr(5);
+    int written = 0;
+    // Catalogue fragments are data, never printf formats. Each %.*s is bounded by
+    // its fragment's size; numeric arguments match %lu on both host and target.
+    // NOLINTBEGIN(bugprone-suspicious-stringview-data-usage)
+    if (hours == 0) {
+        written = std::snprintf(buffer.data(), buffer.size(), "%s%lu%.*s", qualifier, minutes,
+                                static_cast<int>(tail.size()), tail.data());
+    } else {
+        const auto marker = tail.find("%02lu");
+        if (marker == std::string_view::npos) {
+            return result;
+        }
+        const auto suffix = tail.substr(marker + 5);
+        written = std::snprintf(buffer.data(), buffer.size(), "%s%lu%.*s%02lu%.*s", qualifier,
+                                hours, static_cast<int>(marker), tail.data(), minutes,
+                                static_cast<int>(suffix.size()), suffix.data());
+    }
+    // NOLINTEND(bugprone-suspicious-stringview-data-usage)
+    result.assign(accept(buffer.data(), buffer.size(), written));
+    return result;
 }
 
 ValueText layers(const app_model::LayerProgress& value) {

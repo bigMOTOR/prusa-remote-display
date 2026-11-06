@@ -7,8 +7,10 @@
 #include <set>
 #include <vector>
 
+#include "app_model/display_policy.hpp"
 #include "app_model/presentation.hpp"
 #include "app_model/reducer.hpp"
+#include "outcome.hpp"
 #include "support/state_builders.hpp"
 
 // The projection suite.
@@ -1811,4 +1813,136 @@ TEST(LostObservationProjectionTests, RecoveryClearsTheAcknowledgementAndPresents
     EXPECT_FALSE(view.observation_lost_acknowledgement);
     EXPECT_EQ(view.subject, SubjectState::Printing);
     EXPECT_TRUE(view.show_telemetry) << "truthful current data returns immediately";
+}
+
+// Operational pacing is a pause AFTER each request, not a five-second start cadence.
+TEST(ConnectionRecoveryTests, OneTimeoutCanCrossFifteenSecondsWithoutBecomingUnavailable) {
+    const auto timeout = prd::prusalink::classify(prd::network::HttpOutcome::Timeout, 0,
+                                                  prd::prusalink::DecodeError::None);
+    ASSERT_EQ(timeout.phase, ConnectionPhase::PrinterUnavailable);
+    const auto pause = prd::prusalink::poll_pause(prd::prusalink::PollRequest::Status, timeout);
+    ASSERT_EQ(pause.count(), 5000);
+    for (const auto latency : {500, 1000, 1500}) {
+        auto state = printing_device(at_ms(0));
+        state = with_connection(state, timeout.phase, at_ms(9000)); // request 5–9 s
+        EXPECT_EQ(project(state).confidence, Confidence::Current);
+        EXPECT_FALSE(project(state).observation_lost);
+        const auto arrival = 9000 + pause.count() + latency;
+        state = reduce(state, Event::confidence_aged(at_ms(arrival)));
+        const auto before = project(state);
+        EXPECT_EQ(before.confidence, arrival <= 15000 ? Confidence::Current : Confidence::Degraded);
+        EXPECT_EQ(before.stale_indicator, arrival > 15000);
+        EXPECT_EQ(before.remaining.known, arrival <= 15000);
+        EXPECT_FALSE(before.observation_lost);
+        state = with_connection(state, ConnectionPhase::Connected, at_ms(arrival));
+        state = with_printer_state(state, PrinterState::Printing, at_ms(arrival), 2);
+        EXPECT_EQ(project(state).confidence, Confidence::Current);
+        EXPECT_FALSE(project(state).stale_indicator);
+    }
+}
+
+TEST(ConnectionRecoveryTests, RepeatedTimeoutsRetainTruthUntilExactExpiryThenRecover) {
+    auto state = printing_device(at_ms(0));
+    const auto record = project(state).progress;
+    for (const auto end : {9000, 18000, 27000, 36000, 45000, 54000}) {
+        state = with_connection(state, ConnectionPhase::PrinterUnavailable, at_ms(end));
+        state = reduce(state, Event::confidence_aged(at_ms(end)));
+        const auto p = project(state);
+        EXPECT_FALSE(p.observation_lost);
+        EXPECT_EQ(p.progress, record);
+        if (end > 15000) {
+            EXPECT_TRUE(p.stale_indicator);
+            EXPECT_EQ(p.stale_observed_at, at_ms(0));
+            EXPECT_FALSE(p.remaining.known);
+        }
+    }
+    for (const auto arrival : {59999, 60000, 60001}) {
+        auto edge = reduce(state, Event::confidence_aged(at_ms(arrival)));
+        EXPECT_EQ(project(edge).confidence,
+                  arrival <= 60000 ? Confidence::Degraded : Confidence::Unavailable);
+        EXPECT_EQ(project(edge).observation_lost, arrival > 60000);
+        edge = with_connection(edge, ConnectionPhase::Connected, at_ms(arrival));
+        edge = with_printer_state(edge, PrinterState::Printing, at_ms(arrival), 2);
+        EXPECT_EQ(project(edge).confidence, Confidence::Current);
+        EXPECT_FALSE(project(edge).stale_indicator);
+    }
+}
+
+TEST(ConnectionRecoveryTests, InitialAcquisitionAndActionableAccessStaySeparate) {
+    auto initial = with_connection(booted_device(), ConnectionPhase::Probing, at_ms(1000));
+    auto p = project(initial);
+    EXPECT_TRUE(p.acquiring_connection);
+    EXPECT_FALSE(p.stale_indicator);
+    EXPECT_FALSE(p.stale_observed_at.has_value());
+    for (const auto phase : {ConnectionPhase::Unauthorized, ConnectionPhase::UnsupportedApi}) {
+        auto state = with_connection(printing_device(), phase, at_ms(20000));
+        state = reduce(state, Event::confidence_aged(at_ms(20000)));
+        p = project(state);
+        EXPECT_EQ(p.layer, PresentationLayer::AccessCondition);
+        EXPECT_FALSE(p.stale_indicator);
+        EXPECT_EQ(p.access_condition, phase == ConnectionPhase::Unauthorized
+                                          ? AccessCondition::AuthenticationRequired
+                                          : AccessCondition::UnsupportedInterface);
+        EXPECT_EQ(prd::prusalink::next_delay(phase).count(), 60000);
+    }
+    auto unconfigured =
+        with_connection(booted_device(), ConnectionPhase::Unconfigured, at_ms(1000));
+    EXPECT_FALSE(project(unconfigured).stale_indicator);
+    EXPECT_FALSE(project(unconfigured).acquiring_connection);
+    EXPECT_EQ(prd::prusalink::next_delay(ConnectionPhase::Unconfigured).count(), 60000);
+    EXPECT_EQ(prd::prusalink::poll_pause(prd::prusalink::PollRequest::VersionProbe,
+                                         {ConnectionPhase::Connected, {}, true})
+                  .count(),
+              0);
+}
+
+TEST(ConnectionRecoveryTests, WifiLossAndRealAttentionRemainTruthful) {
+    auto state = printing_device();
+    NetworkObservation down;
+    down.phase = NetworkPhase::Reconnecting;
+    down.fault = NetworkFault::LinkLost;
+    state = reduce(state, Event::network_observed(at_ms(5000), down));
+    state = with_connection(state, ConnectionPhase::WaitingForNetwork, at_ms(5000));
+    state = reduce(state, Event::confidence_aged(at_ms(20000)));
+    EXPECT_EQ(project(state).confidence, Confidence::Degraded);
+    EXPECT_TRUE(project(state).stale_indicator);
+    for (const auto condition : {PrinterState::Attention, PrinterState::Error}) {
+        auto alert = with_printer_state(state, condition, at_ms(21000), 2);
+        alert = reduce(alert, Event::confidence_aged(at_ms(41000)));
+        EXPECT_EQ(project(alert).subject_condition, condition == PrinterState::Attention
+                                                        ? SubjectCondition::Attention
+                                                        : SubjectCondition::Error);
+        EXPECT_FALSE(project(alert).remaining.known);
+    }
+    down.phase = NetworkPhase::Connected;
+    down.fault = NetworkFault::None;
+    state = reduce(state, Event::network_observed(at_ms(22000), down));
+    state = with_connection(state, ConnectionPhase::Connected, at_ms(22000));
+    state = with_printer_state(state, PrinterState::Printing, at_ms(22000), 2);
+    EXPECT_EQ(project(state).confidence, Confidence::Current);
+}
+
+TEST(ConnectionRecoveryTests, RoutineRetriesDoNotWakeDarkPanelAndRecoveryStillArrives) {
+    auto state = printing_device();
+    state = with_printer_state(state, PrinterState::Ready, at_ms(1000), 2);
+    state = reduce(state, Event::button_gesture(at_ms(2000), ButtonGesture::ShortPress));
+    ASSERT_EQ(state.display.power, DisplayPower::Off);
+    for (const auto now : {9000, 18000, 27000}) {
+        state = with_connection(state, ConnectionPhase::PrinterUnavailable, at_ms(now));
+        state = reduce(state, Event::confidence_aged(at_ms(now)));
+        EXPECT_EQ(state.display.power, DisplayPower::Off);
+    }
+    state = reduce(state, Event::confidence_aged(at_ms(62000)));
+    ASSERT_EQ(state.display.power, DisplayPower::Off);
+    state = with_connection(state, ConnectionPhase::PrinterUnavailable, at_ms(72000));
+    EXPECT_EQ(state.display.power, DisplayPower::Off);
+    const auto lost = display_policy::situation_of(state);
+    state = with_connection(state, ConnectionPhase::Connected, at_ms(73000));
+    state = with_printer_state(state, PrinterState::Ready, at_ms(73000), 3);
+    EXPECT_EQ(project(state).confidence, Confidence::Current);
+    EXPECT_NE(display_policy::situation_of(state), lost);
+    // app_core requests this wake for a meaningful situation change; polling itself does not.
+    EXPECT_EQ(state.display.power, DisplayPower::Off);
+    state = reduce(state, Event::display_wake(at_ms(73000)));
+    EXPECT_EQ(state.display.power, DisplayPower::On);
 }
