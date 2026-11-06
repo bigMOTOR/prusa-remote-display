@@ -384,6 +384,23 @@ set_source_files_properties(../../components/validation/src/printing_timeline_fl
 
 gtest_discover_tests(prd_host_tests)
 
+# A small dependency-free regression for the production public HTTPS limits.
+add_executable(prd_public_https_buffer_tests network/public_https_buffer_tests.cpp)
+target_include_directories(prd_public_https_buffer_tests PRIVATE ../../components/network/src)
+target_compile_options(prd_public_https_buffer_tests PRIVATE -Wall -Wextra -Wpedantic -Werror=format)
+add_test(NAME public_https_buffer COMMAND prd_public_https_buffer_tests)
+
+# Execute the actual SDK adapter, intercepting only its external API boundary.
+add_executable(prd_public_https_adapter_tests network/public_https_adapter_tests.cpp
+    ../../components/network/src/public_https.cpp
+    ../../components/network/src/request_budget.cpp
+    ../../components/network/src/public_stream.cpp)
+target_include_directories(prd_public_https_adapter_tests PRIVATE support/public_https
+    ../../components/network/include ../../components/network/src
+    ../../components/diagnostics/include)
+target_compile_options(prd_public_https_adapter_tests PRIVATE -Wall -Wextra -Wpedantic -Werror=format)
+add_test(NAME public_https_adapter COMMAND prd_public_https_adapter_tests)
+
 # Compile the real OTA adapter with a narrowly scoped test-only IDF API boundary.
 target_sources(prd_host_tests PRIVATE ota/device_boot_tests.cpp
     ../../components/ota/src/device_boot.cpp)

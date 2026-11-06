@@ -15,6 +15,7 @@
 #include "diagnostics/log.hpp"
 #include "diagnostics/tags.hpp"
 
+#include "public_https_limits.hpp"
 #include "public_stream.hpp"
 #include "request_budget.hpp"
 #include "vendor_log_policy.hpp"
@@ -23,8 +24,8 @@ namespace prd::network {
 namespace {
 
 constexpr std::size_t kReadChunk = 1024;
-constexpr std::size_t kMaximumUrl = 1024;
-constexpr std::size_t kMaximumLocation = 1024;
+constexpr std::size_t kMaximumUrl = public_https_limits::kMaximumUrl;
+constexpr std::size_t kMaximumLocation = public_https_limits::kMaximumUrl;
 constexpr std::uint8_t kHardRedirectLimit = 2;
 constexpr int kReadTimedOut = -ESP_ERR_HTTP_EAGAIN;
 
@@ -151,7 +152,7 @@ std::string_view log_label(const PublicHttpsOutcome outcome) {
     }
     return "unknown";
 }
-
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): #8, retain reviewed flow.
 PublicHttpsResponse get_public_https(const PublicHttpsRequest& request) {
     PublicHttpsResponse response;
     if (!request_shape_valid(request) ||
@@ -175,6 +176,7 @@ PublicHttpsResponse get_public_https(const PublicHttpsRequest& request) {
         esp_http_client_config_t config = {};
         config.url = current.c_str();
         config.method = HTTP_METHOD_GET;
+        config.buffer_size_tx = public_https_limits::kTransmitBufferSize;
         config.timeout_ms = static_cast<int>(
             budget::connect_timeout_ms(allowances(request), elapsed_ms(started_us)));
         config.disable_auto_redirect = true;
