@@ -46,9 +46,7 @@ the connection is lost.
 
 **When a print finishes.** A short demo filmed on the actual display using simulated print data.
 
-[![Watch the print completion demo. Completed at 100% on the physical display.](assets/videos/print-completion-demo.jpg)](assets/videos/print-completion-demo.mp4)
-
-[Watch the demo](assets/videos/print-completion-demo.mp4)
+https://github.com/user-attachments/assets/41cf7bc3-14ca-4d51-8aee-b22a3b54a394
 
 | Paused | Completed | Printer error |
 | :---: | :---: | :---: |
