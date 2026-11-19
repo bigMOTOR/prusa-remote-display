@@ -10,9 +10,9 @@ non-touch board is currently supported. Installation changes the
 display, not your printer. You should not need to compile firmware.
 For parts, assembly and printer setup, start with [Get started](get-started.md).
 
-Use Chrome or Edge (Safari and Firefox are not supported). Use the firmware
-and browser installer identified by the project's official release notes;
-source tags and development builds are not substitutes for a signed release.
+Use Chrome or Edge (Safari and Firefox are not supported). Open the
+[browser installer](https://bigmotor.github.io/prusa-remote-display/) and use the signed firmware for your board.
+Source tags and development builds are not substitutes for a signed release.
 
 ## Choose installation or update
 
@@ -27,7 +27,7 @@ source tags and development builds are not substitutes for a signed release.
 ## Initial installation over USB
 
 Use a computer running **Chrome or Edge**, a USB data cable and the
-browser installer linked in the official release notes.
+[browser installer](https://bigmotor.github.io/prusa-remote-display/).
 
 Before starting, have your 2.4 GHz Wi-Fi details and local PrusaLink details to
 hand. You will need them after an initial installation. The tested printer scope
@@ -35,9 +35,9 @@ is the Prusa CORE One; MK4S and MINI compatibility has not been established.
 
 To install:
 
-1. Open the project's official [GitHub Releases page](https://github.com/bigMOTOR/prusa-remote-display/releases)
-   and follow the browser-installer link in the matching release. Read that
-   release's supported-board and installation notes.
+1. Open the [browser installer](https://bigmotor.github.io/prusa-remote-display/). Check the matching release on the
+   [GitHub Releases page](https://github.com/bigMOTOR/prusa-remote-display/releases)
+   for supported-board and installation notes.
 2. Connect the supported non-touch board directly to the computer with a
    data-capable USB cable. Close serial monitors and other installers that may
    already be using it.

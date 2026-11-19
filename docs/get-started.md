@@ -58,15 +58,14 @@ should move freely; do not force a stiff button.
 
 ## Install the firmware
 
-Use a computer, a USB data cable and the browser installer linked from the
-project's official [release notes](https://github.com/bigMOTOR/prusa-remote-display/releases).
+Open the [browser installer](https://bigmotor.github.io/prusa-remote-display/) on a computer with a USB data cable.
 Use Chrome or Edge (Safari and Firefox are not supported).
-Read the release notes for the exact board and firmware version before
-connecting the display.
+Read the [official release notes](https://github.com/bigMOTOR/prusa-remote-display/releases)
+for the exact board and firmware version before connecting the display.
 
 1. Connect the non-touch display board directly to the computer with the data
    cable. Close serial monitors and other installers using its USB port.
-2. Open the release's browser installer. Confirm the exact board, select its
+2. In the browser installer, confirm the exact board, select its
    USB port and read the erase warning. ESP32-S3 detection alone cannot identify
    the board model.
 3. Start installation and keep USB connected until it finishes.

@@ -25,8 +25,8 @@ printer and never sends printer-control commands.
    and [assembly](enclosure/assembly.md) guides. The case needs no soldering,
    threaded inserts or glue.
    [Case files on Printables](https://www.printables.com/model/1901185).
-3. **Install and connect.** Install the firmware in your browser using a
-   computer and a USB data cable. Then enter your Wi-Fi and PrusaLink details
+3. **Install and connect.** Use the [browser installer](https://bigmotor.github.io/prusa-remote-display/)
+   on a computer with a USB data cable. Then enter your Wi-Fi and PrusaLink details
    on the display's local setup page. You do not need to compile firmware.
 
 Use Chrome or Edge (Safari and Firefox are not supported).
@@ -39,16 +39,21 @@ See the [parts and cost breakdown](docs/parts-and-cost.md).
 
 ## What you will see
 
-Print progress and time remaining take centre stage, with nozzle and bed
-temperatures alongside them. The display follows preparation, printing,
+Print progress takes centre stage, with time remaining and nozzle and bed
+temperatures alongside it. The display follows preparation, printing,
 pauses and completion. It also tells you when the printer needs attention or
 the connection is lost.
 
+**When a print finishes.** A short demo filmed on the actual display using simulated print data.
+
+https://github.com/user-attachments/assets/45594b0d-ce0f-43f1-a8fb-0f223ff1e718
+
 | Paused | Completed | Printer error |
 | :---: | :---: | :---: |
-| ![Paused print on the software renderer.](assets/images/ui-paused.png) | ![Completed print on the software renderer.](assets/images/ui-completed.png) | ![Printer error on the software renderer.](assets/images/ui-error.png) |
+| [![Paused print on the software renderer.](assets/images/ui-paused.png)](assets/images/ui-paused.png) | [![Completed print on the software renderer.](assets/images/ui-completed.png)](assets/images/ui-completed.png) | [![Printer error on the software renderer.](assets/images/ui-error.png)](assets/images/ui-error.png) |
 
-These are software-rendered screen examples, not photographs of the LCD.
+These screen examples are software renders. Open any image to view it at full
+size. The video shows how the display looks on camera.
 [Image sources and attribution](assets/images/README.md).
 
 The completed screen stays bright briefly, then dimly visible
