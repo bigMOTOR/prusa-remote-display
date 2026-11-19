@@ -39,16 +39,23 @@ See the [parts and cost breakdown](docs/parts-and-cost.md).
 
 ## What you will see
 
-Print progress and time remaining take centre stage, with nozzle and bed
-temperatures alongside them. The display follows preparation, printing,
+Print progress takes centre stage, with time remaining and nozzle and bed
+temperatures alongside it. The display follows preparation, printing,
 pauses and completion. It also tells you when the printer needs attention or
 the connection is lost.
 
+**When a print finishes.** A short demo filmed on the actual display using simulated print data.
+
+[![Watch the print completion demo. Completed at 100% on the physical display.](assets/videos/print-completion-demo.jpg)](assets/videos/print-completion-demo.mp4)
+
+[Watch the demo](assets/videos/print-completion-demo.mp4)
+
 | Paused | Completed | Printer error |
 | :---: | :---: | :---: |
-| ![Paused print on the software renderer.](assets/images/ui-paused.png) | ![Completed print on the software renderer.](assets/images/ui-completed.png) | ![Printer error on the software renderer.](assets/images/ui-error.png) |
+| [![Paused print on the software renderer.](assets/images/ui-paused.png)](assets/images/ui-paused.png) | [![Completed print on the software renderer.](assets/images/ui-completed.png)](assets/images/ui-completed.png) | [![Printer error on the software renderer.](assets/images/ui-error.png)](assets/images/ui-error.png) |
 
-These are software-rendered screen examples, not photographs of the LCD.
+These screen examples are software renders. Open any image to view it at full
+size. The video shows how the display looks on camera.
 [Image sources and attribution](assets/images/README.md).
 
 The completed screen stays bright briefly, then dimly visible
