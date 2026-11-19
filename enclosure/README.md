@@ -16,7 +16,7 @@ moving button. The two printed nut keepers have been removed; the square M3 nuts
 The photograph shows the current printed and assembled version, confirmed by
 the project author on 3 November 2026. Only the two printed nut keepers were
 removed from the print plate; the remaining geometry is unchanged.
-A public release with ready-to-install firmware is not available yet.
+For ready-to-install firmware, follow the [browser installation guide](../docs/installation-and-recovery.md#initial-installation-over-usb).
 
 Design and CAD exports: [CERN-OHL-S-2.0](../LICENSE-hardware).
 Documentation: [CC-BY-4.0](../LICENSE-documentation).
