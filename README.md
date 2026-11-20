@@ -33,8 +33,8 @@ Use Chrome or Edge (Safari and Firefox are not supported).
 
 **[Build and set up your display →](docs/get-started.md)**
 
-The Waveshare board is the main purchase. Allow about US$20–26 and check the price of the non-touch version.
-If you already have PLA, the listed fasteners, a USB data cable and a 5 V USB supply, the board may be all you need to buy.
+The Waveshare board is the main purchase. Allow about US$20–26 before shipping and tax, and check the price of the non-touch version.
+If you already have the supplies and tools in the parts list, the board may be all you need to buy.
 See the [parts and cost breakdown](docs/parts-and-cost.md) for anything you’re missing.
 
 ## What you will see
