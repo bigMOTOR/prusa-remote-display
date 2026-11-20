@@ -33,9 +33,9 @@ Use Chrome or Edge (Safari and Firefox are not supported).
 
 **[Build and set up your display →](docs/get-started.md)**
 
-The main purchase is just the Waveshare board, at about US$20–26.
-If you buy the other materials new too (filament, a cable, a USB charger and screws), budget about US$40–50 in total for one build, before shipping and tax.
-See the [parts and cost breakdown](docs/parts-and-cost.md).
+The Waveshare board is the main purchase. Allow about US$20–26 before shipping and tax, and check the price of the non-touch version.
+If you already have the supplies and tools in the parts list, the board may be all you need to buy.
+See the [parts and cost breakdown](docs/parts-and-cost.md) for anything you’re missing.
 
 ## What you will see
 
