@@ -40,10 +40,11 @@ two M3×8 ISO 7380-1 screws and two thin square M3 nuts for the cover.
 See the [assembly instructions](../enclosure/assembly.md) for their exact roles.
 Use a regulated 5 V USB power supply and a data-capable USB cable.
 
-The main purchase is just the Waveshare board, at about US$20–26.
-If you buy the other materials new too (filament, a cable, a USB charger and screws), budget about US$40–50 in total for one build, before shipping and tax.
-See the [parts list and cost estimate](parts-and-cost.md) for quantities and buying assumptions. No soldering,
-threaded inserts or glue are required for this enclosure assembly.
+The Waveshare board is the main purchase. Allow about US$20–26 and check the price of the non-touch version.
+If you already have PLA, the listed fasteners, a USB data cable and a 5 V USB supply, the board may be all you need to buy.
+See the [parts and cost breakdown](parts-and-cost.md) for anything you’re missing.
+
+No soldering, threaded inserts or glue are required for this enclosure assembly.
 
 ## Print and assemble the case
 
