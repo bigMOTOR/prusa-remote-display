@@ -4,6 +4,7 @@
 """Measure a real public GitHub OTA redirect without logging its signed query."""
 
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -14,6 +15,12 @@ import urllib.request
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, response, code, message, headers, new_url):
         return None
+
+
+class ReleaseMetadataHttpError(Exception):
+    def __init__(self, status: int):
+        super().__init__()
+        self.status = status
 
 
 def check():
@@ -29,8 +36,17 @@ def check():
         "https://api.github.com/repos/bigMOTOR/prusa-remote-display/releases/latest",
         headers={**headers, "Accept": "application/vnd.github+json"},
     )
-    with opener.open(request, timeout=20) as response:
-        payload = response.read(1024 * 1024 + 1)
+    token = os.environ.get("OTA_RELEASE_METADATA_TOKEN")
+    if token is not None:
+        if not token:
+            raise ValueError("empty release metadata token")
+        request.add_unredirected_header("Authorization", f"Bearer {token}")
+    try:
+        with opener.open(request, timeout=20) as response:
+            payload = response.read(1024 * 1024 + 1)
+    except urllib.error.HTTPError as response:
+        with response:
+            raise ReleaseMetadataHttpError(response.code) from None
     if len(payload) > 1024 * 1024:
         raise ValueError("release metadata exceeds measurement bound")
     release = json.loads(payload)
@@ -85,7 +101,10 @@ if __name__ == "__main__":
         check()
     except Exception as error:
         # Never print exception messages/tracebacks: urllib errors may contain
-        # a signed Location. There is deliberately no auth or artifact output.
-        print(f"GitHub OTA URL check FAIL ({type(error).__name__}); "
+        # sensitive values. Only the metadata HTTP status is safe to report.
+        failure = type(error).__name__
+        if isinstance(error, ReleaseMetadataHttpError):
+            failure = f"release metadata HTTP {error.status:d}"
+        print(f"GitHub OTA URL check FAIL ({failure}); "
               "signed URLs and response values withheld", file=sys.stderr)
         sys.exit(1)

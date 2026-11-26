@@ -190,6 +190,8 @@ jobs:
 
       - name: Check real GitHub OTA download URL headroom
         if: ${{ !cancelled() }}
+        env:
+          OTA_RELEASE_METADATA_TOKEN: ${{ github.token }}
         run: python3 firmware/tools/check-github-ota-url.py
 
   # --- browser-tests (not numbered in §13.2) ------------------------------
