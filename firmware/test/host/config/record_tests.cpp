@@ -390,3 +390,31 @@ TEST(ConfigRecordTests, DisplayPreferencesKeepTheOldRecordAndHaveIndependentDefa
     EXPECT_EQ(prd::config::load_display_preferences(store).mode, DisplayMode::Timer);
     EXPECT_EQ(prd::config::load_display_preferences(store).backlight, Backlight::Standard);
 }
+
+TEST(ConfigRecordTests, UnknownDisplayPreferenceVersionUsesBothDefaults) {
+    FakeKeyValue store;
+    ASSERT_EQ(store.write_u32(Namespace::Config, "display_prefs", 0x00020201U),
+              prd::storage::Result::Ok);
+    const auto value = prd::config::load_display_preferences(store);
+    EXPECT_EQ(value.mode, prd::app_model::DisplayMode::Timer);
+    EXPECT_EQ(value.backlight, prd::app_model::Backlight::Standard);
+    EXPECT_TRUE(store.has(Namespace::Config, "display_prefs"));
+}
+
+TEST(ConfigRecordTests, OutOfRangeDisplayModeUsesBothDefaults) {
+    FakeKeyValue store;
+    ASSERT_EQ(store.write_u32(Namespace::Config, "display_prefs", 0x00010202U),
+              prd::storage::Result::Ok);
+    const auto value = prd::config::load_display_preferences(store);
+    EXPECT_EQ(value.mode, prd::app_model::DisplayMode::Timer);
+    EXPECT_EQ(value.backlight, prd::app_model::Backlight::Standard);
+}
+
+TEST(ConfigRecordTests, OutOfRangeDisplayBacklightUsesBothDefaults) {
+    FakeKeyValue store;
+    ASSERT_EQ(store.write_u32(Namespace::Config, "display_prefs", 0x00010301U),
+              prd::storage::Result::Ok);
+    const auto value = prd::config::load_display_preferences(store);
+    EXPECT_EQ(value.mode, prd::app_model::DisplayMode::Timer);
+    EXPECT_EQ(value.backlight, prd::app_model::Backlight::Standard);
+}

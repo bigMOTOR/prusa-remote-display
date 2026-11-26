@@ -43,6 +43,7 @@
 #include "diagnostics/tags.hpp"
 #include "diagnostics/task_report.hpp"
 #include "display/display.hpp"
+#include "display_settings_flow.hpp"
 #include "exclusive_operation.hpp"
 #include "factory_reset.hpp"
 #include "network/discovery.hpp"
@@ -67,7 +68,6 @@
 #include "storage/storage.hpp"
 #include "submission_handoff.hpp"
 #include "ui/ui.hpp"
-#include "validation/user_demo.hpp"
 #include "validation/validation.hpp"
 #include "wifi_restore.hpp"
 
@@ -224,8 +224,7 @@ static_assert(CONFIG_ESP_IPC_TASK_STACK_SIZE >= 2560,
 // application task and the boot flow both reach it, and because a 2 kB object has no
 // business on a task stack.
 app_store::Store g_store;
-validation::UserDemo g_user_demo;
-bool g_user_demo_exit_requested = false;
+DisplaySettingsFlow g_display_settings_flow;
 
 QueueHandle_t g_events = nullptr;
 std::uint32_t g_events_dropped = 0;
@@ -347,6 +346,12 @@ bool g_display_output_posted_valid = false;
 // The owner-selected brightness baselines for this checkpoint.
 constexpr app_model::display_policy::Brightness kDisplayBrightness{};
 
+// RECORDED DEBT: DisplayState::brightness_percent is an observation of the driver at startup. The old
+// ConfigV1 brightness, dim_delay_seconds and sleep_delay_seconds remain stored and unused
+// by display policy. Changing their meaning belongs to an explicit configuration migration.
+// The physically selected Standard remains Active 65, Quiet 50, and 55% of Quiet light
+// when Dimmed (control 38, duty 487). Scaling the control value instead of emitted light
+// previously produced an unreadable Dimmed endpoint.
 // The selected preset moves both lit levels by the same control step. Dimmed still has
 // the existing fraction of Quiet's emitted light, with the panel's perceptual curve applied.
 app_model::display_policy::Levels g_display_levels{};
@@ -364,18 +369,6 @@ const app_model::display_policy::Levels& display_levels(const app_model::Backlig
     return g_display_levels;
 }
 
-// While a status is held indefinitely, worker silence must still cross the freshness
-// boundaries. The demo also uses this before restoring the real presentation.
-void age_printer_observation(const app_model::Timestamp now) {
-    const auto& state = g_store.state();
-    if (state.printer.ever_observed &&
-        app_model::classify_freshness(now - state.printer.observed_at,
-                                      app_model::FreshnessPolicy{}) !=
-            state.printer_connection.freshness) {
-        dispatch(app_model::Event::confidence_aged(now));
-    }
-}
-
 void display_tick(const std::uint32_t now_ms) {
     // ⛔ THE BENCH HARNESS OWNS THE BACKLIGHT WHEN IT IS COMPILED, and the policy stands down
     // entirely. Same question display_patterns_own_panel() already answers for the panel itself:
@@ -386,10 +379,13 @@ void display_tick(const std::uint32_t now_ms) {
         return;
     }
 
-    if (g_store.state().display.preferences.mode == app_model::DisplayMode::PrinterStatus) {
-        age_printer_observation(platform::monotonic_time());
-    }
     const app_model::AppState& state = g_store.state();
+    if (state.display.preferences.mode == app_model::DisplayMode::PrinterStatus &&
+        (state.subject == app_model::SubjectState::Ready ||
+         state.subject == app_model::SubjectState::Completed)) {
+        // The optional holds must stop when a silent worker supplies no new event.
+        g_store.age_observation_if_due(platform::monotonic_time());
+    }
 
     const auto situation = app_model::display_policy::situation_of(state);
     const bool situation_changed = !g_display_situation_seen || situation != g_display_situation;
@@ -487,7 +483,7 @@ void display_tick(const std::uint32_t now_ms) {
 // It must not dispatch and must not block. It does neither: project() is pure, and
 // ui::submit() overwrites a one-deep queue and returns.
 void publish_presentation(const app_model::AppState& state, void* /*context*/) {
-    if (g_user_demo.active() && validation::may_present_user_demo(state)) {
+    if (g_display_settings_flow.hides_live(state)) {
         return;
     }
     ui::submit(app_model::project(state), state.revision);
@@ -979,7 +975,6 @@ ota::ReleaseCheckSchedule g_release_schedule;
 // deletes the unpublished queue, so a web callback can never use freed storage.
 std::atomic<QueueHandle_t> g_update_requests{nullptr};
 std::atomic<QueueHandle_t> g_display_settings_requests{nullptr};
-provisioning::DisplaySettings g_display_settings;
 std::uint32_t g_live_ota_generation = 0;
 std::uint32_t g_admitted_live_ota_generation = 0;
 std::uint32_t g_reboot_after_revision = 0;
@@ -1036,7 +1031,7 @@ void start_live_ota();
 void live_ota_tick();
 void display_settings_tick(std::uint32_t now_ms);
 void apply_queued_event(const app_model::Event& event);
-void finish_user_demo(bool resume_monitoring);
+void begin_display_settings();
 [[nodiscard]] provisioning::UpdateHandoff note_update_request(void* context);
 
 bool note_display_settings(const provisioning::DisplayRequest& request, void* /*context*/) {
@@ -1217,12 +1212,7 @@ void boot_sequence() {
         case factory_reset::BootAction::LoadConfiguration:
             enter_boot_phase(app_model::BootPhase::LoadingConfiguration);
             loaded = load_configuration();
-            g_display_settings.preferences = config::load_display_preferences(storage::key_value());
-            dispatch(app_model::Event::display_preferences(platform::monotonic_time(),
-                                                           g_display_settings.preferences));
-            provisioning::publish_display_settings(g_display_settings);
-            g_display_settings_requests.store(xQueueCreate(1, sizeof(provisioning::DisplayRequest)),
-                                              std::memory_order_release);
+            begin_display_settings();
             break;
 
         // ⛔ NOTHING IS LOADED AND NOTHING IS RECONCILED. `loaded` stays default-constructed, which
@@ -3707,116 +3697,78 @@ void run_factory_reset() {
     g_reset_restart_due_us = esp_timer_get_time() + kFactoryResetHoldUs;
 }
 
-// A configured display goes back to monitoring through the ordinary setup teardown. On a new
-// display, the same setup session is still needed, so its original presentation resumes.
-void finish_user_demo(const bool resume_monitoring) {
-    const auto& live = g_store.state();
-    const bool submission_waiting =
-        g_submissions != nullptr && uxQueueMessagesWaiting(g_submissions) != 0;
-    const bool leave_setup = resume_monitoring && validation::may_present_user_demo(live) &&
-                             live.configuration.status == app_model::ConfigurationStatus::Valid &&
-                             !g_transaction_running && !g_wifi_validated && !g_rollback.held &&
-                             !submission_waiting;
-    if (leave_setup) {
-        age_printer_observation(platform::monotonic_time());
-        g_user_demo.stop();
-        stop_setup_ap();
-        dispatch(app_model::Event::provisioning_phase(platform::monotonic_time(),
-                                                      app_model::ProvisioningPhase::Inactive));
-    } else {
-        g_user_demo.stop();
-        publish_presentation(live, nullptr);
+struct DisplaySettingsPort {
+    [[nodiscard]] const app_model::AppState& state() const {
+        return g_store.state();
     }
+    [[nodiscard]] storage::KeyValue& storage() const {
+        return storage::key_value();
+    }
+
+    [[nodiscard]] bool setup_open() const {
+        return network::setup_ap::running() && g_privileged.active();
+    }
+
+    [[nodiscard]] DisplaySettingsConditions conditions() const {
+        DisplaySettingsConditions live;
+        live.exclusive = exclusivity();
+        live.setup_open = setup_open();
+        live.wifi_validated = g_wifi_validated;
+        live.rollback_pending = g_rollback.held;
+        live.station_restore_due = g_station_restore_due;
+        live.submission_waiting =
+            g_submissions != nullptr && uxQueueMessagesWaiting(g_submissions) != 0;
+        live.bench_owns_panel = validation::printing_timeline_compiled() ||
+                                validation::walk_compiled() || validation::scenarios_compiled() ||
+                                validation::display_patterns_own_panel() ||
+                                validation::brightness_harness_owns_panel();
+        return live;
+    }
+
+    [[nodiscard]] bool receive(provisioning::DisplayRequest& request) const {
+        const auto requests = g_display_settings_requests.load(std::memory_order_acquire);
+        return requests != nullptr && xQueueReceive(requests, &request, 0) == pdTRUE;
+    }
+
+    void note_activity(const std::uint32_t now_ms) const {
+        g_privileged.note_activity(now_ms);
+    }
+    void dispatch(const app_model::Event& event) const {
+        ::prd::app_core::dispatch(event);
+    }
+    void publish(const provisioning::DisplaySettings& settings) const {
+        provisioning::publish_display_settings(settings);
+    }
+    void present(const app_model::Presentation& view, const std::uint32_t revision) const {
+        ui::submit(view, revision);
+    }
+    void age_observation(const app_model::Timestamp now) const {
+        g_store.age_observation_if_due(now);
+    }
+    void teardown_setup() const {
+        stop_setup_ap();
+    }
+};
+
+void begin_display_settings() {
+    DisplaySettingsPort port;
+    g_display_settings_flow.begin(port, platform::monotonic_time());
+    g_display_settings_requests.store(xQueueCreate(1, sizeof(provisioning::DisplayRequest)),
+                                      std::memory_order_release);
 }
 
 void apply_queued_event(const app_model::Event& event) {
-    if (g_user_demo.active() && event.type == app_model::EventType::ButtonGestureObserved) {
-        if (event.button.gesture == app_model::ButtonGesture::ShortPress) {
-            // Provisioning and OTA get their normal turns before the demo can close
-            // the setup access point. This tap has already been consumed by the demo.
-            g_user_demo_exit_requested = true;
-            return;
-        }
-
-        // Holds keep their usual setup/reset meanings. End the demo before applying them.
-        finish_user_demo(false);
+    DisplaySettingsPort port;
+    if (!g_display_settings_flow.consume_gesture(port, event)) {
+        (void)g_store.dispatch(event);
+        note_gesture(event);
     }
-
-    (void)g_store.dispatch(event);
-    note_gesture(event);
 }
 
 void display_settings_tick(const std::uint32_t now_ms) {
-    const auto requests = g_display_settings_requests.load(std::memory_order_acquire);
-    if (requests == nullptr) {
-        return;
-    }
-
-    const auto conditions = exclusivity();
-    const auto& state = g_store.state();
-    const bool adjustable = network::setup_ap::running() && g_privileged.active() &&
-                            exclusive::provisioning_work_permitted(conditions) &&
-                            !conditions.first_boot_pending && !conditions.configuration_in_flight &&
-                            !conditions.factory_reset_confirmation_armed &&
-                            state.device_fault == app_model::DeviceFaultReason::None;
-    const bool demo_allowed =
-        adjustable && validation::may_present_user_demo(state) && !g_wifi_validated &&
-        !g_rollback.held && !g_station_restore_due && !validation::printing_timeline_compiled() &&
-        !validation::walk_compiled() && !validation::scenarios_compiled() &&
-        !validation::display_patterns_own_panel() && !validation::brightness_harness_owns_panel();
-
-    const auto now = platform::monotonic_time();
-    const bool exit_requested = g_user_demo_exit_requested;
-    g_user_demo_exit_requested = false;
-    if (g_user_demo.active()) {
-        if (!demo_allowed) {
-            finish_user_demo(false);
-        } else if (exit_requested || g_user_demo.expired(now)) {
-            finish_user_demo(true);
-        }
-    }
-
-    provisioning::DisplayRequest request;
-    const bool received = xQueueReceive(requests, &request, 0) == pdTRUE;
-    if (received) {
-        if (request.action == provisioning::DisplayAction::Demo) {
-            if (demo_allowed && g_privileged.active() && g_user_demo.start(now)) {
-                g_privileged.note_activity(now_ms);
-            }
-        } else {
-            ++g_display_settings.revision;
-            g_display_settings.saved =
-                adjustable && g_privileged.active() && !g_user_demo.active() &&
-                config::save_display_preferences(storage::key_value(), request.preferences);
-            if (g_display_settings.saved) {
-                g_display_settings.preferences = request.preferences;
-                g_privileged.note_activity(now_ms);
-                dispatch(app_model::Event::display_preferences(now, request.preferences));
-            }
-        }
-    }
-
-    if (g_user_demo.active()) {
-        const auto frame = g_user_demo.advance(now);
-        if (frame.has_value()) {
-            // Demo frames carry no real store revision. They cannot satisfy a flush-based OTA gate.
-            ui::submit(*frame, 0U);
-        } else if (!g_user_demo.active()) {
-            finish_user_demo(true);
-        }
-    }
-
-    const bool demo_running = g_user_demo.active();
-    const bool adjustable_now = adjustable && g_privileged.active() && !demo_running;
-    const bool demo_available = demo_allowed && g_privileged.active() && !demo_running;
-    const bool changed = g_display_settings.adjustable != adjustable_now ||
-                         g_display_settings.demo_available != demo_available ||
-                         g_display_settings.demo_running != demo_running;
-    if (changed || received) {
-        g_display_settings.adjustable = adjustable_now;
-        g_display_settings.demo_available = demo_available;
-        g_display_settings.demo_running = demo_running;
-        provisioning::publish_display_settings(g_display_settings);
+    if (g_display_settings_requests.load(std::memory_order_acquire) != nullptr) {
+        DisplaySettingsPort port;
+        g_display_settings_flow.tick(port, platform::monotonic_time(), now_ms);
     }
 }
 

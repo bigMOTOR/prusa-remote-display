@@ -578,6 +578,16 @@ void OperationalScene::apply(const app_model::Presentation& presentation,
         return;
     }
 
+    if (presentation.ready_withheld) {
+        // The observed ineligible status has no Ready frame. Retire the previous composition
+        // on the existing appearance clock so reversals can resume from the painted level.
+        auto destination = motion_.destination();
+        destination.values[OperationalPose::AppearanceAlpha] = 0.0;
+        motion_.target(destination);
+        paint_motion();
+        return;
+    }
+
     // WHAT THIS STATE SHOWS is resolved once, purely, and host-tested. The scene applies it.
     const OperationalContent content = resolve(presentation);
     content_ = content;

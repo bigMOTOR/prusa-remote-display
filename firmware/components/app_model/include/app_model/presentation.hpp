@@ -304,6 +304,10 @@ struct Presentation {
     // and it would narrow this predicate rather than replace it.
     bool at_visual_rest{false};
 
+    // An observed but ineligible resting status. The existing arc can recede into blank
+    // without routing through Connecting or starting an Unavailable acknowledgement.
+    bool ready_withheld{false};
+
     // Firmware update progress, kept separate from `progress` because Production
     // UI §9 forbids representing it with the operational Progress Ring.
     OtaPhase ota_phase{OtaPhase::Idle};

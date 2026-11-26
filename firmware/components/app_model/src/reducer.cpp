@@ -1342,9 +1342,6 @@ void derive_layers(AppState& state, const ReducerPolicy& policy, const Timestamp
             !state.printer.is_busy && state.subject_condition == SubjectCondition::None;
         if (locally_ready) {
             state.subject = SubjectState::Ready;
-            if (state.display.observation_interrupted || state.confidence == Confidence::Degraded) {
-                state.confidence = Confidence::Unavailable;
-            }
         } else {
             state.subject = state.display.waiting_for_ready ? SubjectState::Completed
                                                             : SubjectState::AcquiringState;

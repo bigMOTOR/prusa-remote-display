@@ -243,6 +243,19 @@ TEST_F(ProvisioningServerAdmission, DisplayActionsRequireActiveSetupSurfaceAndSt
     EXPECT_EQ(sink.display_actions.size(), 2U);
 }
 
+TEST_F(ProvisioningServerAdmission, StartPublishesDisplaySettingsSeededBeforeServerExists) {
+    stop();
+    DisplaySettings initial;
+    initial.preferences = {prd::app_model::DisplayMode::PrinterStatus,
+                           prd::app_model::Backlight::Low};
+    publish_display_settings(initial);
+    ASSERT_TRUE(start_session());
+    const auto snapshot = status().response_body;
+    EXPECT_EQ(json_value(snapshot, "displayMode"), "1");
+    EXPECT_EQ(json_value(snapshot, "backlight"), "0");
+    EXPECT_NE(snapshot.find(R"("canShowDemo":false)"), std::string::npos);
+}
+
 TEST_F(ProvisioningServerAdmission, RegisteredAssetsSendExactBytesAndHeaders) {
     struct Asset {
         const char* route;

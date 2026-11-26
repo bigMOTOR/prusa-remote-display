@@ -80,6 +80,9 @@ inline constexpr std::string_view kJsonContentType = "application/json";
 // Settings and update POSTs share the existing burst of five requests and refill one per
 // second. The setup diagnostic report has its own bucket so reading it leaves submission
 // capacity available after a failure. Both still obey the active setup surface and token gates.
+//
+// WORKING BASELINE, NOT PRODUCT POLICY: a token bucket of 5, refilled one per second. A
+// person correcting a typo is never throttled; a script is.
 inline constexpr std::uint32_t kRateBurst = 5;
 inline constexpr std::uint32_t kRateRefillIntervalMs = 1000;
 

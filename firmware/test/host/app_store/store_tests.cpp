@@ -359,3 +359,26 @@ TEST(StoreTests, MatchesADirectReductionOfTheSameSequence) {
 
     EXPECT_EQ(store.state(), expected);
 }
+
+TEST(StoreTests, AutonomouslyAgesOnlyAtCrossedBoundariesOfItsPolicy) {
+    using namespace prd::app_model;
+    using std::chrono::milliseconds;
+    ReducerPolicy custom;
+    custom.freshness = {milliseconds{5}, milliseconds{10}, milliseconds{15}};
+    prd::app_store::Store store{custom};
+    (void)store.dispatch(Event::printer_snapshot(
+        prd::test::at_ms(5), prd::test::printer_snapshot(PrinterState::Idle, 1)));
+    const auto dispatches = store.statistics().dispatched;
+    store.age_observation_if_due(prd::test::at_ms(10));
+    EXPECT_EQ(store.statistics().dispatched, dispatches);
+    store.age_observation_if_due(prd::test::at_ms(11));
+    EXPECT_EQ(store.state().printer_connection.freshness, DataFreshness::Aging);
+    EXPECT_EQ(store.statistics().dispatched, dispatches + 1U);
+    store.age_observation_if_due(prd::test::at_ms(11));
+    store.age_observation_if_due(prd::test::at_ms(9));
+    EXPECT_EQ(store.statistics().dispatched, dispatches + 1U);
+    store.age_observation_if_due(prd::test::at_ms(16));
+    EXPECT_EQ(store.state().confidence, Confidence::Degraded);
+    store.age_observation_if_due(prd::test::at_ms(21));
+    EXPECT_EQ(store.state().confidence, Confidence::Unavailable);
+}

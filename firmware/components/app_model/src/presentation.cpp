@@ -390,6 +390,7 @@ Presentation project(const AppState& state) {
     view.subject = state.subject;
     view.subject_condition = state.subject_condition;
     view.confidence = state.confidence;
+    const bool status_mode = state.display.preferences.mode == DisplayMode::PrinterStatus;
 
     view.device_fault = state.device_fault;
     view.device_operation = state.device_operation;
@@ -413,6 +414,9 @@ Presentation project(const AppState& state) {
     // Before resolve_components(), which reads it, and before the content seam that reads it to
     // decide whether Ready carries a title at all.
     view.at_visual_rest = presentable && subject_is_at_visual_rest(state, view.layer);
+    view.ready_withheld = presentable && status_mode && state.printer.ever_observed &&
+                          state.subject == SubjectState::AcquiringState &&
+                          state.subject_condition == SubjectCondition::None;
 
     // §11.5: stale values are presentable only behind an explicit indicator, and
     // only while there is something to mark.
@@ -475,7 +479,7 @@ bool operator==(const Presentation& lhs, const Presentation& rhs) {
         lhs.device_fault != rhs.device_fault || lhs.device_operation != rhs.device_operation ||
         lhs.boot_phase != rhs.boot_phase || lhs.provisioning != rhs.provisioning ||
         lhs.setup_failure != rhs.setup_failure || lhs.access_condition != rhs.access_condition ||
-        lhs.modal_surface != rhs.modal_surface) {
+        lhs.modal_surface != rhs.modal_surface || lhs.ready_withheld != rhs.ready_withheld) {
         return false;
     }
 

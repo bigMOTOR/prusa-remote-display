@@ -184,6 +184,10 @@ Scene select(const app_model::Presentation& presentation) {
         return Scene::Unimplemented;
     }
 
+    if (presentation.ready_withheld) {
+        return Scene::Operational;
+    }
+
     switch (presentation.subject) {
     case app_model::SubjectState::Ready:
     case app_model::SubjectState::Preparing:

@@ -9,7 +9,6 @@
 
 #include "diagnostics/log.hpp"
 #include "diagnostics/tags.hpp"
-#include "fonts/fonts.hpp"
 #include "text/scene_text.hpp"
 #include "text/text.hpp"
 #include "wifi_qr.hpp"
@@ -46,6 +45,15 @@ constexpr std::string_view kTag = diagnostics::tag::kUi;
 constexpr std::int32_t kFailureTitleY = theme::kCanvasContent.y;
 constexpr std::int32_t kFailureCopyGap = theme::kSpace1 / 2;
 constexpr std::int32_t kFailureActionY = kFailureTitleY + theme::kLineTitle + kFailureCopyGap;
+
+// The QR clears the full-width copy band first. Hand over the title while the
+// compact action stays readable, then hand over the action with the title held.
+// Both arrangements of one line stay disjoint in time.
+constexpr std::uint32_t kRecoveryTitleFadeStart = theme::kOperationalMotionMs * 7 / 10;
+constexpr std::uint32_t kRecoveryTitleHandoff = theme::kOperationalMotionMs * 3 / 4;
+constexpr std::uint32_t kRecoveryActionFadeStart = theme::kOperationalMotionMs * 4 / 5;
+constexpr std::uint32_t kRecoveryActionHandoff = theme::kOperationalMotionMs * 17 / 20;
+constexpr std::uint32_t kRecoveryActionFadeEnd = theme::kOperationalMotionMs * 9 / 10;
 
 constexpr std::int32_t kQrModules = 33;
 constexpr std::int32_t kQrScale = 4;
@@ -410,16 +418,16 @@ void ProvisioningScene::set_row(const RowIndex index, const std::string_view val
     if (!recovery_layout_ &&
         lv_obj_get_height(target.value) > kRowBoxes[static_cast<std::size_t>(index)].value_line) {
         diagnostics::log(diagnostics::LogLevel::Warning, kTag,
-                         "a value wrapped in the ordinary setup layout");
+                         "a provisioning value is too wide for its column and has wrapped; "
+                         "the composition needs re-measuring against the committed face");
     }
 }
 
-void ProvisioningScene::layout_recovery_rows(const std::int32_t minimum_y,
-                                             const std::int32_t row_gap) {
-    // Centre the manual path alongside the QR. A wide generated credential may wrap;
-    // measure the real label so it never covers the following caption.
+void ProvisioningScene::layout_recovery_rows() {
+    // Measure the actual labels, including a wrapped generated credential. Move each
+    // row from its compact position to its final position as the compact copy recedes.
     std::array<std::int32_t, kRowCount> row_heights{};
-    std::int32_t height = row_gap * (static_cast<std::int32_t>(kRowCount) - 1);
+    std::int32_t height = 0;
     for (std::size_t index = 0; index < kRowCount; ++index) {
         lv_obj_t* const value = rows_[index].value;
         lv_obj_update_layout(value);
@@ -427,36 +435,61 @@ void ProvisioningScene::layout_recovery_rows(const std::int32_t minimum_y,
             theme::kLineCaption + std::max(theme::kLineBody, lv_obj_get_height(value));
         height += row_heights[index];
     }
-    const auto centered_y = kRecoveryQrY + std::max<std::int32_t>(0, (kQrBlock - height) / 2);
-    std::int32_t y = std::max(centered_y, minimum_y);
+    const auto top_for_gap = [&](const std::int32_t gap) {
+        const auto stack_height = height + gap * (static_cast<std::int32_t>(kRowCount) - 1);
+        return kRecoveryQrY + std::max<std::int32_t>(0, (kQrBlock - stack_height) / 2);
+    };
+    const auto full = theme::opacity(theme::Opacity::Full);
+    const auto blend = [&](const auto start, const auto end) {
+        return start + (end - start) * recovery_rows_blend_ / full;
+    };
+    std::int32_t y = recovery_geometry_running_
+                         ? blend(std::max(top_for_gap(theme::kSpace1), compact_rows_min_y_),
+                                 top_for_gap(theme::kSpaceCompact))
+                         : top_for_gap(theme::kSpaceCompact);
+    const auto gap = recovery_geometry_running_ ? blend(theme::kSpace1, theme::kSpaceCompact)
+                                                : theme::kSpaceCompact;
     for (std::size_t index = 0; index < kRowCount; ++index) {
         lv_obj_set_pos(rows_[index].caption, kColumnX, y);
         lv_obj_set_pos(rows_[index].value, kColumnX, y + theme::kLineCaption);
-        y += row_heights[index] + row_gap;
+        y += row_heights[index] + gap;
     }
 }
 
+void ProvisioningScene::layout_recovery_title(const bool compact) {
+    theme::apply_text_style(title_,
+                            compact ? theme::TextRole::Section : theme::TextRole::StateTitle,
+                            theme::Colour::Primary);
+    lv_obj_set_width(title_, compact ? kColumnWidth : theme::kCanvasContent.width);
+}
+
+void ProvisioningScene::layout_recovery_action(const bool compact) {
+    lv_obj_set_width(action_, compact ? kColumnWidth : theme::kCanvasContent.width);
+    lv_obj_set_y(action_, kFailureActionY);
+}
+
 void ProvisioningScene::layout_recovery_content() {
-    // While the QR still occupies the copy band, wrap both labels in the left column.
-    // The complete new wording and the full-contrast QR can then coexist on the first frame.
-    const bool compact = recovery_qr_y_ < kFailureActionY + theme::kLineBody;
-    const auto width = compact ? kColumnWidth : theme::kCanvasContent.width;
-    const auto title_role = compact ? theme::TextRole::Section : theme::TextRole::StateTitle;
-    if (lv_obj_get_style_text_font(title_, LV_PART_MAIN) != fonts::for_role(title_role)) {
-        theme::apply_text_style(title_, title_role, theme::Colour::Primary);
+    if (recovery_geometry_running_ && recovery_elapsed_ < kRecoveryActionHandoff) {
+        // Once the title has handed over, keep the remaining compact action in
+        // place until its own handoff. Neither line borrows a second LVGL object.
+        auto title_bottom = kFailureTitleY + theme::kLineTitle;
+        if (recovery_elapsed_ < kRecoveryTitleHandoff) {
+            lv_obj_remove_flag(title_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_update_layout(title_);
+            title_bottom = kFailureTitleY + lv_obj_get_content_height(title_);
+            lv_obj_set_y(action_, std::max(kFailureActionY, title_bottom + kFailureCopyGap));
+        }
+        const bool have_action = lv_label_get_text(action_)[0] != '\0';
+        auto copy_bottom = title_bottom;
+        if (have_action) {
+            lv_obj_remove_flag(action_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_update_layout(action_);
+            copy_bottom = lv_obj_get_y(action_) + lv_obj_get_content_height(action_);
+        }
+        compact_rows_min_y_ = copy_bottom + theme::kSpace1;
     }
-    lv_obj_set_width(title_, width);
-    lv_obj_set_width(action_, width);
-    lv_obj_update_layout(title_);
-    const auto action_y =
-        kFailureTitleY + std::max(theme::kLineTitle, lv_obj_get_height(title_)) + kFailureCopyGap;
-    lv_obj_set_y(action_, action_y);
-    const bool action_visible = !lv_obj_has_flag(action_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_update_layout(action_);
-    const auto copy_bottom = action_visible ? action_y + lv_obj_get_height(action_)
-                                            : kFailureTitleY + lv_obj_get_height(title_);
-    layout_recovery_rows(copy_bottom + theme::kSpace1,
-                         compact ? theme::kSpace1 : theme::kSpaceCompact);
+
+    layout_recovery_rows();
 }
 
 void ProvisioningScene::step_recovery_geometry(const bool panel_visible, const std::uint32_t now) {
@@ -465,18 +498,33 @@ void ProvisioningScene::step_recovery_geometry(const bool panel_visible, const s
     }
 
     recovery_geometry_clock_.advance(panel_visible, now);
-    const auto elapsed = recovery_geometry_clock_.elapsed();
+    const auto previous_elapsed = recovery_elapsed_;
+    recovery_elapsed_ = std::min(recovery_geometry_clock_.elapsed(), theme::kOperationalMotionMs);
+    const auto elapsed = recovery_elapsed_;
     const auto top = kQrBlockRect.y +
                      static_cast<std::int32_t>(
                          std::lround(entry_progress(elapsed) * (kRecoveryQrY - kQrBlockRect.y)));
-    const bool expands_copy = recovery_qr_y_ < kFailureActionY + theme::kLineBody &&
-                              top >= kFailureActionY + theme::kLineBody;
     if (top != recovery_qr_y_) {
         recovery_qr_y_ = top;
         lv_obj_set_y(qr_panel_, top);
     }
-    if (expands_copy) {
-        layout_recovery_content();
+    // Reformat each existing label at its zero-opacity handoff. Hiding before
+    // changing the geometry also covers a tick that crosses that boundary.
+    if (previous_elapsed < kRecoveryTitleHandoff && elapsed >= kRecoveryTitleHandoff) {
+        lv_obj_add_flag(title_, LV_OBJ_FLAG_HIDDEN);
+        layout_recovery_title(false);
+    }
+    if (previous_elapsed < kRecoveryActionHandoff && elapsed >= kRecoveryActionHandoff) {
+        lv_obj_add_flag(action_, LV_OBJ_FLAG_HIDDEN);
+        layout_recovery_action(false);
+    }
+    const auto full = theme::opacity(theme::Opacity::Full);
+    const auto rows_elapsed = std::max(elapsed, kRecoveryActionHandoff) - kRecoveryActionHandoff;
+    const auto rows_blend = static_cast<std::int32_t>(
+        rows_elapsed * full / (theme::kOperationalMotionMs - kRecoveryActionHandoff));
+    if (rows_blend != recovery_rows_blend_) {
+        recovery_rows_blend_ = rows_blend;
+        layout_recovery_rows();
     }
     if (panel_visible && elapsed >= theme::kOperationalMotionMs) {
         recovery_geometry_running_ = false;
@@ -485,10 +533,16 @@ void ProvisioningScene::step_recovery_geometry(const bool panel_visible, const s
 
 void ProvisioningScene::layout_session(const bool recovery) {
     recovery_layout_ = recovery;
-    theme::apply_text_style(title_, recovery ? theme::TextRole::StateTitle : theme::TextRole::Body,
-                            theme::Colour::Primary);
-    lv_obj_set_width(title_, recovery ? theme::kCanvasContent.width : kColumnWidth);
+    recovery_geometry_running_ = recovery && was_drawn_;
+    if (recovery) {
+        layout_recovery_title(recovery_geometry_running_);
+    } else {
+        theme::apply_text_style(title_, theme::TextRole::Body, theme::Colour::Primary);
+        lv_obj_set_width(title_, kColumnWidth);
+        lv_obj_remove_flag(title_, LV_OBJ_FLAG_HIDDEN);
+    }
     lv_obj_set_pos(title_, kColumnX, recovery ? kFailureTitleY : kTitleY);
+    layout_recovery_action(recovery_geometry_running_);
 
     for (std::size_t index = 0; index < kRowCount; ++index) {
         const RowBox& box = kRowBoxes[index];
@@ -507,7 +561,9 @@ void ProvisioningScene::layout_session(const bool recovery) {
             lv_obj_set_pos(current.value, box.x, box.y + theme::kLineCaption);
         }
     }
-    recovery_geometry_running_ = recovery && was_drawn_;
+    recovery_elapsed_ = 0;
+    recovery_rows_blend_ = 0;
+    compact_rows_min_y_ = 0;
     recovery_geometry_clock_.clear();
     if (recovery_geometry_running_) {
         recovery_geometry_clock_.arm();
@@ -614,6 +670,8 @@ void ProvisioningScene::hide_session() {
     if (recovery_geometry_running_) {
         recovery_geometry_running_ = false;
         recovery_geometry_clock_.clear();
+        layout_recovery_title(false);
+        layout_recovery_action(false);
         recovery_qr_y_ = kRecoveryQrY;
         lv_obj_set_y(qr_panel_, kRecoveryQrY);
     }
@@ -850,7 +908,7 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
         (phase != previous_phase || title_changed || returning_from_statement)) {
         layout_recovery_content();
     }
-    if (phase_running_) {
+    if (phase_running_ || recovery_layout_) {
         paint(level_ < 0 ? theme::opacity(theme::Opacity::Full) : level_);
     }
 
@@ -1034,6 +1092,41 @@ void ProvisioningScene::set_visible(const bool visible) {
 // ⬅️ AND THE ENDPOINT IS UNTOUCHED BY CONSTRUCTION. At full level every one of them is the value
 // it was built with, so the settled composition is the same pixels owner ruling R3 froze. The
 // render suite asserts that too, byte for byte, rather than trusting the arithmetic.
+void ProvisioningScene::paint_recovery_copy(const std::int32_t title_level) {
+    const auto paint_label = [](lv_obj_t* const label, const std::int32_t level) {
+        if (level == 0 || lv_label_get_text(label)[0] == '\0') {
+            lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_remove_flag(label, LV_OBJ_FLAG_HIDDEN);
+            theme::apply_text_level(label, theme::Opacity::Full, level);
+        }
+    };
+    if (!recovery_geometry_running_) {
+        paint_label(title_, title_level);
+        paint_label(action_, title_level);
+        return;
+    }
+
+    // The same 88–100% entry envelope is shared by the two forms. Fade one form
+    // through zero before bringing in the other, so duplicated glyphs never mix.
+    const auto visible_level = [&](const std::uint32_t first, const std::uint32_t last) {
+        const auto active = std::clamp(recovery_elapsed_, first, last) - first;
+        return static_cast<std::int32_t>(active * title_level / (last - first));
+    };
+    const bool wide_clear = recovery_qr_y_ >= kFailureActionY + theme::kLineBody;
+    const auto handoff_level = [&](const std::uint32_t start, const std::uint32_t handoff,
+                                   const std::uint32_t end) {
+        if (recovery_elapsed_ < handoff) {
+            return title_level - visible_level(start, handoff);
+        }
+        return wide_clear ? visible_level(handoff, end) : 0;
+    };
+    paint_label(title_, handoff_level(kRecoveryTitleFadeStart, kRecoveryTitleHandoff,
+                                      kRecoveryActionFadeStart));
+    paint_label(action_, handoff_level(kRecoveryActionFadeStart, kRecoveryActionHandoff,
+                                       kRecoveryActionFadeEnd));
+}
+
 void ProvisioningScene::paint_session(const std::int32_t level) {
     const auto session_level = session_running_ ? std::min(level, session_level_) : level;
     const auto qr_level = recovery_layout_ ? theme::opacity(theme::Opacity::Full) : session_level;
@@ -1043,8 +1136,12 @@ void ProvisioningScene::paint_session(const std::int32_t level) {
         recovery_layout_ ? (phase_running_ ? phase_level_ : theme::opacity(theme::Opacity::Full))
                          : (phase_running_ ? std::min(level, phase_level_) : level);
     const auto row_level = recovery_geometry_running_ ? title_level : session_level;
-    theme::apply_text_level(title_, theme::Opacity::Full, title_level);
-    theme::apply_text_level(action_, theme::Opacity::Full, title_level);
+    if (recovery_layout_) {
+        paint_recovery_copy(title_level);
+    } else {
+        theme::apply_text_level(title_, theme::Opacity::Full, title_level);
+        theme::apply_text_level(action_, theme::Opacity::Full, title_level);
+    }
 
     for (auto& current : rows_) {
         theme::apply_text_level(current.caption, theme::Opacity::Full, row_level);

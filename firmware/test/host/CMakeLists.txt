@@ -154,6 +154,7 @@ add_executable(
     prusalink/redirect_tests.cpp
     prusalink/vertical_slice_tests.cpp
     app_core/factory_reset_tests.cpp
+    app_core/display_settings_flow_tests.cpp
     app_core/provisioning_decision_tests.cpp
     app_core/provisioning_flow_tests.cpp
     app_core/candidate_tests.cpp

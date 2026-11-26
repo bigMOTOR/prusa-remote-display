@@ -147,6 +147,8 @@ struct Brightness {
 };
 
 [[nodiscard]] constexpr Brightness preset_levels(const Backlight backlight, Brightness standard) {
+    // PROVISIONAL optical settings. Low and High move both control levels by 15 points.
+    // Verify readability at the resulting Dimmed endpoint separately on the actual panel.
     constexpr int kStep = 15;
     const int offset = backlight == Backlight::Low    ? -kStep
                        : backlight == Backlight::High ? kStep

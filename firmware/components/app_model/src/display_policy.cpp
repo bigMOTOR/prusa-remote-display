@@ -171,8 +171,11 @@ Step next_step(const DisplayPower power, const std::uint32_t since_activity_ms,
 Step next_step_for(const AppState& state, const std::uint32_t since_activity_ms,
                    const bool held_awake, const Timings& ordinary) {
     const auto power = state.display.power;
+    // A failed attempt revokes the optional hold. Fresh/Aging retry grace and the ordinary
+    // loss presentation still use the reducer's unchanged observation clock.
     if (state.display.preferences.mode == DisplayMode::PrinterStatus &&
-        ((state.subject == SubjectState::Ready && state.confidence == Confidence::Current) ||
+        ((state.subject == SubjectState::Ready && state.confidence == Confidence::Current &&
+          !state.display.observation_interrupted) ||
          (state.subject == SubjectState::Completed && state.confidence != Confidence::Unavailable &&
           power == DisplayPower::Dimmed))) {
         return Step::Hold;

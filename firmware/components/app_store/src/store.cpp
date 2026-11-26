@@ -9,6 +9,14 @@ Store::Store(const app_model::AppState& initial) : state_{initial} {}
 
 Store::Store(const app_model::ReducerPolicy& policy) : policy_{policy} {}
 
+void Store::age_observation_if_due(const app_model::Timestamp now) {
+    if (state_.printer.ever_observed && now > state_.last_event_at &&
+        app_model::classify_freshness(now - state_.printer.observed_at, policy_.freshness) !=
+            state_.printer_connection.freshness) {
+        (void)dispatch(app_model::Event::confidence_aged(now));
+    }
+}
+
 DispatchOutcome Store::dispatch(const app_model::Event& event) {
     DispatchOutcome outcome;
 

@@ -173,7 +173,8 @@ The display remembers both choices after restart.
 keeps the ready arc lit after a current PrusaLink idle or ready report. After a print
 finishes, Completed dims after the usual acknowledgement. It stays visible while
 the display can observe the printer and is waiting for a new idle or ready report.
-The local report describes the printer's status. It does not detect whether the print
+The display uses its usual retry window when a reading fails. Reconnecting alone
+does not renew readiness. The local report describes the printer's status. It does not detect whether the print
 was removed or whether the bed is clear.
 
 ## Try the display without a printer

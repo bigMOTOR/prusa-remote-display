@@ -1136,13 +1136,21 @@ TEST(DisplayPrinterStatusIntegrationTests, LocalBuddyIdleMustPostdateFinishedAnd
     ASSERT_TRUE(prd::validation::apply_status_body(live, idle, 15ms, {1, 3}).mutated);
     EXPECT_TRUE(project(live.state()).at_visual_rest);
 
-    (void)live.dispatch(Event::confidence_aged(16000ms));
-    EXPECT_EQ(project(live.state()).confidence, Confidence::Unavailable);
-    EXPECT_FALSE(project(live.state()).show_operational_form);
+    live.age_observation_if_due(16000ms);
+    EXPECT_EQ(project(live.state()).confidence, Confidence::Degraded);
+    EXPECT_TRUE(project(live.state()).stale_indicator);
+    EXPECT_FALSE(project(live.state()).at_visual_rest);
+    EXPECT_FALSE(project(live.state()).observation_lost_acknowledgement);
     ConnectionObservation connected;
     connected.phase = ConnectionPhase::Connected;
     (void)live.dispatch(Event::connection_observed(16001ms, connected));
-    EXPECT_FALSE(project(live.state()).show_operational_form);
-    ASSERT_TRUE(prd::validation::apply_status_body(live, idle, 16002ms, {1, 4}).mutated);
+    EXPECT_FALSE(project(live.state()).at_visual_rest);
+    live.age_observation_if_due(60015ms);
+    EXPECT_FALSE(project(live.state()).observation_lost_acknowledgement);
+    live.age_observation_if_due(60016ms);
+    EXPECT_EQ(project(live.state()).confidence, Confidence::Unavailable);
+    EXPECT_TRUE(project(live.state()).observation_lost_acknowledgement);
+    EXPECT_EQ(project(live.state()).observation_lost_origin, LossOriginForm::Ready);
+    ASSERT_TRUE(prd::validation::apply_status_body(live, idle, 60017ms, {1, 4}).mutated);
     EXPECT_TRUE(project(live.state()).at_visual_rest);
 }

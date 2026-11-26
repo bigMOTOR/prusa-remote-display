@@ -95,6 +95,9 @@ class Store {
 
     DispatchOutcome dispatch(const app_model::Event& event);
 
+    // Observe a crossed boundary using this store's own reducer policy.
+    void age_observation_if_due(app_model::Timestamp now);
+
     // False when the table is full, or when called during a notification.
     bool add_observer(ObserverFn observer, void* context);
 

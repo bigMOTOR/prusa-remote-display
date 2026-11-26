@@ -788,14 +788,17 @@ async function main() {
 
     const posts = submissions();
     const displayPosts = displaySubmissions();
-    const displayBodies = scenario.expectDisplayPosts ?? [];
-    if (JSON.stringify(displayPosts.map((post) => post.raw)) !== JSON.stringify(displayBodies) ||
-        displayPosts.some((post) => post.headers["x-prd-setup-token"] !== "harness-token")) {
-      problems.push("display action did not send just the expected body with the setup token");
-    }
     const updatePosts = updateSubmissions();
     const reportPosts = diagnosticSubmissions();
     const problems = [...result.failures];
+
+    const displayBodies = scenario.expectDisplayPosts ?? [];
+    if (JSON.stringify(displayPosts.map((post) => post.raw)) !== JSON.stringify(displayBodies)) {
+      problems.push("display action body differs from the expected command");
+    }
+    if (displayPosts.some((post) => post.headers["x-prd-setup-token"] !== "harness-token")) {
+      problems.push("display action did not use the setup token");
+    }
 
     if (scenario.expectPosts !== undefined && posts.length !== scenario.expectPosts) {
       problems.push(

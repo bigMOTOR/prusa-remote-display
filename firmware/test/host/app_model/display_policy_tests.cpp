@@ -984,19 +984,21 @@ TEST(DisplayPrinterStatusTests, LossAndReconnectDoNotPromoteAnOldReady) {
     ConnectionObservation link;
     link.phase = ConnectionPhase::PrinterUnavailable;
     state = reduce(state, Event::connection_observed(at_ms(12), link));
-    ASSERT_FALSE(project(state).show_operational_form);
-    EXPECT_TRUE(project(state).observation_lost_acknowledgement);
-    EXPECT_EQ(project(state).observation_lost_origin, LossOriginForm::Ready);
+    EXPECT_EQ(state.confidence, Confidence::Current);
+    EXPECT_TRUE(project(state).at_visual_rest); // Ordinary retry grace stays visually intact.
+    EXPECT_FALSE(project(state).observation_lost_acknowledgement);
+    EXPECT_EQ(next_step_for(state, kDimAt, false, kT), Step::Dim);
 
     link.phase = ConnectionPhase::Connected;
     state = reduce(state, Event::connection_observed(at_ms(13), link));
-    EXPECT_FALSE(project(state).show_operational_form);
+    EXPECT_EQ(next_step_for(state, kDimAt, false, kT), Step::Dim);
     state = reduce(state, Event::printer_snapshot(
                               at_ms(14), prd::test::printer_snapshot(PrinterState::Ready, 2)));
-    EXPECT_FALSE(project(state).show_operational_form); // duplicate sequence
+    EXPECT_EQ(next_step_for(state, kDimAt, false, kT), Step::Dim); // duplicate sequence
     state = reduce(state, Event::printer_snapshot(
                               at_ms(15), prd::test::printer_snapshot(PrinterState::Ready, 3)));
     EXPECT_TRUE(project(state).at_visual_rest);
+    EXPECT_EQ(next_step_for(state, kDimAt, false, kT), Step::Hold);
 }
 
 TEST(DisplayPrinterStatusTests, DefaultsPreserveIdleAndExistingRecessionAndBacklight) {
@@ -1016,4 +1018,24 @@ TEST(DisplayPrinterStatusTests, DefaultsPreserveIdleAndExistingRecessionAndBackl
     EXPECT_EQ(standard.dimmed_light_percent_of_quiet, 55U);
     EXPECT_LT(preset_levels(Backlight::Low, kB).quiet_percent, standard.quiet_percent);
     EXPECT_GT(preset_levels(Backlight::High, kB).quiet_percent, standard.quiet_percent);
+}
+
+TEST(DisplayPrinterStatusTests, IneligibleBusyOrAttentionDoesNotHoldReady) {
+    auto state = prd::test::booted_device();
+    state = reduce(state, Event::display_preferences(
+                              at_ms(1), {DisplayMode::PrinterStatus, Backlight::Standard}));
+    for (const auto disqualifier : {SubjectCondition::None, SubjectCondition::Attention}) {
+        const auto next = state.last_printer_sequence + 1U;
+        state = reduce(state, Event::printer_snapshot(at_ms(10), prd::test::printer_snapshot(
+                                                                     PrinterState::Idle, next)));
+        ASSERT_TRUE(project(state).at_visual_rest);
+        auto status = prd::test::printer_snapshot(PrinterState::Idle, next + 1U);
+        status.is_busy = disqualifier == SubjectCondition::None;
+        status.requires_attention = disqualifier == SubjectCondition::Attention;
+        state = reduce(state, Event::printer_snapshot(at_ms(11), status));
+        EXPECT_EQ(state.subject, SubjectState::AcquiringState);
+        EXPECT_FALSE(project(state).at_visual_rest);
+        EXPECT_FALSE(project(state).show_operational_form);
+        EXPECT_EQ(project(state).ready_withheld, disqualifier == SubjectCondition::None);
+    }
 }

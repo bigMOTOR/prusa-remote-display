@@ -15,9 +15,14 @@
 #include "theme/theme.hpp"
 #include "ui/ui.hpp"
 
-// R3 fixes the ordinary setup layout. The owner accepted a separate setup-failure composition
-// on 2026-11-26 from prusa-diagnostics-preview.html (SHA-256 0b8816be5…).
-// The change applies after a failed attempt in the current setup session.
+// ⚠️ PROVISIONAL, AND NOT A COMPOSITION CANDIDATE. Owner ruling R3 applies to ordinary
+// setup. This scene's original session composition is deliberately minimal and exists only
+// to make Milestone 3.5's setup access point usable on hardware. It does NOT participate in
+// the Operational Family freeze, it is NOT an accepted composition, and it must not cause
+// corrective UI design work. It uses the existing Production UI §4 roles and §3 tokens.
+//
+// The owner accepted the separate failure composition shown in prusa-diagnostics-preview.html
+// (SHA-256 0b8816be5…) on 2026-11-26. It applies after a failed attempt in the current session.
 //
 // WHAT IT DRAWS. A text column on the left, a Wi-Fi QR code on the right, and the session
 // password full width beneath both:
@@ -178,7 +183,10 @@ class ProvisioningScene {
     void set_row(RowIndex index, std::string_view value);
     void layout_session(bool recovery);
     void layout_recovery_content();
-    void layout_recovery_rows(std::int32_t minimum_y, std::int32_t row_gap);
+    void layout_recovery_title(bool compact);
+    void layout_recovery_action(bool compact);
+    void layout_recovery_rows();
+    void paint_recovery_copy(std::int32_t title_level);
     void step_recovery_geometry(bool panel_visible, std::uint32_t now);
 
     // Rebuilds the code from the retained session, or hides it. Called on every path that
@@ -219,6 +227,9 @@ class ProvisioningScene {
     HoldClock recovery_geometry_clock_{};
     bool recovery_geometry_running_{false};
     std::int32_t recovery_qr_y_{0};
+    std::uint32_t recovery_elapsed_{0};
+    std::int32_t recovery_rows_blend_{0};
+    std::int32_t compact_rows_min_y_{0};
     bool phase_running_{false};
     std::int32_t phase_from_level_{0};
     std::int32_t phase_level_{0};
