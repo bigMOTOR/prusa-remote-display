@@ -435,24 +435,45 @@ void ProvisioningScene::layout_recovery_rows() {
             theme::kLineCaption + std::max(theme::kLineBody, lv_obj_get_height(value));
         height += row_heights[index];
     }
+    constexpr auto gap_count = static_cast<std::int32_t>(kRowCount) - 1;
     const auto top_for_gap = [&](const std::int32_t gap) {
-        const auto stack_height = height + gap * (static_cast<std::int32_t>(kRowCount) - 1);
+        const auto stack_height = height + gap * gap_count;
         return kRecoveryQrY + std::max<std::int32_t>(0, (kQrBlock - stack_height) / 2);
     };
+    auto compact_top = std::max(top_for_gap(theme::kSpace1), compact_rows_min_y_);
+    auto compact_gap = theme::kSpace1;
+    std::array<std::int32_t, kRowCount> compact_caption_pitches{};
+    compact_caption_pitches.fill(theme::kLineCaption);
+    if (recovery_geometry_running_ &&
+        compact_top + height + compact_gap * gap_count > theme::kCanvasContent.bottom()) {
+        // A wrapped password below the longest compact message consumes this stack's
+        // spare padding. Keep the full text and its fonts, and place the stack between
+        // the copy and the bottom inset using the captions' measured line boxes.
+        auto packed_height = height;
+        for (std::size_t index = 0; index < kRowCount; ++index) {
+            const auto caption_height = lv_obj_get_height(rows_[index].caption);
+            compact_caption_pitches[index] = caption_height;
+            packed_height -= theme::kLineCaption - caption_height;
+        }
+        compact_gap = 0;
+        compact_top = std::max(compact_rows_min_y_ - theme::kSpace1,
+                               theme::kCanvasContent.bottom() - packed_height);
+    }
     const auto full = theme::opacity(theme::Opacity::Full);
     const auto blend = [&](const auto start, const auto end) {
         return start + (end - start) * recovery_rows_blend_ / full;
     };
-    std::int32_t y = recovery_geometry_running_
-                         ? blend(std::max(top_for_gap(theme::kSpace1), compact_rows_min_y_),
-                                 top_for_gap(theme::kSpaceCompact))
-                         : top_for_gap(theme::kSpaceCompact);
-    const auto gap = recovery_geometry_running_ ? blend(theme::kSpace1, theme::kSpaceCompact)
+    const auto expanded_top = top_for_gap(theme::kSpaceCompact);
+    auto y = recovery_geometry_running_ ? blend(compact_top, expanded_top) : expanded_top;
+    const auto gap = recovery_geometry_running_ ? blend(compact_gap, theme::kSpaceCompact)
                                                 : theme::kSpaceCompact;
     for (std::size_t index = 0; index < kRowCount; ++index) {
+        const auto caption_pitch = recovery_geometry_running_
+                                       ? blend(compact_caption_pitches[index], theme::kLineCaption)
+                                       : theme::kLineCaption;
         lv_obj_set_pos(rows_[index].caption, kColumnX, y);
-        lv_obj_set_pos(rows_[index].value, kColumnX, y + theme::kLineCaption);
-        y += row_heights[index] + gap;
+        lv_obj_set_pos(rows_[index].value, kColumnX, y + caption_pitch);
+        y += caption_pitch + row_heights[index] - theme::kLineCaption + gap;
     }
 }
 

@@ -286,6 +286,21 @@ void collect(lv_obj_t* const o, Drawn& out) {
     }
 }
 
+lv_obj_t* visible_label(lv_obj_t* const object, const std::string_view text) {
+    if (lv_obj_has_flag(object, LV_OBJ_FLAG_HIDDEN)) {
+        return nullptr;
+    }
+    if (lv_obj_check_type(object, &lv_label_class) && lv_label_get_text(object) == text) {
+        return object;
+    }
+    for (std::uint32_t index = 0; index < lv_obj_get_child_count(object); ++index) {
+        if (auto* child = visible_label(lv_obj_get_child(object, index), text)) {
+            return child;
+        }
+    }
+    return nullptr;
+}
+
 char* find_label_text(lv_obj_t* const o, const char* const expected) {
     if (lv_obj_check_type(o, &lv_label_class) && std::strcmp(lv_label_get_text(o), expected) == 0) {
         return lv_label_get_text(o);
@@ -2053,6 +2068,133 @@ int main(int argc, char** argv) {
                 "no message composition acquired an activity loop");
     }
     std::puts("PASS erase activity cadence, boundaries, idle, Off pause, re-entry, invariance");
+
+    // Generated-width credentials must fit beneath the longest compact failure copy
+    // while the QR is moving. This setup session uses the allowed 12-character alphabet.
+    for (const auto wide_network :
+         {std::string_view{"PRD-Setup-FFFF"}, std::string_view{"PRD-Setup-AAAA"}}) {
+        // AAAA is a widest allowed hex suffix in the committed Body face (125 px
+        // including the prefix). W repeated 12 times maximises the 12-character advance.
+        constexpr std::string_view wide_password = "WWWWWWWWWWWW";
+        constexpr std::string_view address = "http://192.168.4.1";
+        const std::array manual{"Network", wide_network.data(), "Password", wide_password.data(),
+                                "Address", address.data()};
+        prd::ui::SetupSession wide_session;
+        require(wide_session.ssid.assign(wide_network) &&
+                    wide_session.password.assign(wide_password) && wide_session.url.assign(address),
+                "wide generated setup credentials fit the session");
+        using Reason = prd::app_model::PrinterValidationReason;
+        using Stage = prd::app_model::PrinterValidationStage;
+        constexpr struct {
+            prd::app_model::PrinterValidationFailure failure;
+            const char* reason;
+            const char* action;
+        } cases[]{
+            {{Stage::Status, Reason::TransportFailed, 200},
+             "Printer response incomplete",
+             "Check the PrusaLink address."},
+            {{Stage::VersionProbe, Reason::Unauthorized, 403},
+             "Printer access denied",
+             "Check the PrusaLink API key."},
+            {{Stage::VersionProbe, Reason::Unreachable, 0},
+             "Printer unreachable",
+             "Check printer power and address."},
+        };
+
+        auto* screen = lv_screen_active();
+        const auto check_manual = [&](const std::string_view reason,
+                                      const std::string_view action) {
+            auto bottom = theme::kCanvasContent.y - 1;
+            bool has_message = false;
+            for (const auto text : {reason, action}) {
+                if (!text.empty()) {
+                    if (auto* label = visible_label(screen, text)) {
+                        lv_area_t box{};
+                        lv_obj_get_coords(label, &box);
+                        bottom = std::max(bottom, box.y2);
+                        has_message = true;
+                    }
+                }
+            }
+            require(has_message, "wide setup keeps an immediate truthful message");
+            for (const auto text : manual) {
+                auto* label = visible_label(screen, text);
+                require(label, "wide setup keeps all six complete manual labels");
+                lv_area_t box{};
+                lv_obj_get_coords(label, &box);
+                require(box.y1 > bottom && box.y2 < theme::kCanvasContent.bottom() &&
+                            box.x1 >= theme::kCanvasContent.x && box.x2 < kSetupQrLeft,
+                        "wide setup fits manual labels under copy inside the inset");
+                if (text == wide_password) {
+                    require(lv_area_get_height(&box) == 2 * theme::kLineBody,
+                            "the full wide password remains two readable body lines");
+                }
+                bottom = box.y2;
+            }
+        };
+
+        for (const auto& test : cases) {
+            blank();
+            controller::set_setup_session(wide_session);
+            controller::apply(setup);
+            tick(0);
+            tick(1120);
+            tick(1120);
+            const auto wide_offer = pixels;
+            controller::apply(validating);
+            tick(0);
+            tick(1120);
+
+            failed.setup_failure = test.failure;
+            controller::apply(failed);
+            recovery_qr_visible = true;
+            tick(0);
+            check_manual(test.reason, test.action);
+            int top = kSetupQrTop;
+            const auto qr_matches = [&](const int candidate_top) {
+                for (int row = 0; row < kSetupQrSide; ++row) {
+                    const auto source = wide_offer.begin() + (kSetupQrTop + row) * w + kSetupQrLeft;
+                    const auto actual = pixels.begin() + (candidate_top + row) * w + kSetupQrLeft;
+                    if (!std::equal(source, source + kSetupQrSide, actual)) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+            require(qr_matches(top), "wide recovery starts with the complete QR and quiet zone");
+            for (unsigned time = 0; time < 1100;) {
+                const auto step = std::min(16U, 1100U - time);
+                tick(step);
+                time += step;
+                check_manual(test.reason, test.action);
+                while (top < kFailureQrTop && !qr_matches(top)) {
+                    ++top;
+                }
+                require(qr_matches(top), "wide recovery retains every QR pixel while moving");
+            }
+            require(top == kFailureQrTop && !tick(16), "wide recovery settles at the approved QR");
+
+            controller::apply(validating);
+            tick(0);
+            check_manual("Checking that network", "");
+            require(!visible_label(screen, test.reason) && !visible_label(screen, test.action) &&
+                        qr_matches(kFailureQrTop),
+                    "wide retry retires copy and holds QR");
+            tick(1120);
+            controller::apply(setup);
+            tick(0);
+            check_manual("Join this network", "");
+            require(qr_matches(kFailureQrTop), "wide editing retains the recovery QR");
+            controller::apply(back);
+            recovery_qr_visible = false;
+            tick(0);
+            require(!visible_label(screen, wide_password) && !qr_matches(kFailureQrTop),
+                    "Back immediately retires the wide credentials and QR");
+        }
+        std::printf(
+            "PASS wide generated setup (%.*s) through three failure entries, retry and Back\n",
+            static_cast<int>(wide_network.size()), wide_network.data());
+    }
 
     require(prd::diagnostics::qr_temp_audit_count() > first_qr_audit_count &&
                 prd::diagnostics::qr_temp_dirty_count() == 0,
