@@ -47,6 +47,10 @@ namespace prd::ui::controller {
 // 2-second poll that reports the same values must not redraw anything at all.
 void apply(const app_model::Presentation& presentation);
 
+// Adds the demo caption to a packed RGB565 band before transmission. Pixels are
+// aligned as in the panel's RGB565 byte swap, with one tightly packed row per area row.
+void paint_demo_marker(const lv_area_t& area, std::uint8_t* pixels);
+
 // Advances the transient lost-observation acknowledgement by one loop iteration. Returns true while
 // its motion is still running, so the loop can shorten its wait — the same contract, and the same
 // reasoning, as ui.cpp's own step_backlight().

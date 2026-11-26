@@ -479,7 +479,8 @@ bool operator==(const Presentation& lhs, const Presentation& rhs) {
         lhs.device_fault != rhs.device_fault || lhs.device_operation != rhs.device_operation ||
         lhs.boot_phase != rhs.boot_phase || lhs.provisioning != rhs.provisioning ||
         lhs.setup_failure != rhs.setup_failure || lhs.access_condition != rhs.access_condition ||
-        lhs.modal_surface != rhs.modal_surface || lhs.ready_withheld != rhs.ready_withheld) {
+        lhs.modal_surface != rhs.modal_surface || lhs.ready_withheld != rhs.ready_withheld ||
+        lhs.user_demo != rhs.user_demo) {
         return false;
     }
 

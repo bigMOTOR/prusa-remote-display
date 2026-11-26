@@ -15,6 +15,7 @@
 #include "esp_memory_utils.h"
 #pragma GCC diagnostic pop
 
+#include "controller.hpp"
 #include "diagnostics/log.hpp"
 #include "diagnostics/tags.hpp"
 #include "display/display.hpp"
@@ -163,6 +164,7 @@ void flush_callback(lv_display_t* const display_handle, const lv_area_t* const a
     // out. Safe here and nowhere else: LVGL has finished rendering this band and
     // DMA does not own it yet, so this is the only window in which the bytes may be
     // touched. Timed, because the ADR rejected the alternative on cost grounds.
+    controller::paint_demo_marker(*area, px_map);
     const std::int64_t swap_started_us = now_us();
     lv_draw_sw_rgb565_swap(px_map, lv_area_get_size(area));
     const std::int64_t swap_finished_us = now_us();

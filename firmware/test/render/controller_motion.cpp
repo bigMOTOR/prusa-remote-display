@@ -15,6 +15,7 @@
 #include "../host/support/state_builders.hpp"
 #include "app_model/presentation.hpp"
 #include "app_store/store.hpp"
+#include "components/demo_marker.hpp"
 #include "controller.hpp"
 #include "fake_source/scenarios.hpp"
 #include "fonts/fonts.hpp"
@@ -30,6 +31,8 @@
 namespace {
 constexpr int kWidth = 320, kHeight = 240, kRows = prd::ui::kDefaultDrawBufferRows;
 std::array<std::uint16_t, kWidth * kHeight> pixels{};
+std::array<std::uint16_t, kWidth * kHeight> unmarked_pixels{};
+bool compare_demo_marker = false;
 std::size_t flush_count = 0;
 alignas(4) std::array<std::uint8_t, kWidth * kRows * 2> draw_a{}, draw_b{};
 void require(bool ok, const char* message) {
@@ -44,6 +47,13 @@ void flush(lv_display_t* display, const lv_area_t* area, std::uint8_t* data) {
     const int width = area->x2 - area->x1 + 1;
     require(area->x1 >= 0 && area->x2 < kWidth && area->y1 >= 0 && area->y2 < kHeight,
             "flush stays inside canvas");
+    if (compare_demo_marker) {
+        for (int y = area->y1; y <= area->y2; ++y) {
+            std::copy_n(input + (y - area->y1) * width, width,
+                        unmarked_pixels.begin() + y * kWidth + area->x1);
+        }
+    }
+    prd::ui::controller::paint_demo_marker(*area, data);
     for (int y = area->y1; y <= area->y2; ++y) {
         for (int x = area->x1; x <= area->x2; ++x) {
             pixels[y * kWidth + x] = input[(y - area->y1) * width + x - area->x1];
@@ -255,6 +265,44 @@ int main(int argc, char** argv) {
         tick(ui::theme::kOperationalMotionMs);
     };
     if (argc == 3 && std::string(argv[2]) == "--user-demo") {
+        compare_demo_marker = true;
+        unsigned checked_demo_frames = 0;
+        const auto background = lv_color_to_u16(ui::theme::colour(ui::theme::Colour::Background));
+        const auto foreground = lv_color_to_u16(ui::theme::colour(ui::theme::Colour::Primary));
+        auto verify_marker = [&](const bool expected) {
+            using ui::demo_marker::kLeft;
+            using ui::demo_marker::kTop;
+            if (!expected) {
+                require(pixels == unmarked_pixels, "live frame is byte-identical to bare render");
+                return;
+            }
+            ++checked_demo_frames;
+            unsigned strong_pixels = 0;
+            for (int y = 0; y < kHeight; ++y) {
+                for (int x = 0; x < kWidth; ++x) {
+                    const auto index = y * kWidth + x;
+                    if (x >= kLeft && x < kLeft + ui::demo_marker::kWidth && y >= kTop &&
+                        y < kTop + ui::demo_marker::kHeight) {
+                        require(unmarked_pixels[index] == background,
+                                "demo marker does not cover any scene pixel");
+                        strong_pixels += pixels[index] == foreground ? 1U : 0U;
+                    } else {
+                        require(pixels[index] == unmarked_pixels[index],
+                                "demo marker does not change pixels outside its area");
+                    }
+                }
+            }
+            require(strong_pixels == 262,
+                    "demo marker is fully visible in the first and every demo frame");
+        };
+        auto advance_visible = [&](unsigned duration, const bool marker) {
+            while (duration > 0U) {
+                const auto step = std::min(duration, 16U);
+                tick(step);
+                verify_marker(marker);
+                duration -= step;
+            }
+        };
         ui::SetupSession fixture;
         (void)fixture.ssid.assign("PRD-Setup-0123");
         (void)fixture.password.assign("fixture123");
@@ -264,6 +312,7 @@ int main(int argc, char** argv) {
         setup.layer = app_model::PresentationLayer::RecoveryOrProvisioning;
         setup.provisioning = app_model::ProvisioningPhase::SetupActive;
         settle(setup);
+        verify_marker(false);
         require(labels().count("PRD-Setup-0123") == 1, "setup fixture is genuinely visible");
 
         validation::UserDemo demo;
@@ -272,27 +321,63 @@ int main(int argc, char** argv) {
         require(ready.has_value(), "initial demo Ready");
         ui::controller::apply(*ready);
         tick(0);
+        verify_marker(true);
+
+        // Target partial flushes can split the left, right, top or bottom of the marker.
+        const std::array<lv_area_t, 4> clips{{
+            {68, 14, 76, 18},
+            {245, 14, 252, 18},
+            {130, 10, 134, 16},
+            {130, 19, 134, 24},
+        }};
+        for (const auto& area : clips) {
+            std::array<std::uint16_t, 64> band{};
+            band.fill(background);
+            band.front() = 0xFFFFU;
+            const auto area_size = static_cast<std::size_t>(lv_area_get_size(&area));
+            band.at(area_size + 1U) = 0xFFFFU;
+            ui::controller::paint_demo_marker(area,
+                                              reinterpret_cast<std::uint8_t*>(band.data() + 1));
+            std::size_t offset = 1;
+            for (int y = area.y1; y <= area.y2; ++y) {
+                for (int x = area.x1; x <= area.x2; ++x) {
+                    require(band.at(offset++) ==
+                                pixels.at(static_cast<std::size_t>(y * kWidth + x)),
+                            "clipped partial band matches full demo marker pixels");
+                }
+            }
+            require(band.front() == 0xFFFFU && band.at(area_size + 1U) == 0xFFFFU,
+                    "partial demo marker writes only within the band");
+        }
+        save(out + "/00-demo-first.rgb565");
         const auto entry = digest();
-        tick(550);
+        advance_visible(550, true);
         require(digest() != entry, "setup-to-demo has visible production entry motion");
-        tick(550);
+        advance_visible(550, true);
         save(out + "/01-demo-ready.rgb565");
 
         const std::array<unsigned, 9> changes{2500,  5500,  9500,  12500, 15500,
                                               19000, 22000, 24500, 28000};
+        unsigned now = 1100;
         for (const auto timestamp : changes) {
+            advance_visible(timestamp - now, true);
             const auto next = demo.advance(at(timestamp));
             require(next.has_value(), "exact demo step present");
             const auto prior_frame = digest();
             ui::controller::apply(*next);
             tick(0);
+            verify_marker(true);
+            if (timestamp == 15500) {
+                save(out + "/demo-error-first.rgb565");
+            }
             const auto boundary = digest();
-            tick(550);
+            advance_visible(550, true);
             // 92% → 100% changes the reading within Printing. The product shows its new
             // value immediately. The actual state changes use the production motion.
             require(timestamp == 22000 || digest() != boundary,
                     "intra-demo state uses the production motion");
-            tick(550);
+            advance_visible(550, true);
+            now = timestamp + 1100;
             require(digest() != prior_frame, "every new stage changes the visible frame");
             const auto visible = labels();
             require(visible.count("PRD-Setup-0123") == 0 && visible.count("fixture123") == 0 &&
@@ -303,14 +388,18 @@ int main(int argc, char** argv) {
                         static_cast<unsigned long long>(digest()));
         }
 
-        require(demo.expired(at(31000)), "demo has a finite endpoint");
+        advance_visible(30999U - now, true);
+        require(!demo.expired(at(30999)) && demo.expired(at(31000)),
+                "demo marker remains until the finite endpoint");
         demo.stop();
         ui::controller::apply(states[2]);
         tick(0);
+        verify_marker(false);
+        save(out + "/post-demo-monitoring-first.rgb565");
         const auto monitoring_entry = digest();
-        tick(550);
+        advance_visible(550, false);
         require(digest() != monitoring_entry, "demo-to-monitoring uses operational motion");
-        tick(550);
+        advance_visible(550, false);
         require(labels().count("Printing") == 1, "current operational view can resume");
         save(out + "/post-demo-monitoring.rgb565");
 
@@ -319,14 +408,44 @@ int main(int argc, char** argv) {
         const auto restarted = demo.advance(at(40000));
         require(restarted.has_value(), "second Ready exists");
         settle(*restarted);
+        verify_marker(true);
         demo.stop();
         ui::controller::apply(setup);
         tick(0);
+        verify_marker(false);
         const auto setup_entry = digest();
-        tick(550);
+        advance_visible(550, false);
         require(digest() != setup_entry, "demo-to-setup has visible production entry motion");
-        tick(550);
+        advance_visible(550, false);
         require(labels().count("PRD-Setup-0123") == 1, "early exit can restore setup");
+        save(out + "/post-demo-setup.rgb565");
+
+        settle(*restarted);
+        verify_marker(true);
+        auto same_ready = *restarted;
+        same_ready.user_demo = false;
+        ui::controller::apply(same_ready);
+        tick(0);
+        verify_marker(false);
+        save(out + "/post-demo-same-ready.rgb565");
+
+        settle(*restarted);
+        verify_marker(true);
+        auto reset = setup;
+        reset.modal_surface = app_model::ModalSurface::FactoryResetConfirmation;
+        settle(reset);
+        verify_marker(false);
+        require(ui::controller::report().scene == "factory-reset",
+                "higher-priority reset takes the panel without a demo marker");
+
+        std::printf("PASS %u synthetic frames with persistent marker, no overlap, both exits\n",
+                    checked_demo_frames);
+#if PRD_ASAN_MODE == 1
+        lv_mem_monitor_t memory{};
+        lv_mem_monitor(&memory);
+        require(memory.max_used <= LV_MEM_SIZE, "demo fits the 64 KiB LVGL pool");
+        std::printf("LVGL 64 KiB pool peak %zu bytes\n", memory.max_used);
+#endif
         std::puts("PASS user-demo production controller, setup entry, nine steps, both exits");
         lv_display_delete(display);
         lv_deinit();

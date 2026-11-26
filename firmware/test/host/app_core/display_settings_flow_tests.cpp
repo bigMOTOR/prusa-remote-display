@@ -201,6 +201,45 @@ TEST(DisplaySettingsFlowTests, ConfiguredExplicitAndTimedExitRestoreTheLiveStore
     }
 }
 
+TEST(DisplaySettingsFlowTests, ShortAndTimedExitRemoveDemoFromLiveReadyInBothDisplayModes) {
+    for (const auto mode : {DisplayMode::Timer, DisplayMode::PrinterStatus}) {
+        for (const bool timed : {false, true}) {
+            FlowPort port;
+            ASSERT_TRUE(prd::config::save_display_preferences(port.bytes, {mode, Backlight::Low}));
+            port.boot(ConfigurationStatus::Valid);
+            port.start_demo();
+            ASSERT_TRUE(port.publications.back().demo_running);
+            ASSERT_TRUE(port.frames.back().view.user_demo);
+            ASSERT_TRUE(port.frames.back().view.at_visual_rest);
+            const auto demo_ready = port.frames.back().view;
+
+            if (timed) {
+                port.tick(28010ms);
+                ASSERT_TRUE(port.frames.back().view.user_demo);
+                EXPECT_EQ(port.frames.back().view.subject, SubjectState::Ready);
+            }
+            port.dispatch(Event::printer_snapshot(
+                timed ? 30s : 11ms, prd::test::printer_snapshot(PrinterState::Ready, 1)));
+            if (!timed) {
+                EXPECT_EQ(port.frames.back().view, demo_ready);
+            }
+            if (!timed) {
+                port.gesture(ButtonGesture::ShortPress);
+                ASSERT_TRUE(port.frames.back().view.user_demo);
+            }
+
+            port.tick(timed ? 31010ms : 21ms);
+            EXPECT_FALSE(port.publications.back().demo_running);
+            const auto& live = port.frames.back();
+            EXPECT_EQ(live.view.subject, SubjectState::Ready);
+            EXPECT_TRUE(live.view.at_visual_rest);
+            EXPECT_FALSE(live.view.user_demo);
+            EXPECT_EQ(live.revision, port.model.revision());
+            EXPECT_EQ(prd::config::load_display_preferences(port.bytes).mode, mode);
+        }
+    }
+}
+
 TEST(DisplaySettingsFlowTests, PendingSetupSubmissionPreservesSetupOnAnExitTap) {
     FlowPort port;
     port.boot(ConfigurationStatus::Valid);

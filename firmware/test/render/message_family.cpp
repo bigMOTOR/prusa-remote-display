@@ -2102,21 +2102,24 @@ int main(int argc, char** argv) {
         };
 
         auto* screen = lv_screen_active();
-        const auto check_manual = [&](const std::string_view reason,
-                                      const std::string_view action) {
+        const auto check_manual = [&](const std::string_view reason, const std::string_view action,
+                                      const int qr_top) {
             auto bottom = theme::kCanvasContent.y - 1;
-            bool has_message = false;
             for (const auto text : {reason, action}) {
-                if (!text.empty()) {
-                    if (auto* label = visible_label(screen, text)) {
-                        lv_area_t box{};
-                        lv_obj_get_coords(label, &box);
-                        bottom = std::max(bottom, box.y2);
-                        has_message = true;
-                    }
+                if (text.empty()) {
+                    continue;
                 }
+                auto* label = visible_label(screen, text);
+                require(label, "wide setup keeps both reason and action through reflow");
+                require(lv_obj_get_style_text_opa(label, LV_PART_MAIN) >=
+                            theme::kSetupFailureEntryLevel,
+                        "wide setup copy stays within the accepted fade range through reflow");
+                lv_area_t box{};
+                lv_obj_get_coords(label, &box);
+                require(box.y1 > bottom && (box.x2 < kSetupQrLeft || box.y2 < qr_top),
+                        "wide setup keeps copy ordered and clear of the QR quiet zone");
+                bottom = box.y2;
             }
-            require(has_message, "wide setup keeps an immediate truthful message");
             for (const auto text : manual) {
                 auto* label = visible_label(screen, text);
                 require(label, "wide setup keeps all six complete manual labels");
@@ -2149,8 +2152,8 @@ int main(int argc, char** argv) {
             controller::apply(failed);
             recovery_qr_visible = true;
             tick(0);
-            check_manual(test.reason, test.action);
             int top = kSetupQrTop;
+            check_manual(test.reason, test.action, top);
             const auto qr_matches = [&](const int candidate_top) {
                 for (int row = 0; row < kSetupQrSide; ++row) {
                     const auto source = wide_offer.begin() + (kSetupQrTop + row) * w + kSetupQrLeft;
@@ -2162,28 +2165,31 @@ int main(int argc, char** argv) {
                 return true;
             };
             require(qr_matches(top), "wide recovery starts with the complete QR and quiet zone");
-            for (unsigned time = 0; time < 1100;) {
-                const auto step = std::min(16U, 1100U - time);
-                tick(step);
-                time += step;
-                check_manual(test.reason, test.action);
-                while (top < kFailureQrTop && !qr_matches(top)) {
-                    ++top;
+            unsigned time = 0;
+            for (const auto target : {824U, 825U, 826U, 934U, 935U, 936U, 1100U}) {
+                while (time < target) {
+                    const auto step = std::min(16U, target - time);
+                    tick(step);
+                    time += step;
+                    while (top < kFailureQrTop && !qr_matches(top)) {
+                        ++top;
+                    }
+                    require(qr_matches(top), "wide recovery retains every QR pixel while moving");
+                    check_manual(test.reason, test.action, top);
                 }
-                require(qr_matches(top), "wide recovery retains every QR pixel while moving");
             }
             require(top == kFailureQrTop && !tick(16), "wide recovery settles at the approved QR");
 
             controller::apply(validating);
             tick(0);
-            check_manual("Checking that network", "");
+            check_manual("Checking that network", "", kFailureQrTop);
             require(!visible_label(screen, test.reason) && !visible_label(screen, test.action) &&
                         qr_matches(kFailureQrTop),
                     "wide retry retires copy and holds QR");
             tick(1120);
             controller::apply(setup);
             tick(0);
-            check_manual("Join this network", "");
+            check_manual("Join this network", "", kFailureQrTop);
             require(qr_matches(kFailureQrTop), "wide editing retains the recovery QR");
             controller::apply(back);
             recovery_qr_visible = false;

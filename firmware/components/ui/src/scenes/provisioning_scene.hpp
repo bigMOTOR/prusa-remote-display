@@ -186,7 +186,6 @@ class ProvisioningScene {
     void layout_recovery_title(bool compact);
     void layout_recovery_action(bool compact);
     void layout_recovery_rows();
-    void paint_recovery_copy(std::int32_t title_level);
     void step_recovery_geometry(bool panel_visible, std::uint32_t now);
 
     // Rebuilds the code from the retained session, or hides it. Called on every path that

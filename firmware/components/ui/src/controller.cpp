@@ -8,7 +8,12 @@
 
 #include "controller.hpp"
 
+#include <algorithm>
+#include <array>
+#include <cstddef>
 #include <string>
+
+#include "components/demo_marker.hpp"
 
 #include "diagnostics/log.hpp"
 #include "diagnostics/tags.hpp"
@@ -29,6 +34,10 @@ namespace {
 constexpr std::string_view kTag = diagnostics::tag::kUi;
 
 lv_obj_t* g_screen = nullptr;
+
+constexpr lv_area_t kDemoMarkerArea{demo_marker::kLeft, demo_marker::kTop,
+                                    demo_marker::kLeft + demo_marker::kWidth - 1,
+                                    demo_marker::kTop + demo_marker::kHeight - 1};
 
 // One scene for the whole operational family — see operational_scene.hpp.
 scene::OperationalScene g_operational{};
@@ -249,6 +258,43 @@ bool build(lv_display_t* const display_handle) {
     return true;
 }
 
+void paint_demo_marker(const lv_area_t& area, std::uint8_t* const pixels) {
+    if (!g_has_applied || !g_applied.user_demo) {
+        return;
+    }
+
+    const lv_area_t visible{
+        std::max(area.x1, kDemoMarkerArea.x1), std::max(area.y1, kDemoMarkerArea.y1),
+        std::min(area.x2, kDemoMarkerArea.x2), std::min(area.y2, kDemoMarkerArea.y2)};
+    if (visible.x1 > visible.x2 || visible.y1 > visible.y2) {
+        return;
+    }
+
+    const auto foreground = theme::colour(theme::Colour::Primary);
+    const auto background = theme::colour(theme::Colour::Background);
+    const std::array<std::uint16_t, demo_marker::kMaxAlpha + 1> colours{
+        0, lv_color_to_u16(lv_color_mix(foreground, background, 85)),
+        lv_color_to_u16(lv_color_mix(foreground, background, 170)), lv_color_to_u16(foreground)};
+    const auto stride = lv_area_get_width(&area);
+    auto* const band = reinterpret_cast<std::uint16_t*>(pixels);
+
+    for (auto y = visible.y1; y <= visible.y2; ++y) {
+        for (auto x = visible.x1; x <= visible.x2; ++x) {
+            const auto pixel =
+                (y - demo_marker::kTop) * demo_marker::kWidth + x - demo_marker::kLeft;
+            const auto packed =
+                demo_marker::kInk[static_cast<std::size_t>(pixel / demo_marker::kPixelsPerByte)];
+            const auto shift =
+                (demo_marker::kPixelsPerByte - 1 - pixel % demo_marker::kPixelsPerByte) *
+                demo_marker::kAlphaBits;
+            const auto alpha = static_cast<std::size_t>((packed >> shift) & demo_marker::kMaxAlpha);
+            if (alpha != 0U) {
+                band[(y - area.y1) * stride + x - area.x1] = colours[alpha];
+            }
+        }
+    }
+}
+
 void apply(const app_model::Presentation& presentation) {
     if (g_screen == nullptr) {
         return;
@@ -262,6 +308,12 @@ void apply(const app_model::Presentation& presentation) {
     if (g_has_applied && presentation == g_applied) {
         ++g_report.redundant;
         return;
+    }
+
+    const bool marker_was_visible = g_has_applied && g_applied.user_demo;
+    if (marker_was_visible != presentation.user_demo) {
+        // Ready can be the same composition on both sides of the handover.
+        (void)lv_obj_invalidate_area(g_screen, &kDemoMarkerArea);
     }
 
     const PresentationDelta delta = diff(g_applied, presentation, !g_has_applied);

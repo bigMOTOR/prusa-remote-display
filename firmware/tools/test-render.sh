@@ -66,6 +66,8 @@ for MODE in 1 2; do
  mkdir -p "$OUT/controller-remaining-frames" "$OUT/controller-recovery-frames"
  ASAN_OPTIONS=detect_leaks=0 "$OUT/controller-tests" "$OUT/controller-remaining-frames" --remaining > "$OUT/controller-remaining.log" 2>&1
  ASAN_OPTIONS=detect_leaks=0 "$OUT/controller-tests" "$OUT/controller-recovery-frames" --recovery > "$OUT/controller-recovery.log" 2>&1
+ mkdir -p "$OUT/controller-user-demo-frames"
+ ASAN_OPTIONS=detect_leaks=0 "$OUT/controller-tests" "$OUT/controller-user-demo-frames" --user-demo > "$OUT/controller-user-demo.log" 2>&1
  # The opt-in path still uses the real reducer and controller. The larger stock
  # byte comparison is an independent replay; CI retains only the targeted transition samples.
  "$CXX" "${SAN[@]}" "${DEFS[@]}" "${INC[@]}" -std=gnu++17 "$H/printer_status.cpp" "$OUT"/*.o -o "$OUT/printer-status"

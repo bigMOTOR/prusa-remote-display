@@ -46,14 +46,10 @@ constexpr std::int32_t kFailureTitleY = theme::kCanvasContent.y;
 constexpr std::int32_t kFailureCopyGap = theme::kSpace1 / 2;
 constexpr std::int32_t kFailureActionY = kFailureTitleY + theme::kLineTitle + kFailureCopyGap;
 
-// The QR clears the full-width copy band first. Hand over the title while the
-// compact action stays readable, then hand over the action with the title held.
-// Both arrangements of one line stay disjoint in time.
-constexpr std::uint32_t kRecoveryTitleFadeStart = theme::kOperationalMotionMs * 7 / 10;
+// Reflow the existing labels only after the QR clears the wide copy band. Each
+// label keeps the shared 88–100% opacity ramp while its format changes.
 constexpr std::uint32_t kRecoveryTitleHandoff = theme::kOperationalMotionMs * 3 / 4;
-constexpr std::uint32_t kRecoveryActionFadeStart = theme::kOperationalMotionMs * 4 / 5;
 constexpr std::uint32_t kRecoveryActionHandoff = theme::kOperationalMotionMs * 17 / 20;
-constexpr std::uint32_t kRecoveryActionFadeEnd = theme::kOperationalMotionMs * 9 / 10;
 
 constexpr std::int32_t kQrModules = 33;
 constexpr std::int32_t kQrScale = 4;
@@ -529,14 +525,10 @@ void ProvisioningScene::step_recovery_geometry(const bool panel_visible, const s
         recovery_qr_y_ = top;
         lv_obj_set_y(qr_panel_, top);
     }
-    // Reformat each existing label at its zero-opacity handoff. Hiding before
-    // changing the geometry also covers a tick that crosses that boundary.
     if (previous_elapsed < kRecoveryTitleHandoff && elapsed >= kRecoveryTitleHandoff) {
-        lv_obj_add_flag(title_, LV_OBJ_FLAG_HIDDEN);
         layout_recovery_title(false);
     }
     if (previous_elapsed < kRecoveryActionHandoff && elapsed >= kRecoveryActionHandoff) {
-        lv_obj_add_flag(action_, LV_OBJ_FLAG_HIDDEN);
         layout_recovery_action(false);
     }
     const auto full = theme::opacity(theme::Opacity::Full);
@@ -1113,41 +1105,6 @@ void ProvisioningScene::set_visible(const bool visible) {
 // ⬅️ AND THE ENDPOINT IS UNTOUCHED BY CONSTRUCTION. At full level every one of them is the value
 // it was built with, so the settled composition is the same pixels owner ruling R3 froze. The
 // render suite asserts that too, byte for byte, rather than trusting the arithmetic.
-void ProvisioningScene::paint_recovery_copy(const std::int32_t title_level) {
-    const auto paint_label = [](lv_obj_t* const label, const std::int32_t level) {
-        if (level == 0 || lv_label_get_text(label)[0] == '\0') {
-            lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_remove_flag(label, LV_OBJ_FLAG_HIDDEN);
-            theme::apply_text_level(label, theme::Opacity::Full, level);
-        }
-    };
-    if (!recovery_geometry_running_) {
-        paint_label(title_, title_level);
-        paint_label(action_, title_level);
-        return;
-    }
-
-    // The same 88–100% entry envelope is shared by the two forms. Fade one form
-    // through zero before bringing in the other, so duplicated glyphs never mix.
-    const auto visible_level = [&](const std::uint32_t first, const std::uint32_t last) {
-        const auto active = std::clamp(recovery_elapsed_, first, last) - first;
-        return static_cast<std::int32_t>(active * title_level / (last - first));
-    };
-    const bool wide_clear = recovery_qr_y_ >= kFailureActionY + theme::kLineBody;
-    const auto handoff_level = [&](const std::uint32_t start, const std::uint32_t handoff,
-                                   const std::uint32_t end) {
-        if (recovery_elapsed_ < handoff) {
-            return title_level - visible_level(start, handoff);
-        }
-        return wide_clear ? visible_level(handoff, end) : 0;
-    };
-    paint_label(title_, handoff_level(kRecoveryTitleFadeStart, kRecoveryTitleHandoff,
-                                      kRecoveryActionFadeStart));
-    paint_label(action_, handoff_level(kRecoveryActionFadeStart, kRecoveryActionHandoff,
-                                       kRecoveryActionFadeEnd));
-}
-
 void ProvisioningScene::paint_session(const std::int32_t level) {
     const auto session_level = session_running_ ? std::min(level, session_level_) : level;
     const auto qr_level = recovery_layout_ ? theme::opacity(theme::Opacity::Full) : session_level;
@@ -1157,12 +1114,8 @@ void ProvisioningScene::paint_session(const std::int32_t level) {
         recovery_layout_ ? (phase_running_ ? phase_level_ : theme::opacity(theme::Opacity::Full))
                          : (phase_running_ ? std::min(level, phase_level_) : level);
     const auto row_level = recovery_geometry_running_ ? title_level : session_level;
-    if (recovery_layout_) {
-        paint_recovery_copy(title_level);
-    } else {
-        theme::apply_text_level(title_, theme::Opacity::Full, title_level);
-        theme::apply_text_level(action_, theme::Opacity::Full, title_level);
-    }
+    theme::apply_text_level(title_, theme::Opacity::Full, title_level);
+    theme::apply_text_level(action_, theme::Opacity::Full, title_level);
 
     for (auto& current : rows_) {
         theme::apply_text_level(current.caption, theme::Opacity::Full, row_level);

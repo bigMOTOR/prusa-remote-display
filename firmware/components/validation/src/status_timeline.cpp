@@ -301,7 +301,9 @@ std::optional<app_model::Presentation> UserDemo::advance(const app_model::Timest
     if (!changed) {
         return std::nullopt;
     }
-    return app_model::project(store_->state());
+    auto frame = app_model::project(store_->state());
+    frame.user_demo = true;
+    return frame;
 }
 
 void UserDemo::stop() {

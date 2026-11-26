@@ -185,9 +185,9 @@ is closed, hold the display button for about two seconds and release. Join the
 start the demo before entering any Wi-Fi or printer details.
 
 Ready, Preparing, Printing, Paused, a printer error, and Completed play once in
-about 30 seconds. The readings are examples. Briefly press the display button
-to exit early, or let the demo finish. A configured display returns to monitoring
-with its saved settings. A new display returns to setup.
+about 30 seconds. The display marks these example readings with a demo caption.
+Briefly press the display button to exit early, or let the demo finish. A configured
+display returns to monitoring with its saved settings. A new display returns to setup.
 
 ## Updates and help
 

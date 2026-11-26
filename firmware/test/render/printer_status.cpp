@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Mykola Fiantsev
 // SPDX-License-Identifier: GPL-3.0-only
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdio>
@@ -272,6 +273,12 @@ void status_transitions(const std::string& directory) {
     const auto blank = pixels;
     check(blank != ready && blank != withdrawing,
           "busy IDLE settles to the background composition");
+    const auto background = lv_color_to_u16(ui::theme::colour(ui::theme::Colour::Background));
+    check(std::all_of(blank.begin(), blank.end(), [&](auto pixel) { return pixel == background; }),
+          "busy IDLE settles to uniform background with no stale Ready arc");
+    record(directory + "/busy-withdrawal-settled.rgb565");
+    replay.at(1227320);
+    check(pixels == blank, "busy IDLE remains settled after the withdrawal clock");
 
     replay.at(1227400);
     replay.status(kIdle, 8);
@@ -293,7 +300,17 @@ void status_transitions(const std::string& directory) {
     check(pixels != attention, "attention has visible motion");
     replay.at(1229680);
     record(directory + "/attention-idle-settled.rgb565");
+    constexpr std::string_view raw_busy = R"({"printer":{"state":"BUSY"}})";
+    replay.at(1229800);
+    replay.status(raw_busy, 10);
+    check(replay.view().subject == SubjectState::Preparing && !replay.view().at_visual_rest,
+          "raw PrusaLink BUSY is a real Preparing observation");
+    replay.at(1230900);
+    check(pixels != ready && pixels != blank, "raw BUSY settles to operational Preparing");
+    record(directory + "/raw-busy-preparing-settled.rgb565");
+
     std::puts("PASS opt-in reducer/controller held Completed, qualifying/ineligible IDLE");
+    std::puts("PASS busy IDLE is uniform background; raw BUSY renders Preparing");
 }
 #endif
 } // namespace

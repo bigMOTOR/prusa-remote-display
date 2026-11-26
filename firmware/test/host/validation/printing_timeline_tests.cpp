@@ -1074,6 +1074,7 @@ TEST(UserDemoTests, RunsOnceWithOnlySyntheticFieldsAndCanExitOrRestart) {
         const auto frame = demo.advance(boot + offset);
         ASSERT_TRUE(frame.has_value()) << offset.count();
         EXPECT_EQ(frame->subject, subject);
+        EXPECT_TRUE(frame->user_demo);
         EXPECT_TRUE(frame->printer_name.empty());
         EXPECT_TRUE(frame->job_name.empty());
         EXPECT_EQ(frame->provisioning, ProvisioningPhase::Inactive);
