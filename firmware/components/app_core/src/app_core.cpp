@@ -329,6 +329,9 @@ std::uint32_t g_display_activity_ms = 0;
 app_model::display_policy::Situation g_display_situation{};
 bool g_display_situation_seen = false;
 
+// Tracks the ordinary power deadlines even when PrinterStatus suppresses a power change.
+app_model::DisplayPower g_display_ordinary_power = app_model::DisplayPower::On;
+
 // §7.11's lastInteractionAt as this tick last saw it. A change means the reducer accepted a button
 // gesture since the previous tick, which is activity — observed rather than intercepted, so the
 // gesture keeps exactly one owner.
@@ -380,13 +383,6 @@ void display_tick(const std::uint32_t now_ms) {
     }
 
     const app_model::AppState& state = g_store.state();
-    if (state.display.preferences.mode == app_model::DisplayMode::PrinterStatus &&
-        (state.subject == app_model::SubjectState::Ready ||
-         state.subject == app_model::SubjectState::Completed)) {
-        // The optional holds must stop when a silent worker supplies no new event.
-        g_store.age_observation_if_due(platform::monotonic_time());
-    }
-
     const auto situation = app_model::display_policy::situation_of(state);
     const bool situation_changed = !g_display_situation_seen || situation != g_display_situation;
     const bool interacted = state.display.last_interaction_at != g_display_interaction;
@@ -401,6 +397,8 @@ void display_tick(const std::uint32_t now_ms) {
         g_display_situation = situation;
         g_display_situation_seen = true;
         g_display_interaction = state.display.last_interaction_at;
+        g_display_ordinary_power =
+            situation_changed ? app_model::DisplayPower::On : state.display.power;
     }
 
     // Evaluate the awake hold once for recession and brightness. Completed's bounded Active
@@ -416,7 +414,54 @@ void display_tick(const std::uint32_t now_ms) {
         const std::uint32_t idle_ms =
             app_model::display_policy::elapsed_ms(now_ms, g_display_activity_ms);
 
-        switch (app_model::display_policy::next_step_for(state, idle_ms, held, kDisplayTimings)) {
+        using app_model::DataFreshness;
+        using app_model::DisplayPower;
+        using app_model::SubjectState;
+        using app_model::display_policy::Step;
+        auto step = app_model::display_policy::next_step_for(state, idle_ms, held, kDisplayTimings);
+        if (state.display.preferences.mode == app_model::DisplayMode::PrinterStatus &&
+            (state.subject == SubjectState::Ready || state.subject == SubjectState::Completed)) {
+            const auto ordinary_power = g_display_ordinary_power;
+            const auto ordinary_step = app_model::display_policy::next_step(
+                ordinary_power, idle_ms, held,
+                app_model::display_policy::recession_timings_for(state.subject, state.confidence,
+                                                                 kDisplayTimings));
+            if (ordinary_step != Step::Hold) {
+                g_display_ordinary_power =
+                    ordinary_step == Step::Dim ? DisplayPower::Dimmed : DisplayPower::Off;
+                // A suppressed power step still supplies the clock at which Timer would age
+                // the observation. Accepted polling outcomes drive aging between these steps.
+                if (step == Step::Hold) {
+                    const auto now = platform::monotonic_time();
+                    const auto freshness = g_store.observation_freshness_at(now);
+                    const bool hold_ended =
+                        freshness == DataFreshness::Expired ||
+                        (state.subject == SubjectState::Ready && freshness == DataFreshness::Stale);
+                    if (hold_ended && state.display.power == ordinary_power) {
+                        step = ordinary_step;
+                    } else {
+                        g_store.age_observation_if_due(now);
+                    }
+                }
+            } else if (ordinary_power == DisplayPower::Off && step == Step::Hold &&
+                       (state.display.power != DisplayPower::Off ||
+                        state.confidence == app_model::Confidence::Degraded)) {
+                // Timer is already dark. A transient failure report gets the same grace as a
+                // current observation to let ordinary retries continue driving loss. Once
+                // reports go quiet, the retained observation still ages from its last body.
+                const auto now = platform::monotonic_time();
+                const auto freshness = g_store.observation_freshness_at(now);
+                if ((freshness == DataFreshness::Stale || freshness == DataFreshness::Expired) &&
+                    (!state.display.observation_interrupted ||
+                     (state.printer_connection.phase ==
+                          app_model::ConnectionPhase::PrinterUnavailable &&
+                      g_store.printer_attempt_grace_elapsed(now)))) {
+                    g_store.age_observation_if_due(now);
+                }
+            }
+        }
+
+        switch (step) {
         case app_model::display_policy::Step::Dim:
             dispatch(app_model::Event::display_idle_timer_fired(platform::monotonic_time()));
             break;

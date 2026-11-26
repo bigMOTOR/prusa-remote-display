@@ -9,10 +9,22 @@ Store::Store(const app_model::AppState& initial) : state_{initial} {}
 
 Store::Store(const app_model::ReducerPolicy& policy) : policy_{policy} {}
 
+app_model::DataFreshness Store::observation_freshness_at(const app_model::Timestamp now) const {
+    if (!state_.printer.ever_observed) {
+        return app_model::DataFreshness::Unknown;
+    }
+    return app_model::classify_freshness(now - state_.printer.observed_at, policy_.freshness);
+}
+
+bool Store::printer_attempt_grace_elapsed(const app_model::Timestamp now) const {
+    const auto freshness = app_model::classify_freshness(
+        now - state_.printer_connection.last_attempt_at, policy_.freshness);
+    return app_model::confidence_from(freshness, true) != app_model::Confidence::Current;
+}
+
 void Store::age_observation_if_due(const app_model::Timestamp now) {
     if (state_.printer.ever_observed && now > state_.last_event_at &&
-        app_model::classify_freshness(now - state_.printer.observed_at, policy_.freshness) !=
-            state_.printer_connection.freshness) {
+        observation_freshness_at(now) != state_.printer_connection.freshness) {
         (void)dispatch(app_model::Event::confidence_aged(now));
     }
 }

@@ -46,11 +46,6 @@ constexpr std::int32_t kFailureTitleY = theme::kCanvasContent.y;
 constexpr std::int32_t kFailureCopyGap = theme::kSpace1 / 2;
 constexpr std::int32_t kFailureActionY = kFailureTitleY + theme::kLineTitle + kFailureCopyGap;
 
-// Reflow the existing labels only after the QR clears the wide copy band. Each
-// label keeps the shared 88–100% opacity ramp while its format changes.
-constexpr std::uint32_t kRecoveryTitleHandoff = theme::kOperationalMotionMs * 3 / 4;
-constexpr std::uint32_t kRecoveryActionHandoff = theme::kOperationalMotionMs * 17 / 20;
-
 constexpr std::int32_t kQrModules = 33;
 constexpr std::int32_t kQrScale = 4;
 constexpr std::int32_t kQrQuietModules = 4;
@@ -420,10 +415,10 @@ void ProvisioningScene::set_row(const RowIndex index, const std::string_view val
 }
 
 void ProvisioningScene::layout_recovery_rows() {
-    // Measure the actual labels, including a wrapped generated credential. Move each
-    // row from its compact position to its final position as the compact copy recedes.
+    // Preserve the approved settled layout, including a wrapped generated password.
+    constexpr auto gap_count = static_cast<std::int32_t>(kRowCount) - 1;
     std::array<std::int32_t, kRowCount> row_heights{};
-    std::int32_t height = 0;
+    std::int32_t height = theme::kSpaceCompact * gap_count;
     for (std::size_t index = 0; index < kRowCount; ++index) {
         lv_obj_t* const value = rows_[index].value;
         lv_obj_update_layout(value);
@@ -431,131 +426,22 @@ void ProvisioningScene::layout_recovery_rows() {
             theme::kLineCaption + std::max(theme::kLineBody, lv_obj_get_height(value));
         height += row_heights[index];
     }
-    constexpr auto gap_count = static_cast<std::int32_t>(kRowCount) - 1;
-    const auto top_for_gap = [&](const std::int32_t gap) {
-        const auto stack_height = height + gap * gap_count;
-        return kRecoveryQrY + std::max<std::int32_t>(0, (kQrBlock - stack_height) / 2);
-    };
-    auto compact_top = std::max(top_for_gap(theme::kSpace1), compact_rows_min_y_);
-    auto compact_gap = theme::kSpace1;
-    std::array<std::int32_t, kRowCount> compact_caption_pitches{};
-    compact_caption_pitches.fill(theme::kLineCaption);
-    if (recovery_geometry_running_ &&
-        compact_top + height + compact_gap * gap_count > theme::kCanvasContent.bottom()) {
-        // A wrapped password below the longest compact message consumes this stack's
-        // spare padding. Keep the full text and its fonts, and place the stack between
-        // the copy and the bottom inset using the captions' measured line boxes.
-        auto packed_height = height;
-        for (std::size_t index = 0; index < kRowCount; ++index) {
-            const auto caption_height = lv_obj_get_height(rows_[index].caption);
-            compact_caption_pitches[index] = caption_height;
-            packed_height -= theme::kLineCaption - caption_height;
-        }
-        compact_gap = 0;
-        compact_top = std::max(compact_rows_min_y_ - theme::kSpace1,
-                               theme::kCanvasContent.bottom() - packed_height);
-    }
-    const auto full = theme::opacity(theme::Opacity::Full);
-    const auto blend = [&](const auto start, const auto end) {
-        return start + (end - start) * recovery_rows_blend_ / full;
-    };
-    const auto expanded_top = top_for_gap(theme::kSpaceCompact);
-    auto y = recovery_geometry_running_ ? blend(compact_top, expanded_top) : expanded_top;
-    const auto gap = recovery_geometry_running_ ? blend(compact_gap, theme::kSpaceCompact)
-                                                : theme::kSpaceCompact;
+
+    auto y = kRecoveryQrY + std::max<std::int32_t>(0, (kQrBlock - height) / 2);
     for (std::size_t index = 0; index < kRowCount; ++index) {
-        const auto caption_pitch = recovery_geometry_running_
-                                       ? blend(compact_caption_pitches[index], theme::kLineCaption)
-                                       : theme::kLineCaption;
         lv_obj_set_pos(rows_[index].caption, kColumnX, y);
-        lv_obj_set_pos(rows_[index].value, kColumnX, y + caption_pitch);
-        y += caption_pitch + row_heights[index] - theme::kLineCaption + gap;
-    }
-}
-
-void ProvisioningScene::layout_recovery_title(const bool compact) {
-    theme::apply_text_style(title_,
-                            compact ? theme::TextRole::Section : theme::TextRole::StateTitle,
-                            theme::Colour::Primary);
-    lv_obj_set_width(title_, compact ? kColumnWidth : theme::kCanvasContent.width);
-}
-
-void ProvisioningScene::layout_recovery_action(const bool compact) {
-    lv_obj_set_width(action_, compact ? kColumnWidth : theme::kCanvasContent.width);
-    lv_obj_set_y(action_, kFailureActionY);
-}
-
-void ProvisioningScene::layout_recovery_content() {
-    if (recovery_geometry_running_ && recovery_elapsed_ < kRecoveryActionHandoff) {
-        // Once the title has handed over, keep the remaining compact action in
-        // place until its own handoff. Neither line borrows a second LVGL object.
-        auto title_bottom = kFailureTitleY + theme::kLineTitle;
-        if (recovery_elapsed_ < kRecoveryTitleHandoff) {
-            lv_obj_remove_flag(title_, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_update_layout(title_);
-            title_bottom = kFailureTitleY + lv_obj_get_content_height(title_);
-            lv_obj_set_y(action_, std::max(kFailureActionY, title_bottom + kFailureCopyGap));
-        }
-        const bool have_action = lv_label_get_text(action_)[0] != '\0';
-        auto copy_bottom = title_bottom;
-        if (have_action) {
-            lv_obj_remove_flag(action_, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_update_layout(action_);
-            copy_bottom = lv_obj_get_y(action_) + lv_obj_get_content_height(action_);
-        }
-        compact_rows_min_y_ = copy_bottom + theme::kSpace1;
-    }
-
-    layout_recovery_rows();
-}
-
-void ProvisioningScene::step_recovery_geometry(const bool panel_visible, const std::uint32_t now) {
-    if (!recovery_geometry_running_) {
-        return;
-    }
-
-    recovery_geometry_clock_.advance(panel_visible, now);
-    const auto previous_elapsed = recovery_elapsed_;
-    recovery_elapsed_ = std::min(recovery_geometry_clock_.elapsed(), theme::kOperationalMotionMs);
-    const auto elapsed = recovery_elapsed_;
-    const auto top = kQrBlockRect.y +
-                     static_cast<std::int32_t>(
-                         std::lround(entry_progress(elapsed) * (kRecoveryQrY - kQrBlockRect.y)));
-    if (top != recovery_qr_y_) {
-        recovery_qr_y_ = top;
-        lv_obj_set_y(qr_panel_, top);
-    }
-    if (previous_elapsed < kRecoveryTitleHandoff && elapsed >= kRecoveryTitleHandoff) {
-        layout_recovery_title(false);
-    }
-    if (previous_elapsed < kRecoveryActionHandoff && elapsed >= kRecoveryActionHandoff) {
-        layout_recovery_action(false);
-    }
-    const auto full = theme::opacity(theme::Opacity::Full);
-    const auto rows_elapsed = std::max(elapsed, kRecoveryActionHandoff) - kRecoveryActionHandoff;
-    const auto rows_blend = static_cast<std::int32_t>(
-        rows_elapsed * full / (theme::kOperationalMotionMs - kRecoveryActionHandoff));
-    if (rows_blend != recovery_rows_blend_) {
-        recovery_rows_blend_ = rows_blend;
-        layout_recovery_rows();
-    }
-    if (panel_visible && elapsed >= theme::kOperationalMotionMs) {
-        recovery_geometry_running_ = false;
+        lv_obj_set_pos(rows_[index].value, kColumnX, y + theme::kLineCaption);
+        y += row_heights[index] + theme::kSpaceCompact;
     }
 }
 
 void ProvisioningScene::layout_session(const bool recovery) {
     recovery_layout_ = recovery;
-    recovery_geometry_running_ = recovery && was_drawn_;
-    if (recovery) {
-        layout_recovery_title(recovery_geometry_running_);
-    } else {
-        theme::apply_text_style(title_, theme::TextRole::Body, theme::Colour::Primary);
-        lv_obj_set_width(title_, kColumnWidth);
-        lv_obj_remove_flag(title_, LV_OBJ_FLAG_HIDDEN);
-    }
+    theme::apply_text_style(title_, recovery ? theme::TextRole::StateTitle : theme::TextRole::Body,
+                            theme::Colour::Primary);
+    lv_obj_set_width(title_, recovery ? theme::kCanvasContent.width : kColumnWidth);
+    lv_obj_remove_flag(title_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_pos(title_, kColumnX, recovery ? kFailureTitleY : kTitleY);
-    layout_recovery_action(recovery_geometry_running_);
 
     for (std::size_t index = 0; index < kRowCount; ++index) {
         const RowBox& box = kRowBoxes[index];
@@ -574,15 +460,13 @@ void ProvisioningScene::layout_session(const bool recovery) {
             lv_obj_set_pos(current.value, box.x, box.y + theme::kLineCaption);
         }
     }
-    recovery_elapsed_ = 0;
-    recovery_rows_blend_ = 0;
-    compact_rows_min_y_ = 0;
-    recovery_geometry_clock_.clear();
-    if (recovery_geometry_running_) {
-        recovery_geometry_clock_.arm();
+    if (recovery) {
+        // The failure frame has its final QR and manual path at once. Only the
+        // new reason and action run an entry ramp.
+        session_running_ = false;
+        session_clock_.clear();
     }
-    recovery_qr_y_ = recovery && !recovery_geometry_running_ ? kRecoveryQrY : kQrBlockRect.y;
-    lv_obj_set_y(qr_panel_, recovery_qr_y_);
+    lv_obj_set_y(qr_panel_, recovery ? kRecoveryQrY : kQrBlockRect.y);
 }
 
 // The shared full-screen message composition — the one every family that states a condition in
@@ -680,14 +564,6 @@ void ProvisioningScene::hide_session() {
     // The credential first. set_row() wipes the scene-owned text buffer as well as hiding it,
     // and session_drawable_ makes apply_qr() clear the encoded copy rather than redraw it.
     session_drawable_ = false;
-    if (recovery_geometry_running_) {
-        recovery_geometry_running_ = false;
-        recovery_geometry_clock_.clear();
-        layout_recovery_title(false);
-        layout_recovery_action(false);
-        recovery_qr_y_ = kRecoveryQrY;
-        lv_obj_set_y(qr_panel_, kRecoveryQrY);
-    }
     session_running_ = false;
     session_clock_.clear();
 #if !defined(PRD_OLD_SETUP_STALE_OFFER) && !defined(PRD_OLD_SESSION_ROWS)
@@ -869,7 +745,8 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
     // Keep the recovery composition through retries in the same setup session.
     const bool use_recovery_layout = failed || (recovery_layout_ && offering_network);
     const bool leaving_recovery_layout = recovery_layout_ && !use_recovery_layout;
-    if (use_recovery_layout != recovery_layout_) {
+    const bool layout_changed = use_recovery_layout != recovery_layout_;
+    if (layout_changed) {
         layout_session(use_recovery_layout);
     }
 
@@ -895,7 +772,6 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
         phase_running_ = true;
     }
 #endif
-    const auto previous_phase = phase_;
     phase_ = phase;
     phase_seen_ = true;
 
@@ -917,9 +793,8 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
         }
     }
 
-    if (recovery_layout_ &&
-        (phase != previous_phase || title_changed || returning_from_statement)) {
-        layout_recovery_content();
+    if (recovery_layout_ && (layout_changed || returning_from_statement)) {
+        layout_recovery_rows();
     }
     if (phase_running_ || recovery_layout_) {
         paint(level_ < 0 ? theme::opacity(theme::Opacity::Full) : level_);
@@ -955,7 +830,7 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
     // make the QR worse than useless: a code that joins something the panel does not name.
     apply_qr();
     if (recovery_layout_) {
-        layout_recovery_content();
+        layout_recovery_rows();
     }
     if (!previously_offering_network) {
         start_session_reveal();
@@ -1013,7 +888,7 @@ void ProvisioningScene::apply_session(const SetupSession& session) {
     set_row(RowIndex::Address, session_.url.view());
     apply_qr();
     if (recovery_layout_) {
-        layout_recovery_content();
+        layout_recovery_rows();
     }
     if (!had_session) {
         start_session_reveal();
@@ -1106,20 +981,20 @@ void ProvisioningScene::set_visible(const bool visible) {
 // it was built with, so the settled composition is the same pixels owner ruling R3 froze. The
 // render suite asserts that too, byte for byte, rather than trusting the arithmetic.
 void ProvisioningScene::paint_session(const std::int32_t level) {
-    const auto session_level = session_running_ ? std::min(level, session_level_) : level;
-    const auto qr_level = recovery_layout_ ? theme::opacity(theme::Opacity::Full) : session_level;
-    const auto alpha = static_cast<lv_opa_t>(std::max<std::int32_t>(0, qr_level));
+    const auto session_level = recovery_layout_
+                                   ? theme::opacity(theme::Opacity::Full)
+                                   : (session_running_ ? std::min(level, session_level_) : level);
+    const auto alpha = static_cast<lv_opa_t>(std::max<std::int32_t>(0, session_level));
 
     const auto title_level =
         recovery_layout_ ? (phase_running_ ? phase_level_ : theme::opacity(theme::Opacity::Full))
                          : (phase_running_ ? std::min(level, phase_level_) : level);
-    const auto row_level = recovery_geometry_running_ ? title_level : session_level;
     theme::apply_text_level(title_, theme::Opacity::Full, title_level);
     theme::apply_text_level(action_, theme::Opacity::Full, title_level);
 
     for (auto& current : rows_) {
-        theme::apply_text_level(current.caption, theme::Opacity::Full, row_level);
-        theme::apply_text_level(current.value, theme::Opacity::Full, row_level);
+        theme::apply_text_level(current.caption, theme::Opacity::Full, session_level);
+        theme::apply_text_level(current.value, theme::Opacity::Full, session_level);
     }
 
     if (qr_panel_ != nullptr) {
@@ -1145,6 +1020,9 @@ void ProvisioningScene::paint_session(const std::int32_t level) {
 
 void ProvisioningScene::start_session_reveal() {
 #ifndef PRD_OLD_SETUP_SESSION_REVEAL
+    if (recovery_layout_) {
+        return;
+    }
     session_clock_.arm();
     session_running_ = true;
     session_level_ = 0;
@@ -1163,7 +1041,7 @@ void ProvisioningScene::paint(const std::int32_t level) {
 }
 
 bool ProvisioningScene::step(const bool panel_visible, const std::uint32_t now) {
-    if (!running_ && !phase_running_ && !session_running_ && !recovery_geometry_running_) {
+    if (!running_ && !phase_running_ && !session_running_) {
         return false;
     }
 
@@ -1217,9 +1095,8 @@ bool ProvisioningScene::step(const bool panel_visible, const std::uint32_t now) 
         }
     }
 
-    step_recovery_geometry(panel_visible, now);
     paint(level_ < 0 ? theme::opacity(theme::Opacity::Full) : level_);
-    return running_ || phase_running_ || session_running_ || recovery_geometry_running_;
+    return running_ || phase_running_ || session_running_;
 }
 
 } // namespace prd::ui::scene

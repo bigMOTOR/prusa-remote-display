@@ -182,11 +182,7 @@ class ProvisioningScene {
 
     void set_row(RowIndex index, std::string_view value);
     void layout_session(bool recovery);
-    void layout_recovery_content();
-    void layout_recovery_title(bool compact);
-    void layout_recovery_action(bool compact);
     void layout_recovery_rows();
-    void step_recovery_geometry(bool panel_visible, std::uint32_t now);
 
     // Rebuilds the code from the retained session, or hides it. Called on every path that
     // changes the session, so the drawn code and the drawn password can never disagree.
@@ -223,12 +219,6 @@ class ProvisioningScene {
     app_model::ProvisioningPhase phase_{app_model::ProvisioningPhase::Inactive};
     bool phase_seen_{false};
     bool recovery_layout_{false};
-    HoldClock recovery_geometry_clock_{};
-    bool recovery_geometry_running_{false};
-    std::int32_t recovery_qr_y_{0};
-    std::uint32_t recovery_elapsed_{0};
-    std::int32_t recovery_rows_blend_{0};
-    std::int32_t compact_rows_min_y_{0};
     bool phase_running_{false};
     std::int32_t phase_from_level_{0};
     std::int32_t phase_level_{0};
