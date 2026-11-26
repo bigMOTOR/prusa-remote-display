@@ -76,6 +76,9 @@ enum class Opacity {
 
 [[nodiscard]] lv_opa_t opacity(Opacity token);
 
+// Owner-approved setup failure/retry entry. Convert 88% to the nearest LVGL level.
+inline constexpr std::int32_t kSetupFailureEntryLevel = (LV_OPA_COVER * 88 + 50) / 100;
+
 // --- §4 Typography ---------------------------------------------------------
 
 // Applies a §4 text role and a §5 colour to a label in one call: font, colour,

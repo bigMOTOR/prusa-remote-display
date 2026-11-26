@@ -740,6 +740,25 @@ TEST(SetupProgressionTests, WalksTheProvisioningFlowAndReturnsToInactive) {
     EXPECT_EQ(state.provisioning, ProvisioningPhase::Inactive);
 }
 
+TEST(SetupProgressionTests, SetupFailureDetailIsCurrentAndPartOfDeviceContent) {
+    const PrinterValidationFailure denial{PrinterValidationStage::Status,
+                                          PrinterValidationReason::Unauthorized, 403};
+    const auto failed = reduce(
+        AppState{}, Event::provisioning_phase(at_ms(0), ProvisioningPhase::SetupFailed, denial));
+    EXPECT_EQ(project(failed).setup_failure, denial);
+
+    const auto next =
+        reduce(failed, Event::provisioning_phase(at_ms(1), ProvisioningPhase::SetupFailed));
+    EXPECT_EQ(project(next).setup_failure, PrinterValidationFailure{});
+    EXPECT_FALSE(content_equals(failed, next));
+    EXPECT_NE(project(failed), project(next));
+
+    const auto validating = reduce(
+        failed,
+        Event::provisioning_phase(at_ms(2), ProvisioningPhase::ValidatingConfiguration, denial));
+    EXPECT_EQ(project(validating).setup_failure, PrinterValidationFailure{});
+}
+
 TEST(SetupProgressionTests, ConnectionFailureNeverEntersProvisioning) {
     // UIAD 001 §5: "Provisioning is distinct from temporary connectivity failure and
     // shall not replace an existing valid configuration". Structural here — no

@@ -93,7 +93,7 @@ bool RateLimiter::allow(const std::uint32_t now_ms) {
     const std::uint32_t refills = elapsed / kRateRefillIntervalMs;
 
     if (refills != 0) {
-        const std::uint32_t room = kRateBurst - tokens_;
+        const std::uint32_t room = burst_ - tokens_;
         tokens_ += refills < room ? refills : room;
         last_refill_ms_ += refills * kRateRefillIntervalMs;
     }
@@ -107,7 +107,7 @@ bool RateLimiter::allow(const std::uint32_t now_ms) {
 }
 
 void RateLimiter::reset() {
-    tokens_ = kRateBurst;
+    tokens_ = burst_;
     last_refill_ms_ = 0;
     started_ = false;
 }

@@ -348,6 +348,25 @@ jobs:
       - name: Verify ESP-IDF version
         run: . "${IDF_PATH}/export.sh" && test "$(idf.py --version)" = "ESP-IDF v5.5.4"
 
+      # Exercise the normal host admission suite with the same parser the device builds.
+      - name: Test provisioning admission with ESP-IDF v5.5.4 cJSON
+        shell: bash
+        run: |
+          . "${IDF_PATH}/export.sh"
+          test "$(idf.py --version)" = "ESP-IDF v5.5.4"
+          parser_dir="${IDF_PATH}/components/json/cJSON"
+          (
+            cd "$parser_dir"
+            sha256sum -c - <<'EOF'
+          298581a04a36c0165da4b0aade235c23088cb2faa58651d720ea2f3706ed0b0d  cJSON.c
+          25b0145150d500498e4d209cec69c18c42cf818bffcc54690be3b895a2a16dee  cJSON.h
+          EOF
+          )
+          env -u IDF_PATH cmake -S firmware/test/host -B firmware/build/f8-cjson -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug "-DPRD_HOST_CJSON_DIR=$parser_dir"
+          cmake --build firmware/build/f8-cjson --target prd_provisioning_admission_tests --parallel 2
+          ctest --test-dir firmware/build/f8-cjson -R '^ProvisioningServerAdmission\.' --output-on-failure --no-tests=error
+
       - name: Build debug profile
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache

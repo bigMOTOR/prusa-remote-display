@@ -363,3 +363,30 @@ TEST(ConfigRecordTests, NoLoadOrSavePathEverErasesAnything) {
 }
 
 } // namespace
+
+TEST(ConfigRecordTests, DisplayPreferencesKeepTheOldRecordAndHaveIndependentDefaults) {
+    using prd::app_model::Backlight;
+    using prd::app_model::DisplayMode;
+    FakeKeyValue store;
+    const ConfigV1 old = configured();
+    ASSERT_EQ(prd::config::save(store, old), SaveOutcome::Committed);
+    ASSERT_EQ(prd::config::load_display_preferences(store).mode, DisplayMode::Timer);
+    ASSERT_EQ(prd::config::load_display_preferences(store).backlight, Backlight::Standard);
+    ASSERT_TRUE(
+        prd::config::save_display_preferences(store, {DisplayMode::PrinterStatus, Backlight::Low}));
+
+    EXPECT_EQ(prd::config::load_display_preferences(store).mode, DisplayMode::PrinterStatus);
+    EXPECT_EQ(prd::config::load_display_preferences(store).backlight, Backlight::Low);
+    EXPECT_EQ(prd::config::load(store).value, old);
+    EXPECT_EQ(prd::config::load(store).generation, 1U);
+
+    store.fail_write(Namespace::Config, "display_prefs");
+    EXPECT_FALSE(
+        prd::config::save_display_preferences(store, {DisplayMode::Timer, Backlight::High}));
+    EXPECT_EQ(prd::config::load_display_preferences(store).mode, DisplayMode::PrinterStatus);
+    EXPECT_EQ(prd::config::load_display_preferences(store).backlight, Backlight::Low);
+
+    EXPECT_EQ(prd::config::discard(store), prd::config::ClearOutcome::Cleared);
+    EXPECT_EQ(prd::config::load_display_preferences(store).mode, DisplayMode::Timer);
+    EXPECT_EQ(prd::config::load_display_preferences(store).backlight, Backlight::Standard);
+}

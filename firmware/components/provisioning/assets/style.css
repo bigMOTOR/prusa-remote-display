@@ -85,6 +85,64 @@ h2 {
   color: var(--tertiary);
 }
 
+#setupFeedback {
+  margin: 16px 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border-left: 4px solid var(--error);
+  border-radius: 8px;
+}
+
+#setupFeedback.checking {
+  border-left-color: var(--accent);
+}
+
+#setupFeedback h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+#setupFeedbackAction {
+  margin: 5px 0 0;
+  font-size: 15px;
+}
+
+#diagnostic {
+  margin-top: 8px;
+}
+
+#diagnosticOpen {
+  min-height: 44px;
+  padding: 8px 0;
+  background: transparent;
+  color: var(--secondary);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+#diagnosticOpen:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+#diagnosticNote {
+  margin: 0 0 6px;
+  color: var(--secondary);
+  font-size: 13px;
+}
+
+#diagnosticReport {
+  field-sizing: content;
+  min-height: 10lh;
+  resize: vertical;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
 form {
   margin: 0 0 24px;
 }
@@ -113,7 +171,9 @@ label {
   color: var(--secondary);
 }
 
-input {
+input,
+textarea,
+select {
   width: 100%;
   padding: 10px 12px;
   background: var(--background);
@@ -124,7 +184,9 @@ input {
   font-size: 16px; /* 16px stops iOS Safari zooming the page on focus. */
 }
 
-input:focus-visible {
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }

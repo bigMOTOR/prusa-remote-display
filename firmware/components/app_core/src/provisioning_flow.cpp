@@ -58,6 +58,9 @@ std::string_view log_label(const Failure failure) {
     case Failure::PrinterUnauthorized:
         return "printer-unauthorized";
 
+    case Failure::PrinterServerError:
+        return "printer-server-error";
+
     case Failure::PrinterUnsupported:
         return "printer-unsupported";
 
@@ -359,7 +362,27 @@ ActivatedPair activate_pair(storage::KeyValue& store, const StagedPair& staged) 
     return report;
 }
 
-Failure failure_for_printer(const app_model::ConnectionPhase phase) {
+Failure failure_for_printer(const app_model::ConnectionPhase phase,
+                            const app_model::PrinterValidationFailure evidence) {
+    if (evidence.http_status == 401 || evidence.http_status == 403) {
+        return Failure::PrinterUnauthorized;
+    }
+    if (evidence.http_status >= 500 && evidence.http_status <= 599) {
+        return Failure::PrinterServerError;
+    }
+
+    using app_model::PrinterValidationReason;
+    if (evidence.has_http_status() &&
+        (evidence.reason == PrinterValidationReason::Timeout ||
+         evidence.reason == PrinterValidationReason::TransportFailed)) {
+        return Failure::PrinterUnusableResponse;
+    }
+    if (!evidence.has_http_status() &&
+        (evidence.reason == PrinterValidationReason::PrinterError ||
+         evidence.reason == PrinterValidationReason::UnexpectedStatus)) {
+        return Failure::PrinterUnusableResponse;
+    }
+
     switch (phase) {
     case app_model::ConnectionPhase::Unauthorized:
         return Failure::PrinterUnauthorized;

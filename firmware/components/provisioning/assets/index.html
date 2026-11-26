@@ -12,6 +12,12 @@
   <body>
     <main>
       <h1 id="product">Prusa Remote Display</h1>
+      <div aria-live="polite" aria-atomic="true">
+        <section id="setupFeedback" hidden>
+          <h2 id="setupFeedbackReason"></h2>
+          <p id="setupFeedbackAction" hidden></p>
+        </section>
+      </div>
       <p class="lead" id="lead">First, connect this display to your Wi-Fi.</p>
 
       <!--
@@ -79,6 +85,16 @@
         </fieldset>
 
         <button id="wifiSubmit" type="submit">Check this Wi-Fi</button>
+
+        <section id="diagnostic" aria-label="Setup diagnostic" hidden>
+          <button id="diagnosticOpen" type="button" aria-expanded="false"
+                  aria-controls="diagnosticPanel">Show diagnostic report</button>
+          <div id="diagnosticPanel" hidden>
+            <p id="diagnosticNote" class="note" role="status" hidden></p>
+            <textarea id="diagnosticReport" rows="8" readonly
+                      aria-label="Diagnostic report" hidden></textarea>
+          </div>
+        </section>
       </form>
 
       <!-- Revealed only once the device has actually joined and held the connection. -->
@@ -145,6 +161,27 @@
       </form>
 
       <p id="done" class="done" role="status" aria-live="polite" hidden></p>
+
+      <form id="displaySettings" hidden>
+        <fieldset>
+          <legend>Display</legend>
+          <label for="displayMode">When idle</label>
+          <select id="displayMode">
+            <option value="0">Sleep on timer</option>
+            <option value="1">Keep printer status visible</option>
+          </select>
+          <label for="backlight">Backlight</label>
+          <select id="backlight">
+            <option value="0">Low</option>
+            <option value="1">Standard</option>
+            <option value="2">High</option>
+          </select>
+          <button id="displaySave" type="submit">Save display settings</button>
+          <p id="displaySaveStatus" class="note" role="status" aria-live="polite"></p>
+          <button id="showDemo" type="button" hidden>Show demo</button>
+          <p id="demoStatus" class="note" role="status" aria-live="polite" hidden></p>
+        </fieldset>
+      </form>
 
       <dl class="facts">
         <dt>Firmware</dt>

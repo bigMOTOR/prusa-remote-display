@@ -347,7 +347,11 @@ bool operator!=(const PrinterConnectionState& lhs, const PrinterConnectionState&
 
 bool operator==(const DisplayState& lhs, const DisplayState& rhs) {
     return lhs.power == rhs.power && lhs.brightness_percent == rhs.brightness_percent &&
-           lhs.idle_mode == rhs.idle_mode && lhs.last_interaction_at == rhs.last_interaction_at;
+           lhs.idle_mode == rhs.idle_mode && lhs.last_interaction_at == rhs.last_interaction_at &&
+           lhs.preferences.mode == rhs.preferences.mode &&
+           lhs.preferences.backlight == rhs.preferences.backlight &&
+           lhs.waiting_for_ready == rhs.waiting_for_ready &&
+           lhs.observation_interrupted == rhs.observation_interrupted;
 }
 
 bool operator!=(const DisplayState& lhs, const DisplayState& rhs) {

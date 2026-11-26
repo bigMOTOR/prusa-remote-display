@@ -9,6 +9,7 @@
 #include "app_model/device_data.hpp"
 #include "app_model/observation.hpp"
 #include "app_model/printer_data.hpp"
+#include "app_model/printer_validation.hpp"
 #include "app_model/state_layers.hpp"
 
 // The single authoritative application state — Architecture Spec §7.1, §24.11.
@@ -158,6 +159,7 @@ struct AppState {
     // --- Device-owned flows (UIAD 001 §5, §9, §10) -------------------------
 
     ProvisioningPhase provisioning{ProvisioningPhase::Inactive};
+    PrinterValidationFailure setup_failure{};
     ModalSurface modal_surface{ModalSurface::None};
 
     // The facts. device_operation below is derived from these three by the

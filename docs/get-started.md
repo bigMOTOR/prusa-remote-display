@@ -163,6 +163,31 @@ If the display says **Settings cannot be used**, nothing has been erased — hol
 the button for about two seconds and release it to set up again.
 Do not force a stiff printed button; disconnect power and check the assembly.
 
+## Display settings
+
+Open setup using the same button hold and join the setup network. Scroll to **Display**.
+Choose **When idle** and **Backlight**, then select **Save display settings**.
+The display remembers both choices after restart.
+
+**Sleep on timer** and **Standard** are the defaults. **Keep printer status visible**
+keeps the ready arc lit after a current PrusaLink idle or ready report. After a print
+finishes, Completed dims after the usual acknowledgement. It stays visible while
+the display can observe the printer and is waiting for a new idle or ready report.
+The local report describes the printer's status. It does not detect whether the print
+was removed or whether the bed is clear.
+
+## Try the display without a printer
+
+On the display's setup page, scroll to **Display** and select **Show demo**. If setup
+is closed, hold the display button for about two seconds and release. Join the
+`PRD-Setup-…` network shown on the display and open the displayed address. You can
+start the demo before entering any Wi-Fi or printer details.
+
+Ready, Preparing, Printing, Paused, a printer error, and Completed play once in
+about 30 seconds. The readings are examples. Briefly press the display button
+to exit early, or let the demo finish. A configured display returns to monitoring
+with its saved settings. A new display returns to setup.
+
 ## Updates and help
 
 When online, the display checks GitHub roughly once a day for new firmware.

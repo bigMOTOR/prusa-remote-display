@@ -4,7 +4,7 @@
 #include "esp_err.h"
 #include <cstdint>
 
-// Only the API surface consumed by the real public_https.cpp. No SDK networking
+// Only the API surface consumed by the real HTTP adapters. No SDK networking
 // or TLS implementation is modelled; init captures the actual caller config.
 struct TestHttpClient;
 using esp_http_client_handle_t = TestHttpClient*;

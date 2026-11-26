@@ -15,6 +15,12 @@
 
   var token = "";
   var polling = null;
+  var pollingStatus = false;
+  var diagnosticId = "";
+  var diagnosticGeneration = 0;
+  var recoveringSetup = false;
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var wifiLead = "";
 
   // Set when the device is observed to have restarted mid-attempt. See readStatus().
   var deviceRestarted = false;
@@ -31,6 +37,9 @@
   // action off this page while nothing could be saved.
   var canConfigure = true;
   var canInstall = false;
+  var displaySettingsRevision = null;
+  var displaySaveBusy = false;
+  var demoBusy = false;
   var updateVersion = "";
   var updateInstalling = false;
 
@@ -319,7 +328,8 @@
 
   function post(stage, body) {
     body.stage = stage;
-    return fetch("/api/setup", {
+    var path = stage === "diagnostic-report" ? "/api/diagnostic-report" : "/api/setup";
+    return fetch(path, {
       method: "POST",
       cache: "no-store",
       credentials: "omit",
@@ -336,9 +346,14 @@
           return {};
         })
         .then(function (report) {
-          return { ok: response.ok, report: report };
+          return { ok: response.ok, status: response.status, report: report };
         });
     });
+  }
+
+  function showRateLimited(id) {
+    setText(id, "Wait a second, then try again.");
+    show(byId(id), true);
   }
 
   function renderUpdate() {
@@ -387,11 +402,149 @@
       });
   }
 
+  function cancelEntry(element) {
+    if (typeof element.getAnimations === "function") {
+      element.getAnimations().forEach(function (animation) { animation.cancel(); });
+    }
+  }
+
+  function enter(element) {
+    cancelEntry(element);
+    if (!reducedMotion.matches && typeof element.animate === "function") {
+      element.animate([{ opacity: 0.88 }, { opacity: 1 }], {
+        duration: 1100,
+        easing: "ease-out",
+      });
+    }
+  }
+
+  function setupFeedback(reason, action, checking) {
+    var feedback = byId("setupFeedback");
+    var title = byId("setupFeedbackReason");
+    var detail = byId("setupFeedbackAction");
+    if (title.textContent === reason && detail.textContent === action) {
+      return;
+    }
+    // Update the live region before starting any motion. Hiding and emptying it on a
+    // retry also retires the previous action for assistive technology.
+    feedback.classList.toggle("checking", checking);
+    title.textContent = reason;
+    detail.textContent = action;
+    show(detail, action !== "");
+    show(feedback, reason !== "");
+    if (reason === "") {
+      cancelEntry(feedback);
+    } else {
+      enter(feedback);
+    }
+  }
+
+  function closeDiagnostic() {
+    var report = byId("diagnosticReport");
+    var note = byId("diagnosticNote");
+    var button = byId("diagnosticOpen");
+    var panel = byId("diagnosticPanel");
+    ++diagnosticGeneration;
+    cancelEntry(panel);
+    cancelEntry(button);
+    report.value = "";
+    note.textContent = "";
+    show(report, false);
+    show(note, false);
+    show(panel, false);
+    button.removeAttribute("aria-busy");
+    button.setAttribute("aria-expanded", "false");
+    setText("diagnosticOpen", "Show diagnostic report");
+  }
+
+  function setDiagnostic(id) {
+    if (id === diagnosticId) {
+      return;
+    }
+
+    diagnosticId = id;
+    closeDiagnostic();
+    var button = byId("diagnosticOpen");
+    show(byId("diagnostic"), id !== "");
+    if (id !== "") {
+      enter(button);
+    }
+  }
+
+  function toggleDiagnostic() {
+    var button = byId("diagnosticOpen");
+    if (diagnosticId === "" || token === "" || inFlight || button.hasAttribute("aria-busy")) {
+      return;
+    }
+
+    if (button.getAttribute("aria-expanded") === "true") {
+      closeDiagnostic();
+      enter(button);
+      return;
+    }
+
+    closeDiagnostic();
+    var id = diagnosticId;
+    var session = token;
+    var generation = diagnosticGeneration;
+    var panel = byId("diagnosticPanel");
+    function current() {
+      return generation === diagnosticGeneration && session === token;
+    }
+
+    button.setAttribute("aria-busy", "true");
+    post("diagnostic-report", { reportId: id })
+      .then(function (result) {
+        if (!current()) {
+          return;
+        }
+        if (result.status === 429) {
+          show(byId("diagnosticPanel"), true);
+          showRateLimited("diagnosticNote");
+          enter(panel);
+          return;
+        }
+        if (!result.ok || typeof result.report.diagnosticReport !== "string") {
+          throw new Error("diagnostic unavailable");
+        }
+
+        var report = byId("diagnosticReport");
+        report.value = result.report.diagnosticReport;
+        setText("diagnosticNote", "Select the text if you need to share it.");
+        show(byId("diagnosticNote"), true);
+        show(report, true);
+        show(panel, true);
+        button.setAttribute("aria-expanded", "true");
+        setText("diagnosticOpen", "Hide diagnostic report");
+        enter(panel);
+      })
+      .catch(function () {
+        if (current()) {
+          var report = byId("diagnosticReport");
+          report.value = "";
+          show(report, false);
+          setText("diagnosticNote", "The report could not be opened. Reload the setup page and try again.");
+          show(byId("diagnosticNote"), true);
+          show(panel, true);
+          enter(panel);
+        }
+      })
+      .finally(function () {
+        if (current()) {
+          button.removeAttribute("aria-busy");
+        }
+      });
+  }
+
   function enterPrinterStep() {
     inFlight = false;
     show(byId("wifiForm"), false);
     show(byId("printerForm"), true);
     setText("lead", "That Wi-Fi works. Now tell the display about your printer.");
+    if (recoveringSetup) {
+      enter(byId("lead"));
+      enter(byId("printerForm"));
+    }
     var summary = byId("printerSummary");
     if (summary) {
       summary.className = "summary good";
@@ -413,11 +566,22 @@
     }
   }
 
-  function failWifi(reason) {
+  function failWifi(reason, incompleteResponse) {
     inFlight = false;
     busy("wifiSubmit", false, "Check this Wi-Fi", "Checking…");
     show(byId("wifiForm"), true);
     show(byId("printerForm"), false);
+    setText("lead", wifiLead);
+
+    if (reason !== "device-restarted") {
+      recoveringSetup = true;
+      show(byId("wifiSummary"), false);
+      setText("wifiSummary", "");
+      var copy = failureCopy(reason, incompleteResponse);
+      setupFeedback(copy[0], copy[1], false);
+      byId("setupFeedback").scrollIntoView({ block: "nearest" });
+      return;
+    }
 
     var summary = byId("wifiSummary");
     if (summary) {
@@ -516,11 +680,8 @@
     // Printer failures end the transaction after Wi-Fi was validated. The server requires
     // another Wi-Fi check before printer retry; retained fields are shown again afterwards.
     // Candidate records may already have been written: do not promise untouched flash.
-    if (reason === "printer-unreachable") {
-      return "That Wi-Fi worked, but the printer did not answer. Check its power, address and port. Check this Wi-Fi again, then correct the printer details.";
-    }
-    if (reason === "printer-unauthorized") {
-      return "That Wi-Fi worked, but the printer rejected the API key. Check the PrusaLink API key on the printer. Check this Wi-Fi again, then correct the key.";
+    if (reason === "printer-server-error") {
+      return "PrusaLink returned a server error. Wait a moment, then check this Wi-Fi again and retry.";
     }
     if (reason === "printer-unsupported") {
       return "That Wi-Fi worked, but the printer interface is not supported. Check that the address is for a supported PrusaLink printer. Check this Wi-Fi again before retrying.";
@@ -532,12 +693,213 @@
     return "The display could not complete that request. Check the details you entered and try again.";
   }
 
+  function failureCopy(reason, incompleteResponse) {
+    if (reason === "printer-unreachable") {
+      return ["Couldn’t reach the printer",
+        "Check the printer’s power. Check this Wi-Fi again, then verify the printer address and port."];
+    }
+    if (reason === "printer-unauthorized") {
+      return ["PrusaLink denied access",
+        "Check this Wi-Fi again, then verify the API key in PrusaLink on your printer."];
+    }
+    if (reason === "printer-unusable-response" && incompleteResponse === true) {
+      return ["The printer response was incomplete",
+        "Check the printer firmware. Check this Wi-Fi again, then verify the PrusaLink address."];
+    }
+
+    // Existing reasons keep their wording. The leading sentence identifies the
+    // failure, with the recovery instructions set separately.
+    var copy = reasonText(reason);
+    var boundary = copy.indexOf(". ") + 1;
+    return boundary === 0 ? [copy, ""] : [copy.slice(0, boundary), copy.slice(boundary + 1)];
+  }
+
+  function renderDisplaySettings(status) {
+    var enabled = canConfigure && status.canAdjustDisplay === true;
+    var playing = canConfigure && status.demoRunning === true;
+    show(byId("displaySettings"), enabled || playing);
+    show(byId("showDemo"), enabled && status.canShowDemo === true);
+    byId("displayMode").disabled = !enabled;
+    byId("backlight").disabled = !enabled;
+    byId("displaySave").disabled = !enabled || displaySaveBusy || demoBusy;
+    byId("showDemo").disabled = displaySaveBusy || demoBusy;
+    if (playing) {
+      setText("demoStatus", "Demo running. Press the display button to exit.");
+      show(byId("demoStatus"), true);
+    }
+    if (enabled && displaySettingsRevision === null) {
+      byId("displayMode").value = status.displayMode;
+      byId("backlight").value = status.backlight;
+    }
+    displaySettingsRevision = enabled ? status.displaySettingsRevision : null;
+  }
+
+  function postDisplayAction(action) {
+    return fetch("/api/display", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-PRD-Setup-Token": token },
+      body: JSON.stringify(action),
+      cache: "no-store",
+    }).then(function (response) {
+      if (!response.ok) {
+        throw new Error("display settings " + response.status);
+      }
+    });
+  }
+
+  function readDisplayStatus(sessionToken) {
+    return fetch("/api/status", { cache: "no-store" })
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error("status " + response.status);
+        }
+        return response.json();
+      })
+      .then(function (status) {
+        if (status.csrfToken !== sessionToken || typeof status.displaySettingsRevision !== "string") {
+          throw new Error("setup ended");
+        }
+        return status;
+      });
+  }
+
+  function displayDelay(milliseconds) {
+    return new Promise(function (resolve) {
+      window.setTimeout(resolve, milliseconds);
+    });
+  }
+
+  function waitForDisplaySave(sessionToken, previous, mode, backlight, remaining) {
+    return readDisplayStatus(sessionToken).then(function (status) {
+      if (status.displaySettingsRevision !== previous) {
+        if (status.displaySettingsSaved && status.displayMode === mode &&
+            status.backlight === backlight) {
+          displaySettingsRevision = status.displaySettingsRevision;
+          return;
+        }
+        throw new Error("settings not saved");
+      }
+      if (remaining === 0) {
+        throw new Error("settings save timed out");
+      }
+      return displayDelay(250).then(function () {
+        return waitForDisplaySave(sessionToken, previous, mode, backlight, remaining - 1);
+      });
+    });
+  }
+
+  function saveDisplaySettings(event) {
+    event.preventDefault();
+    if (displaySettingsRevision === null || displaySaveBusy || demoBusy) {
+      return;
+    }
+
+    displaySaveBusy = true;
+    byId("showDemo").disabled = true;
+    var sessionToken = token;
+    var previous = displaySettingsRevision;
+    var mode = byId("displayMode").value;
+    var backlight = byId("backlight").value;
+    busy("displaySave", true, "Save display settings", "Saving…");
+    setText("displaySaveStatus", "");
+    postDisplayAction([Number(mode), Number(backlight)])
+      .then(function () {
+        return waitForDisplaySave(sessionToken, previous, mode, backlight, 12);
+      })
+      .then(function () {
+        setText("displaySaveStatus", "Display settings saved.");
+      })
+      .catch(function () {
+        setText("displaySaveStatus", "Could not confirm the save. Try again.");
+      })
+      .finally(function () {
+        displaySaveBusy = false;
+        busy("displaySave", displaySettingsRevision === null,
+             "Save display settings", "Save display settings");
+        byId("showDemo").disabled = demoBusy;
+      });
+  }
+
+  function observeDemo(sessionToken, started, remaining) {
+    return readDisplayStatus(sessionToken).then(function (status) {
+      renderDisplaySettings(status);
+      if (status.demoRunning === true) {
+        if (started && remaining === 0) {
+          return;
+        }
+        return displayDelay(1000).then(function () {
+          return observeDemo(sessionToken, true, started ? remaining - 1 : 35);
+        });
+      }
+      if (started) {
+        setText("demoStatus", "Demo ended.");
+        return;
+      }
+      if (remaining === 0) {
+        throw new Error("demo start was not confirmed");
+      }
+      return displayDelay(250).then(function () {
+        return observeDemo(sessionToken, false, remaining - 1);
+      });
+    }).catch(function (error) {
+      if (!started) {
+        throw error;
+      }
+      setText("demoStatus", "Press the display button to exit if the demo is still running.");
+    });
+  }
+
+  function showDemo() {
+    var button = byId("showDemo");
+    if (demoBusy || displaySaveBusy || button.hidden || displaySettingsRevision === null) {
+      return;
+    }
+
+    demoBusy = true;
+    byId("displaySave").disabled = true;
+    var sessionToken = token;
+    busy("showDemo", true, "Show demo", "Starting…");
+    setText("demoStatus", "Starting demo…");
+    show(byId("demoStatus"), true);
+    postDisplayAction("demo")
+      .then(function () {
+        return observeDemo(sessionToken, false, 12);
+      })
+      .catch(function () {
+        setText("demoStatus", "Could not confirm the demo started. Check the display.");
+      })
+      .finally(function () {
+        demoBusy = false;
+        busy("showDemo", false, "Show demo", "Starting…");
+        byId("displaySave").disabled = displaySaveBusy || displaySettingsRevision === null;
+      });
+  }
+
   function render(status) {
     renderUpdate();
+    renderDisplaySettings(status);
+    if (canConfigure && status.demoRunning === true && !demoBusy) {
+      demoBusy = true;
+      observeDemo(token, true, 35).finally(function () {
+        demoBusy = false;
+        byId("showDemo").disabled = displaySaveBusy;
+        byId("displaySave").disabled = displaySaveBusy || displaySettingsRevision === null;
+      });
+    }
+    setDiagnostic(
+      canConfigure &&
+        !deviceRestarted &&
+        token !== "" &&
+        status.setupState === "failed" &&
+        typeof status.diagnosticReportId === "string"
+        ? status.diagnosticReportId
+        : "",
+    );
     // ⬅️ CHECKED FIRST, AND IT ENDS THE RENDER. On a connection that cannot configure the
     // display there is no flow to report: the forms go away, the notice explains why, and
     // there is nothing further to poll for. Returning false stops the timer.
     if (!canConfigure) {
+      setupFeedback("", "", false);
       show(byId("wifiForm"), false);
       show(byId("printerForm"), false);
       show(byId("done"), false);
@@ -552,6 +914,7 @@
       deviceRestarted = false;
       awaiting = false;
       busy("printerSubmit", false, "Save and finish", "Saving…");
+      setupFeedback("", "", false);
       failWifi("device-restarted");
       return false;
     }
@@ -564,18 +927,20 @@
       case "wifi-validated":
         busy("wifiSubmit", false, "Check this Wi-Fi", "Checking…");
         awaiting = false;
+        setupFeedback("", "", false);
         enterPrinterStep();
         return false;
 
       case "succeeded":
         awaiting = false;
+        setupFeedback("", "", false);
         finish();
         return false;
 
       case "failed":
         awaiting = false;
         busy("printerSubmit", false, "Save and finish", "Saving…");
-        failWifi(status.setupReason);
+        failWifi(status.setupReason, status.printerResponseIncomplete);
         return false;
 
       default:
@@ -589,6 +954,12 @@
   }
 
   function poll() {
+    // A slow status request must not arrive after a newer one has rendered a different
+    // setup attempt and reintroduce the preceding reason or report offer.
+    if (pollingStatus) {
+      return;
+    }
+    pollingStatus = true;
     readStatus()
       .then(function (status) {
         var keepPolling = render(status);
@@ -601,6 +972,9 @@
         // Expected once the access point has stopped after success: the last rendered
         // message stands, which is why it is shown before the shutdown rather than fetched
         // after it.
+      })
+      .finally(function () {
+        pollingStatus = false;
       });
   }
 
@@ -617,8 +991,14 @@
       return;
     }
     inFlight = true;
+    var previousDiagnosticId = diagnosticId;
+    setDiagnostic("");
     clearAll(WIFI_FIELDS, "wifiSummary");
     busy("wifiSubmit", true, "Check this Wi-Fi", "Checking…");
+    if (recoveringSetup) {
+      setupFeedback("Checking this Wi-Fi…", "", true);
+      enter(byId("wifiSubmit"));
+    }
 
     post("wifi", {
       wifiSsid: byId("wifiSsid").value,
@@ -631,13 +1011,21 @@
         if (unavailable(result)) {
           inFlight = false;
           busy("wifiSubmit", false, "Check this Wi-Fi", "Checking…");
+          setupFeedback("", "", false);
+          setDiagnostic(previousDiagnosticId);
           failUnavailable("wifiSummary");
           return;
         }
         if (!result.ok || !result.report.accepted) {
           inFlight = false;
           busy("wifiSubmit", false, "Check this Wi-Fi", "Checking…");
-          applyReport(WIFI_FIELDS, result.report, "wifiSummary");
+          setupFeedback("", "", false);
+          setDiagnostic(previousDiagnosticId);
+          if (result.status === 429) {
+            showRateLimited("wifiSummary");
+          } else {
+            applyReport(WIFI_FIELDS, result.report, "wifiSummary");
+          }
           return;
         }
         startPolling();
@@ -645,6 +1033,7 @@
       .catch(function () {
         inFlight = false;
         busy("wifiSubmit", false, "Check this Wi-Fi", "Checking…");
+        setupFeedback("", "", false);
         setText("wifiSummary", "The display did not answer. Try again.");
         show(byId("wifiSummary"), true);
       });
@@ -658,6 +1047,12 @@
     inFlight = true;
     clearAll(PRINTER_FIELDS, "printerSummary");
     busy("printerSubmit", true, "Save and finish", "Saving…");
+    cancelEntry(byId("lead"));
+    cancelEntry(byId("printerForm"));
+    if (recoveringSetup) {
+      setupFeedback("Checking the printer…", "", true);
+      enter(byId("printerSubmit"));
+    }
 
     post("printer", {
       printerHost: normalised("printerHost"),
@@ -670,13 +1065,19 @@
         if (unavailable(result)) {
           inFlight = false;
           busy("printerSubmit", false, "Save and finish", "Saving…");
+          setupFeedback("", "", false);
           failUnavailable("printerSummary");
           return;
         }
         if (!result.ok || !result.report.accepted) {
           inFlight = false;
           busy("printerSubmit", false, "Save and finish", "Saving…");
-          applyReport(PRINTER_FIELDS, result.report, "printerSummary");
+          setupFeedback("", "", false);
+          if (result.status === 429) {
+            showRateLimited("printerSummary");
+          } else {
+            applyReport(PRINTER_FIELDS, result.report, "printerSummary");
+          }
           return;
         }
         startPolling();
@@ -684,12 +1085,14 @@
       .catch(function () {
         inFlight = false;
         busy("printerSubmit", false, "Save and finish", "Saving…");
+        setupFeedback("", "", false);
         setText("printerSummary", "The display did not answer. Try again.");
         show(byId("printerSummary"), true);
       });
   }
 
   function load() {
+    wifiLead = byId("lead").textContent;
     readStatus()
       .then(function (status) {
         if (render(status)) {
@@ -700,6 +1103,9 @@
         setText("version", "—");
       });
 
+    byId("displaySettings").addEventListener("submit", saveDisplaySettings);
+    byId("showDemo").addEventListener("click", showDemo);
+
     var wifiForm = byId("wifiForm");
     if (wifiForm) {
       wifiForm.addEventListener("submit", submitWifi);
@@ -709,6 +1115,8 @@
     if (printerForm) {
       printerForm.addEventListener("submit", submitPrinter);
     }
+
+    byId("diagnosticOpen").addEventListener("click", toggleDiagnostic);
 
     var updateInstall = byId("updateInstall");
     if (updateInstall) {

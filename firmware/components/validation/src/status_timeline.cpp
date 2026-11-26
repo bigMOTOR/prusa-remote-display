@@ -4,6 +4,10 @@
 #include "status_timeline.hpp"
 
 #include <array>
+#include <chrono>
+#include <new>
+
+#include "validation/user_demo.hpp"
 
 #include "dto.hpp"
 #include "normalize.hpp"
@@ -189,6 +193,30 @@ constexpr std::array<StatusStep, 17> kTimeline{{
     {96000, "back to ready", kBackToReady},
 }};
 
+constexpr std::string_view kDemoError =
+    R"({"printer":{"state":"ERROR","temp_nozzle":215,"target_nozzle":215,)"
+    R"("temp_bed":60,"target_bed":60},"job":{"id":173,"progress":79,"time_printing":3100}})";
+
+constexpr std::string_view kDemoPrintingDone =
+    R"({"printer":{"state":"PRINTING","temp_nozzle":215,"target_nozzle":215,)"
+    R"("temp_bed":60,"target_bed":60},"job":{"id":173,"progress":100,"time_printing":4019}})";
+
+// Real display time for one user demo, using the same synthetic status bodies as the bench
+// timeline where applicable. No diagnostic profiles, captured jobs or network data enter it.
+constexpr std::array<StatusStep, 10> kUserTimeline{{
+    {0, "ready", kReady},
+    {2500, "preparing", kHeatingMid},
+    {5500, "printing", kPrintingDecimal},
+    {9500, "paused", kPaused},
+    {12500, "printing", kResumed},
+    {15500, "printer error", kDemoError},
+    {19000, "printing at 92%", kPrintingLate},
+    {22000, "printing at 100%", kDemoPrintingDone},
+    {24500, "completed", kFinished},
+    {28000, "ready", kBackToReady},
+}};
+constexpr auto kUserDemoDuration = std::chrono::milliseconds{31000};
+
 } // namespace
 
 std::size_t status_timeline_step_count() {
@@ -228,6 +256,63 @@ StatusApplication apply_status_body(app_store::Store& store, const std::string_v
     result.mutated = outcome.mutated;
 
     return result;
+}
+
+bool UserDemo::start(const app_model::Timestamp now) {
+    if (active()) {
+        return false;
+    }
+
+    store_.reset(new (std::nothrow) app_store::Store{});
+    if (!active()) {
+        return false;
+    }
+
+    started_at_ = now;
+    next_ = 0;
+    (void)store_->dispatch(app_model::Event::boot_phase(now, app_model::BootPhase::Ready));
+    return true;
+}
+
+bool UserDemo::expired(const app_model::Timestamp now) const {
+    return active() && now - started_at_ >= kUserDemoDuration;
+}
+
+std::optional<app_model::Presentation> UserDemo::advance(const app_model::Timestamp now) {
+    if (!active() || expired(now)) {
+        return std::nullopt;
+    }
+
+    const auto elapsed = now - started_at_;
+    bool changed = false;
+    while (next_ < kUserTimeline.size() &&
+           elapsed >= std::chrono::milliseconds{kUserTimeline.at(next_).offset_ms}) {
+        const auto& step = kUserTimeline.at(next_);
+        ++next_;
+        const auto result =
+            apply_status_body(*store_, step.body, now, {1, static_cast<std::uint32_t>(next_)});
+        if (!result.mutated) {
+            stop();
+            return std::nullopt;
+        }
+        changed = true;
+    }
+
+    if (!changed) {
+        return std::nullopt;
+    }
+    return app_model::project(store_->state());
+}
+
+void UserDemo::stop() {
+    store_.reset();
+}
+
+bool may_present_user_demo(const app_model::AppState& live) {
+    return live.boot.phase == app_model::BootPhase::Ready &&
+           live.provisioning == app_model::ProvisioningPhase::SetupActive &&
+           live.device_operation == app_model::DeviceOperation::None &&
+           live.modal_surface == app_model::ModalSurface::None;
 }
 
 } // namespace prd::validation

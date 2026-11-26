@@ -6,6 +6,8 @@
 #include <cstdint>
 
 #include "app_model/display_policy.hpp"
+#include "app_model/presentation.hpp"
+
 #include "app_model/reducer.hpp"
 #include "brightness_curve.hpp"
 #include "support/state_builders.hpp"
@@ -936,4 +938,82 @@ TEST(DisplayPolicyTests, CompletedTelemetryAndDegradationDoNotRearmButLiveReadyD
     polled.subject = SubjectState::Printing;
     EXPECT_NE(situation_of(completed), situation_of(polled));
     EXPECT_TRUE(holds_awake(polled));
+}
+
+TEST(DisplayPrinterStatusTests, TimerAndIdleCannotTurnCompletedIntoReady) {
+    auto state = prd::test::booted_device();
+    state = reduce(state, Event::display_preferences(
+                              at_ms(1), {DisplayMode::PrinterStatus, Backlight::Standard}));
+    state = reduce(state, Event::printer_snapshot(
+                              at_ms(10), prd::test::printer_snapshot(PrinterState::Finished, 1)));
+    auto unconfirmed = prd::test::printer_snapshot(PrinterState::Idle, 2);
+    unconfirmed.is_busy = true;
+    state = reduce(state, Event::printer_snapshot(at_ms(20000), unconfirmed));
+
+    ASSERT_EQ(state.subject, SubjectState::Completed);
+    EXPECT_EQ(next_step_for(state, kDimAt - 1, false, kT), Step::Hold);
+    ASSERT_EQ(next_step_for(state, kDimAt, false, kT), Step::Dim);
+    state = reduce(state, Event::display_idle_timer_fired(at_ms(20001)));
+    ASSERT_EQ(state.display.power, DisplayPower::Dimmed);
+    EXPECT_EQ(project(state).subject, SubjectState::Completed);
+
+    unconfirmed.sequence = 3;
+    state = reduce(state, Event::printer_snapshot(at_ms(1222010), unconfirmed));
+    EXPECT_EQ(next_step_for(state, 1222000, false, kT), Step::Hold);
+    EXPECT_EQ(project(state).subject, SubjectState::Completed);
+
+    state = reduce(state, Event::printer_snapshot(
+                              at_ms(1222011), prd::test::printer_snapshot(PrinterState::Ready, 4)));
+    EXPECT_EQ(project(state).subject, SubjectState::Ready);
+    EXPECT_TRUE(project(state).at_visual_rest);
+}
+
+TEST(DisplayPrinterStatusTests, LossAndReconnectDoNotPromoteAnOldReady) {
+    auto state = prd::test::booted_device();
+    state = reduce(state, Event::display_preferences(
+                              at_ms(1), {DisplayMode::PrinterStatus, Backlight::Standard}));
+    state = reduce(state, Event::printer_snapshot(
+                              at_ms(10), prd::test::printer_snapshot(PrinterState::Idle, 1)));
+    ASSERT_TRUE(project(state).at_visual_rest);
+
+    state = reduce(state, Event::printer_snapshot(
+                              at_ms(11), prd::test::printer_snapshot(PrinterState::Ready, 2)));
+    ASSERT_TRUE(project(state).at_visual_rest);
+    EXPECT_EQ(next_step_for(state, kDimAt, false, kT), Step::Hold);
+
+    ConnectionObservation link;
+    link.phase = ConnectionPhase::PrinterUnavailable;
+    state = reduce(state, Event::connection_observed(at_ms(12), link));
+    ASSERT_FALSE(project(state).show_operational_form);
+    EXPECT_TRUE(project(state).observation_lost_acknowledgement);
+    EXPECT_EQ(project(state).observation_lost_origin, LossOriginForm::Ready);
+
+    link.phase = ConnectionPhase::Connected;
+    state = reduce(state, Event::connection_observed(at_ms(13), link));
+    EXPECT_FALSE(project(state).show_operational_form);
+    state = reduce(state, Event::printer_snapshot(
+                              at_ms(14), prd::test::printer_snapshot(PrinterState::Ready, 2)));
+    EXPECT_FALSE(project(state).show_operational_form); // duplicate sequence
+    state = reduce(state, Event::printer_snapshot(
+                              at_ms(15), prd::test::printer_snapshot(PrinterState::Ready, 3)));
+    EXPECT_TRUE(project(state).at_visual_rest);
+}
+
+TEST(DisplayPrinterStatusTests, DefaultsPreserveIdleAndExistingRecessionAndBacklight) {
+    auto state = prd::test::booted_device();
+    state = reduce(state, Event::printer_snapshot(
+                              at_ms(10), prd::test::printer_snapshot(PrinterState::Idle, 1)));
+    EXPECT_EQ(state.display.preferences.mode, DisplayMode::Timer);
+    EXPECT_EQ(state.display.preferences.backlight, Backlight::Standard);
+    EXPECT_TRUE(project(state).at_visual_rest);
+    EXPECT_EQ(next_step_for(state, kDimAt, false, kT), Step::Dim);
+    state = reduce(state, Event::display_idle_timer_fired(at_ms(11)));
+    EXPECT_EQ(next_step_for(state, kSleepAt, false, kT), Step::Sleep);
+
+    const auto standard = preset_levels(Backlight::Standard, kB);
+    EXPECT_EQ(standard.active_percent, 65U);
+    EXPECT_EQ(standard.quiet_percent, 50U);
+    EXPECT_EQ(standard.dimmed_light_percent_of_quiet, 55U);
+    EXPECT_LT(preset_levels(Backlight::Low, kB).quiet_percent, standard.quiet_percent);
+    EXPECT_GT(preset_levels(Backlight::High, kB).quiet_percent, standard.quiet_percent);
 }

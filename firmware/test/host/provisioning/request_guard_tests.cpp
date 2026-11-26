@@ -302,6 +302,20 @@ TEST(RateLimiterTests, ResetRestoresTheFullBurst) {
     EXPECT_TRUE(limiter.allow(0));
 }
 
+TEST(RateLimiterTests, SingleSlotBudgetKeepsItsCapacityAfterRefillAndReset) {
+    RateLimiter limiter{1};
+    EXPECT_TRUE(limiter.allow(0));
+    EXPECT_FALSE(limiter.allow(kRateRefillIntervalMs - 1));
+
+    const std::uint32_t later = 3 * kRateRefillIntervalMs;
+    EXPECT_TRUE(limiter.allow(later));
+    EXPECT_FALSE(limiter.allow(later));
+
+    limiter.reset();
+    EXPECT_TRUE(limiter.allow(later));
+    EXPECT_FALSE(limiter.allow(later));
+}
+
 // --- Statuses ---------------------------------------------------------------
 
 TEST(RequestGuardTests, EveryCsrfRefusalAnswersTheSameStatus) {

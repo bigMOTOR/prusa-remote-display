@@ -67,6 +67,7 @@
 #include "storage/storage.hpp"
 #include "submission_handoff.hpp"
 #include "ui/ui.hpp"
+#include "validation/user_demo.hpp"
 #include "validation/validation.hpp"
 #include "wifi_restore.hpp"
 
@@ -223,6 +224,8 @@ static_assert(CONFIG_ESP_IPC_TASK_STACK_SIZE >= 2560,
 // application task and the boot flow both reach it, and because a 2 kB object has no
 // business on a task stack.
 app_store::Store g_store;
+validation::UserDemo g_user_demo;
+bool g_user_demo_exit_requested = false;
 
 QueueHandle_t g_events = nullptr;
 std::uint32_t g_events_dropped = 0;
@@ -344,59 +347,33 @@ bool g_display_output_posted_valid = false;
 // The owner-selected brightness baselines for this checkpoint.
 constexpr app_model::display_policy::Brightness kDisplayBrightness{};
 
-// The panel's three lit control levels, in the driver's own units.
-//
-// ⛔ ABSOLUTE PRODUCT DEFAULTS, NOT A SCALING OF THE OBSERVED LEVEL — AND THAT DISTINCTION IS THE
-// WHOLE ANSWER TO "WHAT IS THE SOURCE OF TRUTH". Active and Quiet are the two levels the owner
-// selected on the panel; they are copied here unchanged. If they were instead expressed as
-// fractions of DisplayState::brightness_percent, then display::kDefaultBrightnessPercent — a
-// driver bring-up constant nobody chose as a preference — would silently become the user's
-// configuration, and every later level would inherit it. That is exactly the accidental
-// configuration this checkpoint must not create, and it is why the startup observation is NOT an
-// input here.
-//
-// ⬅️ THE STARTUP REPAIR STILL HOLDS, BY AGREEMENT RATHER THAN BY ARITHMETIC. Its purpose was that
-// the policy must never raise the panel off its validated startup level a few milliseconds after
-// boot. At boot the device is not held awake, so the tier is Quiet, and Quiet is 50 — the same
-// value display::kDefaultBrightnessPercent applies. The first tick therefore asks for the level
-// already on the panel. The observation is still dispatched and still recorded in DisplayState;
-// what changed is that it is now a RECORD of the panel rather than a SETTING for it.
-//
-// ⚠️ RECORDED DEBT, NOT HIDDEN: with the levels explicit, DisplayState::brightness_percent has no
-// remaining consumer in the policy. It belongs on the configuration/migration checkpoint's list
-// beside config::Config::brightness, dim_delay_seconds and sleep_delay_seconds — deciding what it
-// means is that checkpoint's job, not something to settle incidentally here.
-//
-// ⬅️ COMPUTED ONCE. The Dimmed conversion costs a std::pow and the inputs are compile-time
-// constants, so the answer is built on first use and never recomputed.
+// The selected preset moves both lit levels by the same control step. Dimmed still has
+// the existing fraction of Quiet's emitted light, with the panel's perceptual curve applied.
 app_model::display_policy::Levels g_display_levels{};
-bool g_display_levels_valid = false;
+std::optional<app_model::Backlight> g_display_backlight;
 
-const app_model::display_policy::Levels& display_levels() {
-    if (!g_display_levels_valid) {
-        g_display_levels.active_percent = kDisplayBrightness.active_percent;
-        g_display_levels.quiet_percent = kDisplayBrightness.quiet_percent;
-
-        // ⛔ THE DISPLAY COMPONENT CONVERTS, NEVER THE POLICY. Dimmed is a fraction of the LIGHT
-        // emitted at QUIET; brightness percentages are perceptually pre-distorted, so the same
-        // fraction applied to the control value emits far less than it names — the confirmed defect
-        // the owner met as an unreadable Dimmed state. 55 % of Quiet's light is control 38, which is
-        // duty 487: the output observed at harness step D2.
+const app_model::display_policy::Levels& display_levels(const app_model::Backlight backlight) {
+    if (g_display_backlight != backlight) {
+        const auto levels = app_model::display_policy::preset_levels(backlight, kDisplayBrightness);
+        g_display_levels.active_percent = levels.active_percent;
+        g_display_levels.quiet_percent = levels.quiet_percent;
         g_display_levels.dimmed_percent = display::percent_for_light_fraction(
-            kDisplayBrightness.quiet_percent,
-            display::LightFraction{kDisplayBrightness.dimmed_light_percent_of_quiet});
-
-        g_display_levels_valid = true;
-
-        diagnostics::timeline(diagnostics::tag::kApp, "display-levels", "active",
-                              g_display_levels.active_percent, "quiet",
-                              g_display_levels.quiet_percent);
-        diagnostics::timeline(diagnostics::tag::kApp, "display-dimmed", "percent",
-                              g_display_levels.dimmed_percent, "of-quiet-light",
-                              kDisplayBrightness.dimmed_light_percent_of_quiet);
+            levels.quiet_percent, display::LightFraction{levels.dimmed_light_percent_of_quiet});
+        g_display_backlight = backlight;
     }
-
     return g_display_levels;
+}
+
+// While a status is held indefinitely, worker silence must still cross the freshness
+// boundaries. The demo also uses this before restoring the real presentation.
+void age_printer_observation(const app_model::Timestamp now) {
+    const auto& state = g_store.state();
+    if (state.printer.ever_observed &&
+        app_model::classify_freshness(now - state.printer.observed_at,
+                                      app_model::FreshnessPolicy{}) !=
+            state.printer_connection.freshness) {
+        dispatch(app_model::Event::confidence_aged(now));
+    }
 }
 
 void display_tick(const std::uint32_t now_ms) {
@@ -409,6 +386,9 @@ void display_tick(const std::uint32_t now_ms) {
         return;
     }
 
+    if (g_store.state().display.preferences.mode == app_model::DisplayMode::PrinterStatus) {
+        age_printer_observation(platform::monotonic_time());
+    }
     const app_model::AppState& state = g_store.state();
 
     const auto situation = app_model::display_policy::situation_of(state);
@@ -440,10 +420,7 @@ void display_tick(const std::uint32_t now_ms) {
         const std::uint32_t idle_ms =
             app_model::display_policy::elapsed_ms(now_ms, g_display_activity_ms);
 
-        switch (app_model::display_policy::next_step(
-            state.display.power, idle_ms, held,
-            app_model::display_policy::recession_timings_for(state.subject, state.confidence,
-                                                             kDisplayTimings))) {
+        switch (app_model::display_policy::next_step_for(state, idle_ms, held, kDisplayTimings)) {
         case app_model::display_policy::Step::Dim:
             dispatch(app_model::Event::display_idle_timer_fired(platform::monotonic_time()));
             break;
@@ -464,11 +441,12 @@ void display_tick(const std::uint32_t now_ms) {
     const app_model::display_policy::Tier tier = app_model::display_policy::output_tier_for(
         held, settled.subject, settled.confidence, power);
 
+    const auto& levels = display_levels(settled.display.preferences.backlight);
     const app_model::display_policy::Output output =
 #ifdef CONFIG_PRD_VALIDATION_ACCESS_REVIEW
-        validation::access_review_output(power, tier, display_levels(), kDisplayTimings);
+        validation::access_review_output(power, tier, levels, kDisplayTimings);
 #else
-        app_model::display_policy::output_for(power, tier, display_levels(), kDisplayTimings);
+        app_model::display_policy::output_for(power, tier, levels, kDisplayTimings);
 #endif
 
     if (g_display_output_posted_valid && output == g_display_output_posted) {
@@ -509,6 +487,9 @@ void display_tick(const std::uint32_t now_ms) {
 // It must not dispatch and must not block. It does neither: project() is pure, and
 // ui::submit() overwrites a one-deep queue and returns.
 void publish_presentation(const app_model::AppState& state, void* /*context*/) {
+    if (g_user_demo.active() && validation::may_present_user_demo(state)) {
+        return;
+    }
     ui::submit(app_model::project(state), state.revision);
 }
 
@@ -997,6 +978,8 @@ ota::ReleaseCheckSchedule g_release_schedule;
 // Published only after both the OTA worker and this queue exist. A failed startup
 // deletes the unpublished queue, so a web callback can never use freed storage.
 std::atomic<QueueHandle_t> g_update_requests{nullptr};
+std::atomic<QueueHandle_t> g_display_settings_requests{nullptr};
+provisioning::DisplaySettings g_display_settings;
 std::uint32_t g_live_ota_generation = 0;
 std::uint32_t g_admitted_live_ota_generation = 0;
 std::uint32_t g_reboot_after_revision = 0;
@@ -1051,7 +1034,15 @@ void commit_transaction();
 void restore_station(std::uint32_t now_ms);
 void start_live_ota();
 void live_ota_tick();
+void display_settings_tick(std::uint32_t now_ms);
+void apply_queued_event(const app_model::Event& event);
+void finish_user_demo(bool resume_monitoring);
 [[nodiscard]] provisioning::UpdateHandoff note_update_request(void* context);
+
+bool note_display_settings(const provisioning::DisplayRequest& request, void* /*context*/) {
+    const auto requests = g_display_settings_requests.load(std::memory_order_acquire);
+    return requests != nullptr && xQueueSend(requests, &request, 0) == pdTRUE;
+}
 
 provisioning::UpdateHandoff note_update_request(void* /*context*/) {
     const std::uint8_t request = 1;
@@ -1226,6 +1217,12 @@ void boot_sequence() {
         case factory_reset::BootAction::LoadConfiguration:
             enter_boot_phase(app_model::BootPhase::LoadingConfiguration);
             loaded = load_configuration();
+            g_display_settings.preferences = config::load_display_preferences(storage::key_value());
+            dispatch(app_model::Event::display_preferences(platform::monotonic_time(),
+                                                           g_display_settings.preferences));
+            provisioning::publish_display_settings(g_display_settings);
+            g_display_settings_requests.store(xQueueCreate(1, sizeof(provisioning::DisplayRequest)),
+                                              std::memory_order_release);
             break;
 
         // ⛔ NOTHING IS LOADED AND NOTHING IS RECONCILED. `loaded` stays default-constructed, which
@@ -1356,14 +1353,12 @@ void app_task(void* /*argument*/) {
         app_model::Event event;
 
         if (xQueueReceive(g_events, &event, kAppTickInterval) == pdTRUE) {
-            (void)g_store.dispatch(event);
-            note_gesture(event);
+            apply_queued_event(event);
 
             // Drain whatever else is queued without blocking, so a burst is applied
             // in one pass rather than one event per tick.
             while (xQueueReceive(g_events, &event, 0) == pdTRUE) {
-                (void)g_store.dispatch(event);
-                note_gesture(event);
+                apply_queued_event(event);
             }
         } else {
             since_stack_report += kAppTickInterval;
@@ -1407,6 +1402,7 @@ void app_task(void* /*argument*/) {
         // read it without racing the reducer.
         local_interface_tick();
         live_ota_tick();
+        display_settings_tick(now_ms);
 
         // Milestone 4, stepped from here for the third instance of the same reason: all three
         // decide on state this task alone may read, and two of them write configuration.
@@ -1872,6 +1868,7 @@ bool step_start_server(void* /*context*/) {
     server.address = network::setup_ap::address();
     server.sink = &note_submission;
     server.update_sink = &note_update_request;
+    server.display_settings_sink = &note_display_settings;
 
     if (provisioning::start(server)) {
         return true;
@@ -2073,7 +2070,8 @@ void wipe_submission(provisioning_flow::Submission& submission) {
 // Ends a transaction: publishes the phase, clears the retained credential, and lets the
 // browser see the result before anything else moves.
 void settle_transaction(const provisioning_flow::Verdict verdict,
-                        const provisioning_flow::Failure failure) {
+                        const provisioning_flow::Failure failure,
+                        const app_model::PrinterValidationFailure validation_failure = {}) {
     g_transaction_running = false;
     g_validation.reset();
     g_wifi_validated = false;
@@ -2111,7 +2109,7 @@ void settle_transaction(const provisioning_flow::Verdict verdict,
     provisioning::publish(verdict == provisioning_flow::Verdict::Validated
                               ? provisioning::SetupState::Succeeded
                               : provisioning::SetupState::Failed,
-                          provisioning_flow::log_label(failure));
+                          provisioning_flow::log_label(failure), validation_failure);
 
     if (verdict == provisioning_flow::Verdict::Validated) {
         // ⬅️ D-2'S ORDER. The phase reaches success first, the browser gets its poll during
@@ -2132,8 +2130,8 @@ void settle_transaction(const provisioning_flow::Verdict verdict,
     // serving, the form stays editable, and nothing new was persisted. The phase remains
     // SetupFailed until the user submits again rather than bouncing back to SetupActive,
     // because a failure that erased itself would leave them with no idea what happened.
-    dispatch(app_model::Event::provisioning_phase(platform::monotonic_time(),
-                                                  app_model::ProvisioningPhase::SetupFailed));
+    dispatch(app_model::Event::provisioning_phase(
+        platform::monotonic_time(), app_model::ProvisioningPhase::SetupFailed, validation_failure));
 
     // ⛔ THE PRECISE TRUTH, BECAUSE THE OLD SENTENCE WAS FALSE. It said "nothing was persisted",
     // and by this point stage_pair() has written BOTH candidate records to flash and read them back
@@ -2840,6 +2838,7 @@ void ensure_local_server() {
     server.address = network::setup_ap::address();
     server.sink = &note_submission;
     server.update_sink = &note_update_request;
+    server.display_settings_sink = &note_display_settings;
 
     if (!provisioning::start(server)) {
         diagnostics::log(diagnostics::LogLevel::Warning, diagnostics::tag::kProvisioning,
@@ -3211,8 +3210,10 @@ void apply_validate_report(const prusalink::Report& report) {
         return;
     }
 
-    settle_transaction(provisioning_flow::Verdict::Failed,
-                       provisioning_flow::failure_for_printer(report.failure_phase));
+    settle_transaction(
+        provisioning_flow::Verdict::Failed,
+        provisioning_flow::failure_for_printer(report.failure_phase, report.validation_failure),
+        report.validation_failure);
 }
 
 // The exclusivity conditions, assembled in ONE place from the store and this file's own deadline.
@@ -3704,6 +3705,119 @@ void run_factory_reset() {
     // The next tick reaches Step::Wait on this deadline, and the tick after it elapses reaches
     // Step::Restart. Both above; neither anywhere else.
     g_reset_restart_due_us = esp_timer_get_time() + kFactoryResetHoldUs;
+}
+
+// A configured display goes back to monitoring through the ordinary setup teardown. On a new
+// display, the same setup session is still needed, so its original presentation resumes.
+void finish_user_demo(const bool resume_monitoring) {
+    const auto& live = g_store.state();
+    const bool submission_waiting =
+        g_submissions != nullptr && uxQueueMessagesWaiting(g_submissions) != 0;
+    const bool leave_setup = resume_monitoring && validation::may_present_user_demo(live) &&
+                             live.configuration.status == app_model::ConfigurationStatus::Valid &&
+                             !g_transaction_running && !g_wifi_validated && !g_rollback.held &&
+                             !submission_waiting;
+    if (leave_setup) {
+        age_printer_observation(platform::monotonic_time());
+        g_user_demo.stop();
+        stop_setup_ap();
+        dispatch(app_model::Event::provisioning_phase(platform::monotonic_time(),
+                                                      app_model::ProvisioningPhase::Inactive));
+    } else {
+        g_user_demo.stop();
+        publish_presentation(live, nullptr);
+    }
+}
+
+void apply_queued_event(const app_model::Event& event) {
+    if (g_user_demo.active() && event.type == app_model::EventType::ButtonGestureObserved) {
+        if (event.button.gesture == app_model::ButtonGesture::ShortPress) {
+            // Provisioning and OTA get their normal turns before the demo can close
+            // the setup access point. This tap has already been consumed by the demo.
+            g_user_demo_exit_requested = true;
+            return;
+        }
+
+        // Holds keep their usual setup/reset meanings. End the demo before applying them.
+        finish_user_demo(false);
+    }
+
+    (void)g_store.dispatch(event);
+    note_gesture(event);
+}
+
+void display_settings_tick(const std::uint32_t now_ms) {
+    const auto requests = g_display_settings_requests.load(std::memory_order_acquire);
+    if (requests == nullptr) {
+        return;
+    }
+
+    const auto conditions = exclusivity();
+    const auto& state = g_store.state();
+    const bool adjustable = network::setup_ap::running() && g_privileged.active() &&
+                            exclusive::provisioning_work_permitted(conditions) &&
+                            !conditions.first_boot_pending && !conditions.configuration_in_flight &&
+                            !conditions.factory_reset_confirmation_armed &&
+                            state.device_fault == app_model::DeviceFaultReason::None;
+    const bool demo_allowed =
+        adjustable && validation::may_present_user_demo(state) && !g_wifi_validated &&
+        !g_rollback.held && !g_station_restore_due && !validation::printing_timeline_compiled() &&
+        !validation::walk_compiled() && !validation::scenarios_compiled() &&
+        !validation::display_patterns_own_panel() && !validation::brightness_harness_owns_panel();
+
+    const auto now = platform::monotonic_time();
+    const bool exit_requested = g_user_demo_exit_requested;
+    g_user_demo_exit_requested = false;
+    if (g_user_demo.active()) {
+        if (!demo_allowed) {
+            finish_user_demo(false);
+        } else if (exit_requested || g_user_demo.expired(now)) {
+            finish_user_demo(true);
+        }
+    }
+
+    provisioning::DisplayRequest request;
+    const bool received = xQueueReceive(requests, &request, 0) == pdTRUE;
+    if (received) {
+        if (request.action == provisioning::DisplayAction::Demo) {
+            if (demo_allowed && g_privileged.active() && g_user_demo.start(now)) {
+                g_privileged.note_activity(now_ms);
+            }
+        } else {
+            ++g_display_settings.revision;
+            g_display_settings.saved =
+                adjustable && g_privileged.active() && !g_user_demo.active() &&
+                config::save_display_preferences(storage::key_value(), request.preferences);
+            if (g_display_settings.saved) {
+                g_display_settings.preferences = request.preferences;
+                g_privileged.note_activity(now_ms);
+                dispatch(app_model::Event::display_preferences(now, request.preferences));
+            }
+        }
+    }
+
+    if (g_user_demo.active()) {
+        const auto frame = g_user_demo.advance(now);
+        if (frame.has_value()) {
+            // Demo frames carry no real store revision. They cannot satisfy a flush-based OTA gate.
+            ui::submit(*frame, 0U);
+        } else if (!g_user_demo.active()) {
+            finish_user_demo(true);
+        }
+    }
+
+    const bool demo_running = g_user_demo.active();
+    const bool adjustable_now = adjustable && g_privileged.active() && !demo_running;
+    const bool demo_available = demo_allowed && g_privileged.active() && !demo_running;
+    const bool changed = g_display_settings.adjustable != adjustable_now ||
+                         g_display_settings.demo_available != demo_available ||
+                         g_display_settings.demo_running != demo_running;
+    if (changed || received) {
+        g_display_settings.adjustable = adjustable_now;
+        g_display_settings.demo_available = demo_available;
+        g_display_settings.demo_running = demo_running;
+        provisioning::publish_display_settings(g_display_settings);
+    }
 }
 
 void local_interface_tick() {

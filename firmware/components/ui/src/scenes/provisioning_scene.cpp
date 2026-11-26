@@ -9,6 +9,7 @@
 
 #include "diagnostics/log.hpp"
 #include "diagnostics/tags.hpp"
+#include "fonts/fonts.hpp"
 #include "text/scene_text.hpp"
 #include "text/text.hpp"
 #include "wifi_qr.hpp"
@@ -42,6 +43,10 @@ constexpr std::string_view kTag = diagnostics::tag::kUi;
 //   - A full-width StateTitle row does not fit beside a 164 px block and a 40 px password
 //     row: 24 + 164 + 40 exceeds the 216 px of content height. The title therefore joins
 //     the text column, at Body, and that is the one presentation the QR cost.
+constexpr std::int32_t kFailureTitleY = theme::kCanvasContent.y;
+constexpr std::int32_t kFailureCopyGap = theme::kSpace1 / 2;
+constexpr std::int32_t kFailureActionY = kFailureTitleY + theme::kLineTitle + kFailureCopyGap;
+
 constexpr std::int32_t kQrModules = 33;
 constexpr std::int32_t kQrScale = 4;
 constexpr std::int32_t kQrQuietModules = 4;
@@ -49,6 +54,11 @@ constexpr std::int32_t kQrQuietModules = 4;
 constexpr std::int32_t kQrCode = kQrModules * kQrScale;
 constexpr std::int32_t kQrQuiet = kQrQuietModules * kQrScale;
 constexpr std::int32_t kQrBlock = kQrCode + (2 * kQrQuiet);
+// The accepted 2026-11-26 setup-failure preview places the 164px QR at (144, 66).
+// Its last two quiet-zone rows extend past canvas.inset; the modules stay inside.
+constexpr std::int32_t kRecoveryQrY = theme::kCanvasContent.bottom() - kQrBlock + kFailureCopyGap;
+static_assert(kRecoveryQrY + kQrBlock <= theme::kCanvas.bottom());
+static_assert(kRecoveryQrY + kQrQuiet + kQrCode <= theme::kCanvasContent.bottom());
 
 // THE QUIET ZONE IS OURS, NOT LVGL'S. lv_qrcode's own quiet zone is two modules per side;
 // the specification asks four, and owner ruling 2026-08-16 makes scan reliability this
@@ -59,6 +69,8 @@ static_assert(kQrQuiet == theme::kSpaceRegion,
 
 constexpr theme::Rect kQrBlockRect{theme::kCanvasContent.right() - kQrBlock,
                                    theme::kCanvasContent.y, kQrBlock, kQrBlock};
+
+static_assert(kFailureActionY + theme::kLineBody <= kRecoveryQrY);
 
 // The text column takes what the QR block and the gutter leave.
 //
@@ -171,6 +183,16 @@ bool ProvisioningScene::build(lv_obj_t* const parent) {
     lv_obj_set_style_text_align(title_, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     lv_obj_set_pos(title_, kColumnX, kTitleY);
     lv_label_set_text(title_, "");
+
+    action_ = theme::bare_label(root_);
+    if (action_ == nullptr) {
+        diagnostics::log(diagnostics::LogLevel::Error, kTag, "provisioning recovery action failed");
+        return false;
+    }
+    theme::apply_text_style(action_, theme::TextRole::Body, theme::Colour::Primary);
+    lv_obj_set_width(action_, theme::kCanvasContent.width);
+    lv_obj_set_pos(action_, kColumnX, kFailureActionY);
+    lv_obj_add_flag(action_, LV_OBJ_FLAG_HIDDEN);
 
     static_assert(kRowBoxes.size() == kRowCount, "every row needs a box and every box a row");
 
@@ -385,11 +407,113 @@ void ProvisioningScene::set_row(const RowIndex index, const std::string_view val
     // Clipping instead would be worse than wrapping: a truncated address looks like a
     // complete one.
     lv_obj_update_layout(target.value);
-    if (lv_obj_get_height(target.value) > kRowBoxes[static_cast<std::size_t>(index)].value_line) {
+    if (!recovery_layout_ &&
+        lv_obj_get_height(target.value) > kRowBoxes[static_cast<std::size_t>(index)].value_line) {
         diagnostics::log(diagnostics::LogLevel::Warning, kTag,
-                         "a provisioning value is too wide for its column and has wrapped; "
-                         "the composition needs re-measuring against the committed face");
+                         "a value wrapped in the ordinary setup layout");
     }
+}
+
+void ProvisioningScene::layout_recovery_rows(const std::int32_t minimum_y,
+                                             const std::int32_t row_gap) {
+    // Centre the manual path alongside the QR. A wide generated credential may wrap;
+    // measure the real label so it never covers the following caption.
+    std::array<std::int32_t, kRowCount> row_heights{};
+    std::int32_t height = row_gap * (static_cast<std::int32_t>(kRowCount) - 1);
+    for (std::size_t index = 0; index < kRowCount; ++index) {
+        lv_obj_t* const value = rows_[index].value;
+        lv_obj_update_layout(value);
+        row_heights[index] =
+            theme::kLineCaption + std::max(theme::kLineBody, lv_obj_get_height(value));
+        height += row_heights[index];
+    }
+    const auto centered_y = kRecoveryQrY + std::max<std::int32_t>(0, (kQrBlock - height) / 2);
+    std::int32_t y = std::max(centered_y, minimum_y);
+    for (std::size_t index = 0; index < kRowCount; ++index) {
+        lv_obj_set_pos(rows_[index].caption, kColumnX, y);
+        lv_obj_set_pos(rows_[index].value, kColumnX, y + theme::kLineCaption);
+        y += row_heights[index] + row_gap;
+    }
+}
+
+void ProvisioningScene::layout_recovery_content() {
+    // While the QR still occupies the copy band, wrap both labels in the left column.
+    // The complete new wording and the full-contrast QR can then coexist on the first frame.
+    const bool compact = recovery_qr_y_ < kFailureActionY + theme::kLineBody;
+    const auto width = compact ? kColumnWidth : theme::kCanvasContent.width;
+    const auto title_role = compact ? theme::TextRole::Section : theme::TextRole::StateTitle;
+    if (lv_obj_get_style_text_font(title_, LV_PART_MAIN) != fonts::for_role(title_role)) {
+        theme::apply_text_style(title_, title_role, theme::Colour::Primary);
+    }
+    lv_obj_set_width(title_, width);
+    lv_obj_set_width(action_, width);
+    lv_obj_update_layout(title_);
+    const auto action_y =
+        kFailureTitleY + std::max(theme::kLineTitle, lv_obj_get_height(title_)) + kFailureCopyGap;
+    lv_obj_set_y(action_, action_y);
+    const bool action_visible = !lv_obj_has_flag(action_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_update_layout(action_);
+    const auto copy_bottom = action_visible ? action_y + lv_obj_get_height(action_)
+                                            : kFailureTitleY + lv_obj_get_height(title_);
+    layout_recovery_rows(copy_bottom + theme::kSpace1,
+                         compact ? theme::kSpace1 : theme::kSpaceCompact);
+}
+
+void ProvisioningScene::step_recovery_geometry(const bool panel_visible, const std::uint32_t now) {
+    if (!recovery_geometry_running_) {
+        return;
+    }
+
+    recovery_geometry_clock_.advance(panel_visible, now);
+    const auto elapsed = recovery_geometry_clock_.elapsed();
+    const auto top = kQrBlockRect.y +
+                     static_cast<std::int32_t>(
+                         std::lround(entry_progress(elapsed) * (kRecoveryQrY - kQrBlockRect.y)));
+    const bool expands_copy = recovery_qr_y_ < kFailureActionY + theme::kLineBody &&
+                              top >= kFailureActionY + theme::kLineBody;
+    if (top != recovery_qr_y_) {
+        recovery_qr_y_ = top;
+        lv_obj_set_y(qr_panel_, top);
+    }
+    if (expands_copy) {
+        layout_recovery_content();
+    }
+    if (panel_visible && elapsed >= theme::kOperationalMotionMs) {
+        recovery_geometry_running_ = false;
+    }
+}
+
+void ProvisioningScene::layout_session(const bool recovery) {
+    recovery_layout_ = recovery;
+    theme::apply_text_style(title_, recovery ? theme::TextRole::StateTitle : theme::TextRole::Body,
+                            theme::Colour::Primary);
+    lv_obj_set_width(title_, recovery ? theme::kCanvasContent.width : kColumnWidth);
+    lv_obj_set_pos(title_, kColumnX, recovery ? kFailureTitleY : kTitleY);
+
+    for (std::size_t index = 0; index < kRowCount; ++index) {
+        const RowBox& box = kRowBoxes[index];
+        Row& current = rows_[index];
+        const auto width = recovery ? kColumnWidth : box.width;
+        const auto alignment = recovery ? LV_TEXT_ALIGN_LEFT : box.align;
+        lv_obj_set_width(current.caption, width);
+        lv_obj_set_style_text_align(current.caption, alignment, LV_PART_MAIN);
+        lv_obj_set_width(current.value, width);
+        lv_obj_set_style_text_align(current.value, alignment, LV_PART_MAIN);
+        theme::apply_text_style(current.value,
+                                recovery ? theme::TextRole::Body : kValueRoles[index],
+                                recovery ? theme::Colour::Primary : kValueColours[index]);
+        if (!recovery) {
+            lv_obj_set_pos(current.caption, box.x, box.y);
+            lv_obj_set_pos(current.value, box.x, box.y + theme::kLineCaption);
+        }
+    }
+    recovery_geometry_running_ = recovery && was_drawn_;
+    recovery_geometry_clock_.clear();
+    if (recovery_geometry_running_) {
+        recovery_geometry_clock_.arm();
+    }
+    recovery_qr_y_ = recovery && !recovery_geometry_running_ ? kRecoveryQrY : kQrBlockRect.y;
+    lv_obj_set_y(qr_panel_, recovery_qr_y_);
 }
 
 // The shared full-screen message composition — the one every family that states a condition in
@@ -487,6 +611,12 @@ void ProvisioningScene::hide_session() {
     // The credential first. set_row() wipes the scene-owned text buffer as well as hiding it,
     // and session_drawable_ makes apply_qr() clear the encoded copy rather than redraw it.
     session_drawable_ = false;
+    if (recovery_geometry_running_) {
+        recovery_geometry_running_ = false;
+        recovery_geometry_clock_.clear();
+        recovery_qr_y_ = kRecoveryQrY;
+        lv_obj_set_y(qr_panel_, kRecoveryQrY);
+    }
     session_running_ = false;
     session_clock_.clear();
 #if !defined(PRD_OLD_SETUP_STALE_OFFER) && !defined(PRD_OLD_SESSION_ROWS)
@@ -502,6 +632,7 @@ void ProvisioningScene::hide_session() {
     apply_qr();
 
     lv_obj_add_flag(title_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(action_, LV_OBJ_FLAG_HIDDEN);
 }
 
 void ProvisioningScene::apply(const app_model::Presentation& presentation) {
@@ -621,6 +752,7 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
     // statement has its own objects now, so the session composition's geometry is never disturbed
     // and there is nothing to undo — which is also why a revert cannot silently reintroduce the
     // wrap this scene's comments spend so long measuring.
+    const bool returning_from_statement = statement_;
     if (statement_) {
         statement_ = false;
         form_.show(false);
@@ -645,42 +777,79 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
     }
 
     const app_model::ProvisioningPhase phase = presentation.provisioning;
+    const bool failed = phase == app_model::ProvisioningPhase::SetupFailed;
+    const bool offering_network = phase == app_model::ProvisioningPhase::SetupActive ||
+                                  phase == app_model::ProvisioningPhase::ValidatingConfiguration ||
+                                  failed;
     const bool previously_offering_network =
         phase_seen_ && (phase_ == app_model::ProvisioningPhase::SetupActive ||
                         phase_ == app_model::ProvisioningPhase::ValidatingConfiguration ||
                         phase_ == app_model::ProvisioningPhase::SetupFailed);
 
+    text::TextId title = text::kSetupRequiredTitle;
+    if (phase == app_model::ProvisioningPhase::ValidatingConfiguration) {
+        title = text::TextId::StateValidatingConfiguration;
+    } else if (failed) {
+        title = text::setup_failed_title(presentation.setup_failure);
+    } else if (phase == app_model::ProvisioningPhase::SetupActive) {
+        title = text::kSetupActiveTitle;
+    }
+
+    // Keep the recovery composition through retries in the same setup session.
+    const bool use_recovery_layout = failed || (recovery_layout_ && offering_network);
+    const bool leaving_recovery_layout = recovery_layout_ && !use_recovery_layout;
+    if (use_recovery_layout != recovery_layout_) {
+        layout_session(use_recovery_layout);
+    }
+
+    const auto title_text = text::lookup(title);
+    const bool title_changed = title_text != lv_label_get_text(title_);
+
     // These are changes INSIDE the same scene, so the controller's scene-entry clock does not
     // see them. The new status is written now, not after the animation; only its luminance
     // resolves. In particular the network/password/address and QR stay put and readable while
-    // a submitted configuration is checked or a failure returns to the form.
+    // a submitted configuration is checked or a failure returns to the form. Ordinary setup
+    // uses the existing scene entry while it runs; recovery copy has its own preview ramp.
 #ifndef PRD_OLD_SETUP_PHASE_STATIC
-    if (phase_seen_ && phase != phase_ && !running_) {
-        phase_from_level_ = phase_running_ ? phase_level_ : theme::opacity(theme::Opacity::Medium);
+    const bool ordinary_phase_changed = phase_seen_ && phase != phase_ && !running_;
+    const bool recovery_copy_changed =
+        recovery_layout_ && (!phase_seen_ || phase != phase_ || title_changed);
+    if (ordinary_phase_changed || recovery_copy_changed || leaving_recovery_layout) {
+        phase_from_level_ =
+            (recovery_layout_ || leaving_recovery_layout)
+                ? theme::kSetupFailureEntryLevel
+                : (phase_running_ ? phase_level_ : theme::opacity(theme::Opacity::Medium));
         phase_level_ = phase_from_level_;
         phase_clock_.arm();
         phase_running_ = true;
     }
 #endif
+    const auto previous_phase = phase_;
     phase_ = phase;
     phase_seen_ = true;
 
-    const bool offering_network = phase == app_model::ProvisioningPhase::SetupActive ||
-                                  phase == app_model::ProvisioningPhase::ValidatingConfiguration ||
-                                  phase == app_model::ProvisioningPhase::SetupFailed;
     offering_network_ = offering_network;
 
-    text::TextId title = text::kSetupRequiredTitle;
-    if (phase == app_model::ProvisioningPhase::ValidatingConfiguration) {
-        title = text::TextId::StateValidatingConfiguration;
-    } else if (phase == app_model::ProvisioningPhase::SetupFailed) {
-        title = text::TextId::StateSetupFailed;
-    } else if (phase == app_model::ProvisioningPhase::SetupActive) {
-        title = text::kSetupActiveTitle;
+    if (title_changed) {
+        set_label(title_, title_text);
+    }
+    if (failed) {
+        const auto action = text::lookup(text::setup_failed_action(title));
+        if (action != lv_label_get_text(action_)) {
+            set_label(action_, action);
+        }
+        lv_obj_remove_flag(action_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(action_, LV_OBJ_FLAG_HIDDEN);
+        if (lv_label_get_text(action_)[0] != '\0') {
+            lv_label_set_text(action_, "");
+        }
     }
 
-    set_label(title_, text::lookup(title));
-
+    if (recovery_layout_ &&
+        (phase != previous_phase || title_changed || returning_from_statement)) {
+        layout_recovery_content();
+    }
     if (phase_running_) {
         paint(level_ < 0 ? theme::opacity(theme::Opacity::Full) : level_);
     }
@@ -714,6 +883,9 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
     // cannot disagree about which network they describe, which is the failure that would
     // make the QR worse than useless: a code that joins something the panel does not name.
     apply_qr();
+    if (recovery_layout_) {
+        layout_recovery_content();
+    }
     if (!previously_offering_network) {
         start_session_reveal();
         paint(level_ < 0 ? theme::opacity(theme::Opacity::Full) : level_);
@@ -769,6 +941,9 @@ void ProvisioningScene::apply_session(const SetupSession& session) {
     set_row(RowIndex::Password, session_.password.view());
     set_row(RowIndex::Address, session_.url.view());
     apply_qr();
+    if (recovery_layout_) {
+        layout_recovery_content();
+    }
     if (!had_session) {
         start_session_reveal();
         paint(level_ < 0 ? theme::opacity(theme::Opacity::Full) : level_);
@@ -826,6 +1001,10 @@ void ProvisioningScene::set_visible(const bool visible) {
     clock_.clear();
     phase_seen_ = false;
     phase_running_ = false;
+    if (recovery_layout_) {
+        layout_session(false);
+    }
+    lv_obj_add_flag(action_, LV_OBJ_FLAG_HIDDEN);
     phase_clock_.clear();
     session_running_ = false;
     session_clock_.clear();
@@ -857,14 +1036,19 @@ void ProvisioningScene::set_visible(const bool visible) {
 // render suite asserts that too, byte for byte, rather than trusting the arithmetic.
 void ProvisioningScene::paint_session(const std::int32_t level) {
     const auto session_level = session_running_ ? std::min(level, session_level_) : level;
-    const auto alpha = static_cast<lv_opa_t>(session_level < 0 ? 0 : session_level);
+    const auto qr_level = recovery_layout_ ? theme::opacity(theme::Opacity::Full) : session_level;
+    const auto alpha = static_cast<lv_opa_t>(std::max<std::int32_t>(0, qr_level));
 
-    const auto title_level = phase_running_ ? std::min(level, phase_level_) : level;
+    const auto title_level =
+        recovery_layout_ ? (phase_running_ ? phase_level_ : theme::opacity(theme::Opacity::Full))
+                         : (phase_running_ ? std::min(level, phase_level_) : level);
+    const auto row_level = recovery_geometry_running_ ? title_level : session_level;
     theme::apply_text_level(title_, theme::Opacity::Full, title_level);
+    theme::apply_text_level(action_, theme::Opacity::Full, title_level);
 
     for (auto& current : rows_) {
-        theme::apply_text_level(current.caption, theme::Opacity::Full, session_level);
-        theme::apply_text_level(current.value, theme::Opacity::Full, session_level);
+        theme::apply_text_level(current.caption, theme::Opacity::Full, row_level);
+        theme::apply_text_level(current.value, theme::Opacity::Full, row_level);
     }
 
     if (qr_panel_ != nullptr) {
@@ -908,7 +1092,7 @@ void ProvisioningScene::paint(const std::int32_t level) {
 }
 
 bool ProvisioningScene::step(const bool panel_visible, const std::uint32_t now) {
-    if (!running_ && !phase_running_ && !session_running_) {
+    if (!running_ && !phase_running_ && !session_running_ && !recovery_geometry_running_) {
         return false;
     }
 
@@ -936,8 +1120,17 @@ bool ProvisioningScene::step(const bool panel_visible, const std::uint32_t now) 
             phase_level_ = theme::opacity(theme::Opacity::Full);
         } else {
             const auto span = theme::opacity(theme::Opacity::Full) - phase_from_level_;
-            phase_level_ = phase_from_level_ +
-                           static_cast<std::int32_t>(std::lround(entry_progress(elapsed) * span));
+            if (recovery_layout_) {
+                constexpr std::int32_t bezier_max = LV_BEZIER_VAL_MAX;
+                const auto time = lv_map(static_cast<std::int32_t>(elapsed), 0,
+                                         theme::kOperationalMotionMs, 0, bezier_max);
+                const auto eased =
+                    lv_cubic_bezier(time, 0, 0, LV_BEZIER_VAL_FLOAT(0.58), bezier_max);
+                phase_level_ = phase_from_level_ + ((span * eased + bezier_max / 2) / bezier_max);
+            } else {
+                phase_level_ = phase_from_level_ + static_cast<std::int32_t>(
+                                                       std::lround(entry_progress(elapsed) * span));
+            }
         }
     }
 
@@ -953,8 +1146,9 @@ bool ProvisioningScene::step(const bool panel_visible, const std::uint32_t now) 
         }
     }
 
+    step_recovery_geometry(panel_visible, now);
     paint(level_ < 0 ? theme::opacity(theme::Opacity::Full) : level_);
-    return running_ || phase_running_ || session_running_;
+    return running_ || phase_running_ || session_running_ || recovery_geometry_running_;
 }
 
 } // namespace prd::ui::scene

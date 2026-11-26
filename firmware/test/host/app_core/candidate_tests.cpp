@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -10,7 +11,9 @@
 #include "candidate.hpp"
 #include "configuration_observation.hpp"
 #include "provisioning_flow.hpp"
+#include "server_view.hpp"
 #include "support/fake_key_value.hpp"
+#include "text/text.hpp"
 
 // The candidate lifecycle, its activation boundary, and every way a power loss can land inside it.
 //
@@ -955,6 +958,204 @@ TEST(PrinterFailureMappingTests, EachConnectionFailureBecomesADistinctActionable
         Failure::PrinterUnreachable);
 }
 
+TEST(PrinterFailureMappingTests, StatusAndBodyFailuresAgreeAcrossSetupSurfaces) {
+    using app_model::ConnectionPhase;
+    using app_model::PrinterValidationFailure;
+    using app_model::PrinterValidationReason;
+    using app_model::PrinterValidationStage;
+    using ui::text::TextId;
+
+    constexpr std::string_view kReportPrefix =
+        "Prusa Remote Display setup diagnostic\nFirmware: 1.2.0\n"
+        "Stage: PrusaLink status check\nSummary: ";
+    constexpr std::string_view kBodyInterrupted =
+        "\nResponse body: The connection failed while reading it.";
+    constexpr std::string_view kHeadersReceived = "PrusaLink returned HTTP headers.";
+    constexpr std::string_view kNoResponse =
+        "The connection failed before the response could be read.";
+    constexpr std::string_view kNoResponseTimeout =
+        "No HTTP response arrived before the request timed out.";
+    constexpr std::string_view kDenied = "PrusaLink denied access.";
+    constexpr std::string_view kServerError = "PrusaLink returned a server error.";
+
+    const struct {
+        ConnectionPhase phase;
+        PrinterValidationReason reason;
+        std::uint16_t status;
+        Failure portal;
+        std::string_view label;
+        TextId lcd;
+        std::string_view summary;
+        std::string_view report_status;
+        std::string_view report_body;
+    } cases[] = {
+        {ConnectionPhase::PrinterUnavailable,
+         PrinterValidationReason::TransportFailed,
+         0,
+         Failure::PrinterUnreachable,
+         "printer-unreachable",
+         TextId::SetupPrinterNoConnection,
+         kNoResponse,
+         {},
+         {}},
+        {ConnectionPhase::PrinterUnavailable,
+         PrinterValidationReason::Timeout,
+         0,
+         Failure::PrinterUnreachable,
+         "printer-unreachable",
+         TextId::SetupPrinterSilent,
+         kNoResponseTimeout,
+         {},
+         {}},
+        {ConnectionPhase::PrinterUnavailable,
+         PrinterValidationReason::TransportFailed,
+         99,
+         Failure::PrinterUnreachable,
+         "printer-unreachable",
+         TextId::SetupPrinterNoConnection,
+         kNoResponse,
+         {},
+         {}},
+        {ConnectionPhase::PrinterUnavailable, PrinterValidationReason::TransportFailed, 100,
+         Failure::PrinterUnusableResponse, "printer-unusable-response",
+         TextId::SetupPrinterIncomplete, kHeadersReceived, "\nHTTP status: 100", kBodyInterrupted},
+        {ConnectionPhase::PrinterUnavailable, PrinterValidationReason::TransportFailed, 200,
+         Failure::PrinterUnusableResponse, "printer-unusable-response",
+         TextId::SetupPrinterIncomplete, kHeadersReceived, "\nHTTP status: 200", kBodyInterrupted},
+        {ConnectionPhase::PrinterUnavailable,
+         PrinterValidationReason::Timeout,
+         200,
+         Failure::PrinterUnusableResponse,
+         "printer-unusable-response",
+         TextId::SetupPrinterIncomplete,
+         "The request timed out while reading the response.",
+         "\nHTTP status: 200",
+         {}},
+        {ConnectionPhase::PrinterUnavailable,
+         PrinterValidationReason::Timeout,
+         401,
+         Failure::PrinterUnauthorized,
+         "printer-unauthorized",
+         TextId::SetupPrinterDenied,
+         kDenied,
+         "\nHTTP status: 401",
+         {}},
+        {ConnectionPhase::PrinterUnavailable, PrinterValidationReason::TransportFailed, 403,
+         Failure::PrinterUnauthorized, "printer-unauthorized", TextId::SetupPrinterDenied, kDenied,
+         "\nHTTP status: 403", kBodyInterrupted},
+        {ConnectionPhase::PrinterUnavailable, PrinterValidationReason::TransportFailed, 404,
+         Failure::PrinterUnusableResponse, "printer-unusable-response",
+         TextId::SetupPrinterIncomplete, kHeadersReceived, "\nHTTP status: 404", kBodyInterrupted},
+        {ConnectionPhase::UnsupportedApi,
+         PrinterValidationReason::EndpointUnsupported,
+         404,
+         Failure::PrinterUnsupported,
+         "printer-unsupported",
+         TextId::SetupPrinterBadReply,
+         "The expected PrusaLink endpoint was missing.",
+         "\nHTTP status: 404",
+         {}},
+        {ConnectionPhase::PrinterUnavailable, PrinterValidationReason::TransportFailed, 429,
+         Failure::PrinterUnusableResponse, "printer-unusable-response",
+         TextId::SetupPrinterIncomplete, kHeadersReceived, "\nHTTP status: 429", kBodyInterrupted},
+        {ConnectionPhase::UnsupportedApi,
+         PrinterValidationReason::RequestUnsupported,
+         429,
+         Failure::PrinterUnsupported,
+         "printer-unsupported",
+         TextId::SetupPrinterBadReply,
+         "The endpoint did not accept the PrusaLink request.",
+         "\nHTTP status: 429",
+         {}},
+        {ConnectionPhase::PrinterUnavailable, PrinterValidationReason::TransportFailed, 500,
+         Failure::PrinterServerError, "printer-server-error", TextId::SetupPrinterServerError,
+         kServerError, "\nHTTP status: 500", kBodyInterrupted},
+        {ConnectionPhase::PrinterUnavailable,
+         PrinterValidationReason::PrinterError,
+         503,
+         Failure::PrinterServerError,
+         "printer-server-error",
+         TextId::SetupPrinterServerError,
+         kServerError,
+         "\nHTTP status: 503",
+         {}},
+        {ConnectionPhase::PrinterUnavailable, PrinterValidationReason::TransportFailed, 599,
+         Failure::PrinterServerError, "printer-server-error", TextId::SetupPrinterServerError,
+         kServerError, "\nHTTP status: 599", kBodyInterrupted},
+        {ConnectionPhase::PrinterUnavailable,
+         PrinterValidationReason::TransportFailed,
+         600,
+         Failure::PrinterUnreachable,
+         "printer-unreachable",
+         TextId::SetupPrinterNoConnection,
+         kNoResponse,
+         {},
+         {}},
+        {ConnectionPhase::PrinterUnavailable,
+         PrinterValidationReason::PrinterError,
+         600,
+         Failure::PrinterUnusableResponse,
+         "printer-unusable-response",
+         TextId::SetupPrinterBadReply,
+         "The display could not use the PrusaLink response.",
+         {},
+         {}},
+        {ConnectionPhase::PrinterUnavailable,
+         PrinterValidationReason::PrinterError,
+         0,
+         Failure::PrinterUnusableResponse,
+         "printer-unusable-response",
+         TextId::SetupPrinterBadReply,
+         "The display could not use the PrusaLink response.",
+         {},
+         {}},
+        {ConnectionPhase::PrinterUnavailable,
+         PrinterValidationReason::Timeout,
+         600,
+         Failure::PrinterUnreachable,
+         "printer-unreachable",
+         TextId::SetupPrinterSilent,
+         kNoResponseTimeout,
+         {},
+         {}},
+    };
+
+    const app_model::SemanticVersion version{1, 2, 0, ""};
+    for (const auto& test : cases) {
+        SCOPED_TRACE(test.status);
+        SCOPED_TRACE(static_cast<int>(test.reason));
+        const PrinterValidationFailure evidence{PrinterValidationStage::Status, test.reason,
+                                                test.status};
+        const auto failure = provisioning_flow::failure_for_printer(test.phase, evidence);
+        EXPECT_EQ(failure, test.portal);
+        EXPECT_EQ(ui::text::setup_failed_title(evidence), test.lcd);
+
+        provisioning::ServerSnapshot snapshot;
+        snapshot.set_setup_state(provisioning::SetupState::Failed,
+                                 provisioning_flow::log_label(failure), evidence);
+        const std::string status =
+            provisioning::status_body(snapshot, provisioning::Surface::SetupAccessPoint, "1.2.0",
+                                      provisioning::CsrfToken{"test-token"});
+        std::string expected_reason{"\"setupReason\":\""};
+        expected_reason += test.label;
+        expected_reason += '"';
+        EXPECT_NE(status.find(expected_reason), std::string::npos) << status;
+        const auto hint = R"("printerResponseIncomplete":true)";
+        EXPECT_EQ(status.find(hint) != std::string::npos,
+                  test.lcd == TextId::SetupPrinterIncomplete);
+        EXPECT_EQ(provisioning::status_body(snapshot, provisioning::Surface::StationLan, "1.2.0",
+                                            provisioning::CsrfToken{"test-token"})
+                      .find(hint),
+                  std::string::npos);
+
+        std::string expected_report{kReportPrefix};
+        expected_report += test.summary;
+        expected_report += test.report_status;
+        expected_report += test.report_body;
+        EXPECT_EQ(provisioning::diagnostic_report(snapshot, "1", version), expected_report);
+    }
+}
+
 TEST(PrinterFailureMappingTests, NoPhaseEverMapsToNoFailure) {
     // A caller asking why validation failed must never be handed "nothing failed" as the answer:
     // it would settle the transaction as a success with no printer behind it.
@@ -992,7 +1193,7 @@ TEST(PrinterFailureMappingTests, EveryFailureHasItsOwnNonSecretLabel) {
     // two different problems indistinguishable — and none may echo anything the user submitted.
     constexpr Failure kPrinterFailures[] = {
         Failure::PrinterUnreachable,      Failure::PrinterUnauthorized, Failure::PrinterUnsupported,
-        Failure::PrinterUnusableResponse, Failure::PromotionFailed,
+        Failure::PrinterUnusableResponse, Failure::PrinterServerError,  Failure::PromotionFailed,
     };
 
     for (const Failure lhs : kPrinterFailures) {

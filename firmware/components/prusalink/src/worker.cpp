@@ -117,8 +117,7 @@ template <typename T> void wipe(T& object) {
 // network::AbandonPredicate. The transport calls this between slices, on this same task, so a
 // supersession is observed inside a request rather than only between them.
 bool abandon_if_superseded(void* const context) {
-    const auto mine = static_cast<Generation>(reinterpret_cast<std::uintptr_t>(context));
-    return superseded(mine);
+    return superseded(*static_cast<const Generation*>(context));
 }
 
 // One completed request: what the transport said, and what the body decoded to.
@@ -142,10 +141,10 @@ void describe_connection(app_model::ConnectionObservation& connection, const Tar
     connection.phase = outcome.phase;
     connection.endpoint = target.host;
     connection.auth_method = target.auth_method;
-    connection.error.assign(outcome.error);
+    connection.error.assign(outcome.error());
 
-    // A status code exists only when the transport completed; reporting 0 as a code would make "no
-    // answer" indistinguishable from a printer that answered oddly.
+    // Poll observations publish a response code only after the transport completed the exchange.
+    // Validation can retain a received status even when reading the response body later fails.
     connection.response_code_known = response.outcome == network::HttpOutcome::Ok;
     connection.response_code = response.status;
 
@@ -208,6 +207,8 @@ void describe_connection(app_model::ConnectionObservation& connection, const Tar
     network::BodyBuffer buffer{storage.data(), storage.size()};
 
     const network::HttpHeader header{kApiKeyHeader, context.target.api_key.view()};
+    // The blocking GET borrows this snapshot for the duration of the call.
+    Generation generation = context.generation;
 
     network::HttpRequest request;
     request.url = url.view();
@@ -216,8 +217,7 @@ void describe_connection(app_model::ConnectionObservation& connection, const Tar
     request.total_budget_ms = kRequestBudgetMs;
     request.slice_ms = kRequestSliceMs;
     request.abandon = &abandon_if_superseded;
-    request.abandon_context =
-        reinterpret_cast<void*>(static_cast<std::uintptr_t>(context.generation));
+    request.abandon_context = &generation;
 
     result.response = network::get(request, buffer);
 
@@ -288,7 +288,23 @@ void wait(const Generation mine, const std::chrono::milliseconds delay) {
     }
 }
 
-// §14.3 steps 6–8 in one bounded pass, publishing a verdict and nothing else.
+[[nodiscard]] app_model::PrinterValidationFailure
+describe_validation_failure(const app_model::PrinterValidationStage request_stage,
+                            const Attempt& attempt) {
+    using app_model::PrinterValidationStage;
+    if (attempt.target != TargetVerdict::Ok) {
+        return {PrinterValidationStage::AddressCheck, attempt.outcome.reason, 0};
+    }
+    if (attempt.response.outcome == network::HttpOutcome::Rejected) {
+        return {PrinterValidationStage::RequestPreparation, attempt.outcome.reason, 0};
+    }
+
+    const std::uint16_t status = attempt.response.status;
+    const std::uint16_t valid_status = status >= 100 && status <= 599 ? status : 0;
+    return {request_stage, attempt.outcome.reason, valid_status};
+}
+
+// §14.3 steps 6–8 in one bounded pass, publishing the verdict with safe failure evidence.
 void run_validation(const LaunchContext& context) {
     Report report;
     report.purpose = Purpose::Validate;
@@ -299,6 +315,8 @@ void run_validation(const LaunchContext& context) {
 
     if (!version.outcome.usable) {
         report.failure_phase = version.outcome.phase;
+        report.validation_failure =
+            describe_validation_failure(app_model::PrinterValidationStage::VersionProbe, version);
         (void)publish(context, report);
         return;
     }
@@ -315,6 +333,8 @@ void run_validation(const LaunchContext& context) {
 
     if (!status.outcome.usable) {
         report.failure_phase = status.outcome.phase;
+        report.validation_failure =
+            describe_validation_failure(app_model::PrinterValidationStage::Status, status);
         (void)publish(context, report);
         return;
     }

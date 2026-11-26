@@ -115,7 +115,8 @@ struct HttpRequest {
 struct HttpResponse {
     HttpOutcome outcome{HttpOutcome::Rejected};
 
-    // The HTTP status, when `outcome` is Ok. Zero otherwise.
+    // The HTTP status after reading response headers, even when the body read later fails.
+    // Zero until the transport obtains a status.
     std::uint16_t status{0};
 
     // Measured across the whole exchange, for §7.5's lastLatencyMs.

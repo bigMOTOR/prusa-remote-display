@@ -34,15 +34,23 @@ let pollIndex = 0;
 let token = "harness-token";
 let posts = [];
 let updatePosts = [];
+let diagnosticPosts = [];
+let displayState = {};
+let displayPosts = [];
+let demoPolls = 0;
 let result = null;
 const waiters = [];
 
 export function arm(scenario) {
+  displayState = scenario.display ?? {};
+  displayPosts = [];
+  demoPolls = 0;
   active = scenario;
   pollIndex = 0;
   token = "harness-token";
   posts = [];
   updatePosts = [];
+  diagnosticPosts = [];
   result = null;
 }
 
@@ -52,6 +60,14 @@ export function submissions() {
 
 export function updateSubmissions() {
   return updatePosts;
+}
+
+export function displaySubmissions() {
+  return displayPosts;
+}
+
+export function diagnosticSubmissions() {
+  return diagnosticPosts;
 }
 
 // How many /api/status requests the page has made. Each submission below is stamped with the count
@@ -137,7 +153,8 @@ export function start(port) {
     }
 
     if (req.method === "GET" && url.pathname === "/api/status") {
-      const state = nextStatus();
+      const scripted = nextStatus();
+      const state = typeof scripted === "string" ? { setupState: scripted } : scripted;
       send(
         res,
         200,
@@ -158,11 +175,45 @@ export function start(port) {
           updateVersion: active.updateVersion ?? "",
           updateInstalling: active.updateInstalling === true,
 
-          setupState: state,
-          setupReason: state === "failed" ? active.reason || "wifi-unreachable" : "",
+          setupReason: state.setupState === "failed" ? active.reason || "wifi-unreachable" : "",
+          ...state,
+          ...displayState,
+          ...(demoPolls > 0 ? { demoRunning: demoPolls-- > 1, canShowDemo: demoPolls === 0,
+                                canAdjustDisplay: demoPolls === 0 } : {}),
         }),
         "application/json",
       );
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/diagnostic-report") {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      let parsed = {};
+      try {
+        parsed = JSON.parse(body);
+      } catch {
+        /* recorded as raw below */
+      }
+      diagnosticPosts.push({ raw: body, parsed, headers: { ...req.headers } });
+      const diagnosticReport = active.reports?.[parsed?.reportId];
+      send(res, diagnosticReport === undefined ? 409 : 200,
+        JSON.stringify({ diagnosticReport }), "application/json");
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/display") {
+      let raw = "";
+      for await (const chunk of req) raw += chunk;
+      displayPosts.push({ raw, headers: { ...req.headers } });
+      if (raw === '"demo"') {
+        demoPolls = 2;
+      } else {
+        const [displayMode, backlight] = JSON.parse(raw).map(String);
+        displayState = { ...displayState, displayMode, backlight, displaySettingsRevision: "1",
+                         displaySettingsSaved: true };
+      }
+      send(res, 200, '{"accepted":true}', "application/json");
       return;
     }
 

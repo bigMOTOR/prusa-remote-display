@@ -66,6 +66,8 @@ unsigned setup_phase_qr_flushes = 0;
 constexpr int kSetupQrSide = (33 + 2 * 4) * 4;
 constexpr int kSetupQrLeft = theme::kCanvasContent.right() - kSetupQrSide;
 constexpr int kSetupQrTop = theme::kCanvasContent.y;
+constexpr int kFailureQrTop = 66;
+int setup_phase_qr_top = kSetupQrTop;
 
 void require(bool ok, const char* why) {
     if (!ok) {
@@ -77,7 +79,7 @@ void require(bool ok, const char* why) {
 void flush(lv_display_t* d, const lv_area_t* a, std::uint8_t* data) {
     ++flushes;
     if (watch_setup_phase_qr && a->x1 < kSetupQrLeft + kSetupQrSide && a->x2 >= kSetupQrLeft &&
-        a->y1 < kSetupQrTop + kSetupQrSide && a->y2 >= kSetupQrTop) {
+        a->y1 < setup_phase_qr_top + kSetupQrSide && a->y2 >= setup_phase_qr_top) {
         ++setup_phase_qr_flushes;
     }
     const auto* input = reinterpret_cast<const std::uint16_t*>(data);
@@ -99,13 +101,17 @@ void flush(lv_display_t* d, const lv_area_t* a, std::uint8_t* data) {
 using Frame = std::array<std::uint16_t, w * h>;
 
 // The §7 content area: "All content shall remain inside canvas.inset."
-[[nodiscard]] bool ink_outside_inset(const Frame& frame) {
+[[nodiscard]] bool ink_outside_inset(const Frame& frame, const bool recovery_qr_visible = false) {
     const auto background = frame[0];
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
             const bool inside = x >= theme::kCanvasContent.x && x < theme::kCanvasContent.right() &&
                                 y >= theme::kCanvasContent.y && y < theme::kCanvasContent.bottom();
-            if (!inside && frame[y * w + x] != background) {
+            // The owner-approved QR has two extra quiet-zone rows below the general inset.
+            const bool extra_quiet_zone =
+                recovery_qr_visible && x >= kSetupQrLeft && x < kSetupQrLeft + kSetupQrSide &&
+                y >= theme::kCanvasContent.bottom() && y < kFailureQrTop + kSetupQrSide;
+            if (!inside && !extra_quiet_zone && frame[y * w + x] != background) {
                 return true;
             }
         }
@@ -424,11 +430,13 @@ int main(int argc, char** argv) {
     require(controller::build(d), "whole controller builds in the unchanged pool");
     controller::note_panel_visible(true);
 
+    bool recovery_qr_visible = false;
     auto tick = [&](unsigned ms) {
         lv_tick_inc(ms);
         const auto moving = controller::step_acknowledgement();
         lv_refr_now(d);
-        require(!ink_outside_inset(pixels), "every tick keeps all ink inside canvas.inset");
+        require(!ink_outside_inset(pixels, recovery_qr_visible),
+                "every tick keeps ink inside canvas.inset or the approved QR quiet zone");
         return moving;
     };
 
@@ -1118,10 +1126,10 @@ int main(int argc, char** argv) {
     // checking a submitted network, but the changed, truthful title must visibly resolve on the
     // same bounded clock as every other screen transition. The pre-repair selector still chose
     // Provisioning, so scene-entry tests alone could not detect its static title replacement.
-    auto same_code = [&](const Frame& frame) {
-        for (int y = kSetupQrTop; y < kSetupQrTop + kSetupQrSide; ++y) {
+    auto same_code = [&](const Frame& frame, const int target_y = kSetupQrTop) {
+        for (int row = 0; row < kSetupQrSide; ++row) {
             for (int x = kSetupQrLeft; x < kSetupQrLeft + kSetupQrSide; ++x) {
-                if (frame[y * w + x] != settled_setup[y * w + x]) {
+                if (frame[(target_y + row) * w + x] != settled_setup[(kSetupQrTop + row) * w + x]) {
                     return false;
                 }
             }
@@ -1183,6 +1191,7 @@ int main(int argc, char** argv) {
 
     Presentation failed = setup;
     failed.provisioning = ProvisioningPhase::SetupFailed;
+    recovery_qr_visible = true;
     controller::apply(failed);
     require(tick(0), "validation failure is another internal phase transition");
     {
@@ -1191,16 +1200,199 @@ int main(int argc, char** argv) {
         require(drawn.labels.count("That did not work") == 1,
                 "the failure title replaces validation immediately");
     }
-    require(same_code(pixels), "the retryable failure retains the same QR and session");
-    tick(1120);
+    require(same_code(pixels), "first failure retains the full QR at the source coordinate");
+    save_setup_phase("first-failure-start");
+    int qr_top = kSetupQrTop;
+    unsigned moved_frames = 0;
+    for (unsigned elapsed = 16; elapsed < 1100; elapsed += 16) {
+        require(tick(16), "first failure geometry remains in motion");
+        int painted_top = qr_top;
+        while (painted_top <= kFailureQrTop && !same_code(pixels, painted_top)) {
+            ++painted_top;
+        }
+        require(painted_top <= kFailureQrTop, "every tick has the complete readable QR block");
+        moved_frames += painted_top != qr_top ? 1U : 0U;
+        qr_top = painted_top;
+        if (elapsed == 320) {
+            require(qr_top > kSetupQrTop && qr_top < kFailureQrTop,
+                    "first failure moves through intermediate QR coordinates");
+            const auto paused_frame = pixels;
+            save_setup_phase("first-failure-middle");
+            controller::note_panel_visible(false);
+            tick(5000);
+            require(pixels == paused_frame, "off holds the whole recovery frame");
+            controller::note_panel_visible(true);
+            require(tick(16) && pixels == paused_frame, "wake resumes the same recovery frame");
+        }
+    }
+    tick(12);
     require(!tick(16), "the failure phase settles");
+    require(moved_frames > 10 && same_code(pixels, kFailureQrTop),
+            "motion ends at the exact accepted QR coordinate");
+    save_setup_phase("first-failure-settled");
+
+    // Replacements and retry keep the QR in the exact place shown in the accepted preview.
+    watch_setup_phase_qr = true;
+    setup_phase_qr_top = kFailureQrTop;
+    setup_phase_qr_flushes = 0;
+
+    failed.setup_failure = {prd::app_model::PrinterValidationStage::VersionProbe,
+                            prd::app_model::PrinterValidationReason::Unreachable, 0};
+    controller::apply(failed);
+    require(tick(0), "the actionable printer failure immediately replaces the generic failure");
+    {
+        Drawn drawn;
+        collect(lv_screen_active(), drawn);
+        require(drawn.labels.count("Printer unreachable") == 1, "the reason is immediate");
+        require(drawn.labels.count("Check printer power and address.") == 1,
+                "the action is immediate");
+        require(drawn.labels.count("That did not work") == 0, "old reason retired");
+    }
+    const auto unreachable_first = pixels;
+    save_setup_phase("unreachable-first");
+    tick(320);
+    require(pixels != unreachable_first, "failure copy has visible entry motion");
+
+    failed.setup_failure = {prd::app_model::PrinterValidationStage::VersionProbe,
+                            prd::app_model::PrinterValidationReason::Unauthorized, 403};
+    controller::apply(failed);
+    require(tick(0), "another failure can replace a moving message");
+    {
+        Drawn drawn;
+        collect(lv_screen_active(), drawn);
+        require(drawn.labels.count("Printer access denied") == 1,
+                "the replacement reason is immediate");
+        require(drawn.labels.count("Check the PrusaLink API key.") == 1,
+                "the replacement action is immediate");
+        require(drawn.labels.count("Printer unreachable") == 0, "previous failure reason retired");
+        require(drawn.labels.count("Check printer power and address.") == 0,
+                "previous failure action retired");
+    }
+    tick(1100);
+    save_setup_phase("denied-settled");
+    require(same_code(pixels, kFailureQrTop), "replacement leaves the complete QR byte-identical");
+
+    controller::apply(validating);
+    require(tick(0), "retry shows validation with motion");
+    {
+        Drawn drawn;
+        collect(lv_screen_active(), drawn);
+        require(drawn.labels.count("Checking that network") == 1, "retry says what is happening");
+        require(drawn.labels.count("Printer access denied") == 0,
+                "retry retires reason immediately");
+        require(drawn.labels.count("Check the PrusaLink API key.") == 0,
+                "retry retires advice immediately");
+    }
+    save_setup_phase("retry-first");
+    tick(1100);
+    require(same_code(pixels, kFailureQrTop), "retry leaves the complete QR byte-identical");
 
     controller::apply(setup);
     require(tick(0), "retry returns to the active setup phase with motion");
     tick(1120);
     require(!tick(16), "the retry title settles");
-    require(pixels == settled_setup, "retry returns to the exact frozen setup endpoint");
-    std::puts("PASS internal setup phase motion without QR or credential disruption");
+    require(same_code(pixels, kFailureQrTop), "QR remains anchored on the active retry screen");
+    require(setup_phase_qr_flushes == 0, "no QR flush during message replacement or retry");
+
+    failed.setup_failure = {prd::app_model::PrinterValidationStage::Status,
+                            prd::app_model::PrinterValidationReason::TransportFailed, 200};
+    controller::apply(failed);
+    require(tick(0), "failed printer recheck changes the reason immediately with motion");
+    {
+        Drawn drawn;
+        collect(lv_screen_active(), drawn);
+        require(drawn.labels.count("Printer response incomplete") == 1,
+                "accurate body failure reason");
+        require(drawn.labels.count("Check the PrusaLink address.") == 1,
+                "accurate body failure advice");
+    }
+    tick(1100);
+    save_setup_phase("incomplete-settled");
+    require(same_code(pixels, kFailureQrTop), "QR stays anchored on the next failure");
+    require(setup_phase_qr_flushes == 0, "no refreshed QR tiles during failed printer recheck");
+    watch_setup_phase_qr = false;
+    setup_phase_qr_top = kSetupQrTop;
+    std::puts("PASS internal setup phase motion, truthful replacement, and stable retry QR");
+
+    // Back uses the ordinary SetupRequired title while retiring the private session immediately.
+    Presentation back = setup;
+    back.provisioning = ProvisioningPhase::SetupRequired;
+    controller::apply(back);
+    recovery_qr_visible = false;
+    require(tick(0), "back to setup required animates the new title");
+    const auto back_first = pixels;
+    Drawn back_drawn;
+    collect(lv_screen_active(), back_drawn);
+    require(back_drawn.labels.count("Setup required") == 1 &&
+                back_drawn.labels.count(session_password) == 0 && !same_code(pixels, kFailureQrTop),
+            "back replaces recovery wording and immediately retires its QR and password");
+    tick(352);
+    require(pixels != back_first, "back title visibly progresses");
+    tick(800);
+    require(!tick(16), "back settles without idle work");
+
+    // Receive a failure while the regular scene itself is still entering from a different scene.
+    blank();
+    controller::set_setup_session(session);
+    controller::apply(setup);
+    require(tick(0), "ordinary setup starts a new scene entry");
+    tick(256);
+    controller::apply(failed);
+    recovery_qr_visible = true;
+    require(tick(0), "failure interrupts the running setup scene entry");
+    Drawn interrupted_setup;
+    collect(lv_screen_active(), interrupted_setup);
+    require(interrupted_setup.labels.count("Printer response incomplete") == 1 &&
+                interrupted_setup.labels.count("Check the PrusaLink address.") == 1 &&
+                same_code(pixels),
+            "the real reason and a complete QR appear on the interrupted frame");
+    tick(320);
+    save_setup_phase("interrupted-failure-middle");
+    std::puts("PASS backing out retires recovery and a first failure can interrupt scene entry");
+
+    auto require_no_setup_failure = [&] {
+        Drawn drawn;
+        collect(lv_screen_active(), drawn);
+        require(drawn.labels.count("Printer response incomplete") == 0 &&
+                    drawn.labels.count("Check the PrusaLink address.") == 0 &&
+                    drawn.labels.count(session_password) == 0,
+                "operational paint has no recovery copy or setup credential");
+    };
+    Presentation job = printing;
+    job.show_operational_form = true;
+    controller::clear_setup_session();
+    controller::apply(job);
+    recovery_qr_visible = false;
+    require(tick(0), "the operational destination animates when setup succeeds");
+    require_no_setup_failure();
+    tick(1120);
+    require(std::string{controller::report().scene} == "operational",
+            "printing selects the regular operational scene after setup");
+    require_no_setup_failure();
+
+    Presentation lost = job;
+    lost.confidence = Confidence::Unavailable;
+    lost.observation_lost = lost.observation_lost_eligible = true;
+    lost.observation_lost_acknowledgement = true;
+    lost.observation_lost_generation = 1;
+    lost.observation_lost_origin = prd::app_model::LossOriginForm::Printing;
+    controller::apply(lost);
+    tick(0);
+    tick(1600);
+    {
+        Drawn drawn;
+        collect(lv_screen_active(), drawn);
+        require(drawn.labels.count("Printer unavailable") == 1,
+                "operational loss draws its accepted acknowledgement");
+    }
+    require_no_setup_failure();
+    controller::apply(job);
+    tick(0);
+    tick(1120);
+    require(std::string{controller::report().scene} == "operational",
+            "operational recovery restores the regular printing scene");
+    require_no_setup_failure();
+    std::puts("PASS printing, observation loss and recovery keep setup failure off the panel");
 
     // The phase and the private session arrive on independent queues. Neither arrival order may
     // expose a credential while the panel still says setup is required. Once the offered network

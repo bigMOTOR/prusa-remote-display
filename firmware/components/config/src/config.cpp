@@ -35,6 +35,9 @@
 namespace prd::config {
 namespace {
 
+constexpr std::string_view kDisplayPreferencesKey = "display_prefs";
+constexpr std::uint32_t kDisplayPreferencesVersion = 0x00010000U;
+
 constexpr std::size_t kSlotCount = 2;
 
 // Keys. Each is within NVS's 15-character bound, asserted rather than assumed.
@@ -529,12 +532,43 @@ ClearOutcome deactivate(storage::KeyValue& store) {
     return ClearOutcome::Cleared;
 }
 
+app_model::DisplayPreferences load_display_preferences(storage::KeyValue& store) {
+    std::uint32_t encoded = 0;
+    if (store.read_u32(storage::Namespace::Config, kDisplayPreferencesKey, encoded) !=
+            storage::Result::Ok ||
+        (encoded & 0xffff0000U) != kDisplayPreferencesVersion) {
+        return {};
+    }
+
+    const auto mode = encoded & 0xffU;
+    const auto backlight = (encoded >> 8U) & 0xffU;
+    if (mode > static_cast<unsigned>(app_model::DisplayMode::PrinterStatus) ||
+        backlight > static_cast<unsigned>(app_model::Backlight::High)) {
+        return {};
+    }
+
+    return {static_cast<app_model::DisplayMode>(mode),
+            static_cast<app_model::Backlight>(backlight)};
+}
+
+bool save_display_preferences(storage::KeyValue& store,
+                              const app_model::DisplayPreferences preferences) {
+    const auto mode = static_cast<unsigned>(preferences.mode);
+    const auto backlight = static_cast<unsigned>(preferences.backlight);
+    if (mode > static_cast<unsigned>(app_model::DisplayMode::PrinterStatus) ||
+        backlight > static_cast<unsigned>(app_model::Backlight::High)) {
+        return false;
+    }
+    return store.write_u32(storage::Namespace::Config, kDisplayPreferencesKey,
+                           kDisplayPreferencesVersion | (backlight << 8U) | mode) ==
+           storage::Result::Ok;
+}
+
 ClearOutcome discard(storage::KeyValue& store) {
     ClearOutcome outcome = ClearOutcome::Cleared;
 
-    // Both slots, each by its own name. No enumeration and no wildcard: the keys this
-    // component wrote are the keys it removes, and nothing else in the namespace is touched.
-    for (const std::string_view key : kSlotKeys) {
+    // Remove only the two configuration slots and the independent display preference key.
+    for (const std::string_view key : {kSlotKeys[0], kSlotKeys[1], kDisplayPreferencesKey}) {
         const storage::Result result = store.erase_key(storage::Namespace::Config, key);
 
         if (result != storage::Result::Ok && result != storage::Result::NotFound) {

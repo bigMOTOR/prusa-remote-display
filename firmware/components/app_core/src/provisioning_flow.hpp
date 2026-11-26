@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include "app_model/bounded_string.hpp"
+#include "app_model/printer_validation.hpp"
 #include "app_model/state_layers.hpp"
 #include "config/config.hpp"
 #include "network/wifi.hpp"
@@ -195,6 +196,8 @@ enum class Failure : std::uint8_t {
     // writes this enumerator's value into a timeline record and the checkpoint-3c archive contains
     // such records; a host test pins every existing value.
     WifiRollbackUnavailable,
+
+    PrinterServerError,
 };
 
 [[nodiscard]] std::string_view log_label(Failure failure);
@@ -420,11 +423,11 @@ struct ActivatedPair {
 // active ONLY AFTER validation succeeds". Until the promotion below runs, the candidate must
 // not be a source of operational data or presentation.
 
-// Turns a failed validation attempt's connection phase into something showable.
+// Turns a failed setup validation attempt into something showable.
 //
-// Total over ConnectionPhase, so a phase nobody anticipated becomes a conservative
-// "unreachable" rather than a claim about the printer that no evidence supports.
-[[nodiscard]] Failure failure_for_printer(app_model::ConnectionPhase phase);
+// A known denial or server error still determines the recovery action if reading the body failed.
+[[nodiscard]] Failure failure_for_printer(app_model::ConnectionPhase phase,
+                                          app_model::PrinterValidationFailure evidence = {});
 
 // Maps a verdict onto UIAD 001 §5's provisioning phase.
 //

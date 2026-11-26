@@ -1,0 +1,26 @@
+// SPDX-FileCopyrightText: 2026 Mykola Fiantsev
+// SPDX-License-Identifier: GPL-3.0-only
+
+#ifdef __APPLE__
+.section __TEXT,__const
+#else
+.section .rodata
+#endif
+
+.globl _binary_index_html_start, _binary_index_html_end
+.globl _binary_style_css_start, _binary_style_css_end
+.globl _binary_app_js_start, _binary_app_js_end
+
+_binary_index_html_start:
+.incbin "@PRD_ADMISSION_ASSETS_DIR@/index.html"
+_binary_index_html_end:
+_binary_style_css_start:
+.incbin "@PRD_ADMISSION_ASSETS_DIR@/style.css"
+_binary_style_css_end:
+_binary_app_js_start:
+.incbin "@PRD_ADMISSION_ASSETS_DIR@/app.js"
+_binary_app_js_end:
+
+#ifndef __APPLE__
+.section .note.GNU-stack,"",%progbits
+#endif

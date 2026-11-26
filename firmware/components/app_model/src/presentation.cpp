@@ -395,6 +395,7 @@ Presentation project(const AppState& state) {
     view.device_operation = state.device_operation;
     view.boot_phase = state.boot.phase;
     view.provisioning = state.provisioning;
+    view.setup_failure = state.setup_failure;
     view.access_condition = state.access_condition;
     view.acquiring_connection = initial_acquisition_in_progress(state);
     view.modal_surface = state.modal_surface;
@@ -473,7 +474,8 @@ bool operator==(const Presentation& lhs, const Presentation& rhs) {
     if (lhs.acquiring_connection != rhs.acquiring_connection || lhs.layer != rhs.layer ||
         lhs.device_fault != rhs.device_fault || lhs.device_operation != rhs.device_operation ||
         lhs.boot_phase != rhs.boot_phase || lhs.provisioning != rhs.provisioning ||
-        lhs.access_condition != rhs.access_condition || lhs.modal_surface != rhs.modal_surface) {
+        lhs.setup_failure != rhs.setup_failure || lhs.access_condition != rhs.access_condition ||
+        lhs.modal_surface != rhs.modal_surface) {
         return false;
     }
 

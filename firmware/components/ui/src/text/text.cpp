@@ -107,6 +107,17 @@ constexpr std::array<Entry, kTextIdCount> kEnglish{{
     {TextId::ObservationAgeSeconds, "%lu sec ago"},
     {TextId::ObservationAgeMinutes, "%lu min ago"},
     {TextId::ObservationUpdated, "Updated"},
+    {TextId::SetupPrinterSilent, "No reply"},
+    {TextId::SetupPrinterDenied, "Printer access denied"},
+    {TextId::SetupPrinterBadReply, "Bad reply"},
+    {TextId::SetupPrinterServerError, "Server error"},
+    {TextId::SetupPrinterNoConnection, "No link"},
+    {TextId::SetupPrinterUnreachable, "Printer unreachable"},
+    {TextId::SetupPrinterIncomplete, "Printer response incomplete"},
+    {TextId::SetupCheckPrinterPower, "Check printer power and address."},
+    {TextId::SetupCheckPrinterAddress, "Check the PrusaLink address."},
+    {TextId::SetupRetry, "Try again."},
+    {TextId::SetupScan, "Scan the QR code."},
 }};
 
 // --- Compile-time catalogue integrity --------------------------------------
@@ -186,6 +197,71 @@ std::string_view lookup(const TextId text_id) {
     }
 
     return kEnglish[index].english;
+}
+
+TextId setup_failed_title(const app_model::PrinterValidationFailure failure) {
+    using app_model::PrinterValidationReason;
+
+    if (failure.reason == PrinterValidationReason::None ||
+        failure.reason == PrinterValidationReason::Cancelled) {
+        return TextId::StateSetupFailed;
+    }
+    if (failure.http_status == 401 || failure.http_status == 403) {
+        return TextId::SetupPrinterDenied;
+    }
+    if (failure.http_status >= 500 && failure.http_status <= 599) {
+        return TextId::SetupPrinterServerError;
+    }
+
+    if (failure.body_interrupted()) {
+        return TextId::SetupPrinterIncomplete;
+    }
+
+    switch (failure.reason) {
+    case PrinterValidationReason::Timeout:
+        return TextId::SetupPrinterSilent;
+    case PrinterValidationReason::Unreachable:
+        return TextId::SetupPrinterUnreachable;
+    case PrinterValidationReason::RequestRejected:
+    case PrinterValidationReason::HostUnusable:
+    case PrinterValidationReason::NameNotResolved:
+    case PrinterValidationReason::NotOnLan:
+    case PrinterValidationReason::TransportFailed:
+        return TextId::SetupPrinterNoConnection;
+    case PrinterValidationReason::Unauthorized:
+        return TextId::SetupPrinterDenied;
+    case PrinterValidationReason::EndpointUnsupported:
+    case PrinterValidationReason::RequestUnsupported:
+    case PrinterValidationReason::UnexpectedStatus:
+    case PrinterValidationReason::PrinterError:
+    case PrinterValidationReason::ResponseTooLarge:
+    case PrinterValidationReason::MalformedBody:
+    case PrinterValidationReason::SchemaMismatch:
+        return TextId::SetupPrinterBadReply;
+    case PrinterValidationReason::None:
+    case PrinterValidationReason::Cancelled:
+        return TextId::StateSetupFailed;
+    }
+
+    return TextId::StateSetupFailed;
+}
+
+TextId setup_failed_action(const TextId title) {
+    switch (title) {
+    case TextId::SetupPrinterUnreachable:
+        return TextId::SetupCheckPrinterPower;
+    case TextId::SetupPrinterDenied:
+        return TextId::AccessCheckKey;
+    case TextId::SetupPrinterIncomplete:
+        return TextId::SetupCheckPrinterAddress;
+    case TextId::SetupPrinterSilent:
+    case TextId::SetupPrinterServerError:
+        return TextId::SetupRetry;
+    case TextId::SetupPrinterBadReply:
+    case TextId::SetupPrinterNoConnection:
+    default:
+        return TextId::SetupScan;
+    }
 }
 
 TextId text_id_at(const std::size_t index) {

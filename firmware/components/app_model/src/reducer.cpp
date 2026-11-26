@@ -341,6 +341,8 @@ void forget_previous_printer(AppState& state) {
     state.temperatures = TemperatureState{};
     state.current_job = PrintJob{};
     state.last_completed_job = CompletedJobSnapshot{};
+    state.display.waiting_for_ready = false;
+    state.display.observation_interrupted = false;
     state.alert = PrinterAlert{};
 
     state.last_printer_generation = 0;
@@ -404,14 +406,19 @@ void apply_configuration(AppState& state, const ConfigurationObservation& observ
     // that separation.
     if (observation.status == ConfigurationStatus::Missing) {
         state.provisioning = ProvisioningPhase::SetupRequired;
+        state.setup_failure = {};
     } else if (observation.status == ConfigurationStatus::Valid) {
         state.provisioning = ProvisioningPhase::Inactive;
+        state.setup_failure = {};
     }
 }
 
 // --- Network and connection lifecycle --------------------------------------
 
 void apply_network(AppState& state, const NetworkObservation& observation, const Timestamp now) {
+    if (observation.phase != NetworkPhase::Connected) {
+        state.display.observation_interrupted = true;
+    }
     state.network.phase = observation.phase;
     state.network.ip_address = observation.ip_address;
     state.network.signal_known = observation.signal_known;
@@ -444,6 +451,9 @@ void apply_connection(AppState& state, const ConnectionObservation& observation,
                       const Timestamp now) {
     PrinterConnectionState& connection = state.printer_connection;
 
+    if (observation.phase != ConnectionPhase::Connected) {
+        state.display.observation_interrupted = true;
+    }
     connection.phase = observation.phase;
     connection.endpoint = observation.endpoint;
     connection.auth_method = observation.auth_method;
@@ -529,6 +539,32 @@ PrinterState write_printer(AppState& state, const PrinterSnapshotObservation& ob
     state.printer.requires_attention = observation.requires_attention;
     state.printer.observed_at = now;
     state.printer.ever_observed = true;
+    state.display.observation_interrupted = false;
+
+    // Buddy's local /api/v1/status uses IDLE, while READY is also a recognized report.
+    // Only a new accepted status observation may replace the completed outcome.
+    switch (observation.normalized) {
+    case PrinterState::Finished:
+        state.display.waiting_for_ready = true;
+        break;
+    case PrinterState::Idle:
+    case PrinterState::Ready:
+        if (!observation.is_busy && !observation.requires_attention) {
+            state.display.waiting_for_ready = false;
+        }
+        break;
+    case PrinterState::Preparing:
+    case PrinterState::Printing:
+    case PrinterState::Paused:
+    case PrinterState::Stopped:
+        state.display.waiting_for_ready = false;
+        break;
+    case PrinterState::Attention:
+    case PrinterState::Error:
+    case PrinterState::Offline:
+    case PrinterState::Unknown:
+        break;
+    }
 
     state.temperatures.nozzle_current = observation.nozzle_current;
     state.temperatures.nozzle_target = observation.nozzle_target;
@@ -1024,6 +1060,9 @@ bool apply(AppState& state, const Event& event, const Timestamp now) {
 
     case EventType::ProvisioningPhaseObserved:
         state.provisioning = event.provisioning.phase;
+        state.setup_failure = state.provisioning == ProvisioningPhase::SetupFailed
+                                  ? event.provisioning.failure
+                                  : PrinterValidationFailure{};
         return true;
 
     case EventType::NetworkObserved:
@@ -1093,6 +1132,10 @@ bool apply(AppState& state, const Event& event, const Timestamp now) {
 
     case EventType::DisplayBrightnessObserved:
         state.display.brightness_percent = event.brightness.brightness_percent;
+        return true;
+
+    case EventType::DisplayPreferencesObserved:
+        state.display.preferences = {event.preferences.mode, event.preferences.backlight};
         return true;
 
     case EventType::ButtonGestureObserved:
@@ -1288,9 +1331,27 @@ void derive_layers(AppState& state, const ReducerPolicy& policy, const Timestamp
 
     state.printer_connection.freshness = freshness;
     state.confidence = confidence_from(freshness, state.printer.ever_observed);
-    state.subject = subject_from_printer_state(state.subject, state.printer.normalized);
+    const auto reported = state.printer.normalized;
+    const auto ordinary_subject = subject_from_printer_state(state.subject, reported);
     state.subject_condition =
-        condition_from(state.printer.normalized, state.printer.requires_attention, state.alert);
+        condition_from(reported, state.printer.requires_attention, state.alert);
+    if (state.display.preferences.mode == DisplayMode::PrinterStatus &&
+        ordinary_subject == SubjectState::Ready) {
+        const bool locally_ready =
+            (reported == PrinterState::Idle || reported == PrinterState::Ready) &&
+            !state.printer.is_busy && state.subject_condition == SubjectCondition::None;
+        if (locally_ready) {
+            state.subject = SubjectState::Ready;
+            if (state.display.observation_interrupted || state.confidence == Confidence::Degraded) {
+                state.confidence = Confidence::Unavailable;
+            }
+        } else {
+            state.subject = state.display.waiting_for_ready ? SubjectState::Completed
+                                                            : SubjectState::AcquiringState;
+        }
+    } else {
+        state.subject = ordinary_subject;
+    }
     state.access_condition = access_from(state.printer_connection.phase, state.access_condition);
     state.device_operation = resolve_device_operation(state);
 

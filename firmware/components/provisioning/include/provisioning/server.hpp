@@ -7,6 +7,8 @@
 #include <string_view>
 
 #include "app_model/bounded_string.hpp"
+#include "app_model/device_data.hpp"
+#include "app_model/printer_validation.hpp"
 
 // The local web server — Architecture Spec §5.11, §10.5, §14.4; owner rulings R6, R7 and
 // A–D of Milestone 3.9.
@@ -119,6 +121,26 @@ using SubmissionSink = SubmissionHandoff (*)(const Submitted& submitted, void* c
 enum class UpdateHandoff : std::uint8_t { Accepted, Unavailable };
 using UpdateSink = UpdateHandoff (*)(void* context);
 
+enum class DisplayAction : std::uint8_t { Save, Demo };
+
+struct DisplayRequest {
+    DisplayAction action{DisplayAction::Save};
+    app_model::DisplayPreferences preferences;
+};
+
+using DisplaySettingsSink = bool (*)(const DisplayRequest& request, void* context);
+
+struct DisplaySettings {
+    app_model::DisplayPreferences preferences;
+    std::uint32_t revision{0};
+    bool adjustable{false};
+    bool saved{false};
+    bool demo_available{false};
+    bool demo_running{false};
+};
+
+void publish_display_settings(const DisplaySettings& settings);
+
 struct Config {
     // The address the access point answers on, e.g. "192.168.4.1". Supplied by app_core
     // from `network`; this component does not ask the radio anything.
@@ -131,6 +153,7 @@ struct Config {
     SubmissionSink sink{nullptr};
     UpdateSink update_sink{nullptr};
     void* context{nullptr};
+    DisplaySettingsSink display_settings_sink{nullptr};
 };
 
 // --- Where the device can be reached, as it stands (owner ruling B) --------
@@ -205,7 +228,9 @@ enum class SetupState : std::uint8_t {
 
 // Publishes the flow's state for the page to read. Called from the application task; read
 // on the HTTP task. `reason` is a fixed non-secret label and is shown only for Failed.
-void publish(SetupState state, std::string_view reason);
+// Validation evidence is retained in the current failure snapshot.
+void publish(SetupState state, std::string_view reason,
+             app_model::PrinterValidationFailure validation_failure = {});
 
 // Publishes only non-secret release availability. An empty version withdraws the action; installing
 // keeps the action disabled while allowing the page to state what the display is doing.

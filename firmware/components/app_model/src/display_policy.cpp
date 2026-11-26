@@ -34,7 +34,7 @@ bool operator==(const Situation& lhs, const Situation& rhs) {
     return lhs.operation == rhs.operation && lhs.fault == rhs.fault && lhs.boot == rhs.boot &&
            lhs.provisioning == rhs.provisioning && lhs.access == rhs.access &&
            lhs.modal == rhs.modal && lhs.subject == rhs.subject && lhs.condition == rhs.condition &&
-           lhs.observation == rhs.observation;
+           lhs.observation == rhs.observation && lhs.display_mode == rhs.display_mode;
 }
 
 bool operator!=(const Situation& lhs, const Situation& rhs) {
@@ -53,6 +53,7 @@ Situation situation_of(const AppState& state) {
     situation.subject = state.subject;
     situation.condition = state.subject_condition;
     situation.observation = observation_of(state.confidence);
+    situation.display_mode = state.display.preferences.mode;
 
     return situation;
 }
@@ -165,6 +166,20 @@ Step next_step(const DisplayPower power, const std::uint32_t since_activity_ms,
     }
 
     return Step::Hold;
+}
+
+Step next_step_for(const AppState& state, const std::uint32_t since_activity_ms,
+                   const bool held_awake, const Timings& ordinary) {
+    const auto power = state.display.power;
+    if (state.display.preferences.mode == DisplayMode::PrinterStatus &&
+        ((state.subject == SubjectState::Ready && state.confidence == Confidence::Current) ||
+         (state.subject == SubjectState::Completed && state.confidence != Confidence::Unavailable &&
+          power == DisplayPower::Dimmed))) {
+        return Step::Hold;
+    }
+
+    return next_step(power, since_activity_ms, held_awake,
+                     recession_timings_for(state.subject, state.confidence, ordinary));
 }
 
 std::string_view log_label(const Tier tier) {

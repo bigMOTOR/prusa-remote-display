@@ -9,6 +9,7 @@
 #include "app_model/device_data.hpp"
 #include "app_model/events.hpp"
 #include "app_model/printer_data.hpp"
+#include "app_model/printer_validation.hpp"
 
 #include "prusalink/transaction.hpp"
 
@@ -42,9 +43,8 @@ enum class Purpose : std::uint8_t {
     // §14.3 steps 6–8 and §13.3 step 5: one bounded pass over `/api/version` and
     // `/api/v1/status` that answers whether a candidate configuration works.
     //
-    // ⛔ PUBLISHES NO OBSERVATIONS AT ALL. A validation run reports only a verdict. Nothing
-    // it learns reaches the store, so a candidate cannot colour the printer state, the
-    // connection state or the panel while it is still a candidate.
+    // Validation reports a verdict with safe evidence on failure, without publishing observations
+    // that would change the operational printer or connection state.
     Validate,
 
     // Ongoing operational polling. Only ever started against a configuration already marked
@@ -98,7 +98,7 @@ struct Target {
 
 // What one worker cycle established.
 //
-// Poll fills the three observation slots; Validate fills the verdict and nothing else. The
+// Poll fills the three observation slots. Validate fills the verdict and any failure evidence. The
 // invariant is asserted by a host test rather than left to a reader's care, because it is the
 // mechanism by which an unvalidated candidate is kept out of the store.
 //
@@ -143,6 +143,7 @@ struct Report {
 
     // Why a Validate run failed, in §7.5's vocabulary. Meaningless unless `verdict` is Failed.
     app_model::ConnectionPhase failure_phase{app_model::ConnectionPhase::PrinterUnavailable};
+    app_model::PrinterValidationFailure validation_failure{};
 
     // --- Poll only ---
     //

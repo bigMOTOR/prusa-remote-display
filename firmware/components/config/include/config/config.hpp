@@ -116,6 +116,12 @@ struct ConfigV1 {
 // factory-fresh device report Invalid rather than Missing.
 [[nodiscard]] ConfigV1 defaults();
 
+// Local display preferences have a separate key. Changing them must not replace a validated
+// Wi-Fi/printer pair or change the ConfigV1 layout already written by older firmware.
+[[nodiscard]] app_model::DisplayPreferences load_display_preferences(storage::KeyValue& store);
+[[nodiscard]] bool save_display_preferences(storage::KeyValue& store,
+                                            app_model::DisplayPreferences preferences);
+
 // Why a load ended where it did.
 //
 // Finer-grained than ConfigurationStatus for the same reason storage::Outcome is finer

@@ -83,7 +83,7 @@ TEST(RedirectTests, EveryRedirectIsABoundedClassifiedFailure) {
 
         EXPECT_FALSE(outcome.usable) << status;
         EXPECT_EQ(outcome.phase, app_model::ConnectionPhase::UnsupportedApi) << status;
-        EXPECT_FALSE(outcome.error.empty()) << status;
+        EXPECT_FALSE(outcome.error().empty()) << status;
 
         // It must not read as a reachability problem either: a device that redirects is present
         // and answering, and telling the user the printer is unreachable would send them to

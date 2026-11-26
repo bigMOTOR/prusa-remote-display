@@ -390,6 +390,14 @@ struct PrinterConnectionState {
 [[nodiscard]] bool operator!=(const PrinterConnectionState& lhs, const PrinterConnectionState& rhs);
 
 // §7.11. §7.11's closing rule and §17.8: display power never stops monitoring.
+enum class DisplayMode : std::uint8_t { Timer, PrinterStatus };
+enum class Backlight : std::uint8_t { Low, Standard, High };
+
+struct DisplayPreferences {
+    DisplayMode mode{DisplayMode::Timer};
+    Backlight backlight{Backlight::Standard};
+};
+
 struct DisplayState {
     DisplayPower power{DisplayPower::On};
     std::uint8_t brightness_percent{100};
@@ -399,6 +407,9 @@ struct DisplayState {
     bool idle_mode{false};
 
     Timestamp last_interaction_at{};
+    DisplayPreferences preferences;
+    bool waiting_for_ready{false};
+    bool observation_interrupted{false};
 };
 
 [[nodiscard]] bool operator==(const DisplayState& lhs, const DisplayState& rhs);

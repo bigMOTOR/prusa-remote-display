@@ -77,7 +77,7 @@ constexpr const char* kVersionBody =
     connection.phase = outcome.phase;
     connection.endpoint.assign("printer.local");
     connection.auth_method = app_model::AuthMethod::ApiKey;
-    connection.error.assign(outcome.error);
+    connection.error.assign(outcome.error());
     connection.response_code_known = transport == network::HttpOutcome::Ok;
     connection.response_code = status;
     connection.latency_known = true;

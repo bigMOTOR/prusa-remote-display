@@ -4,7 +4,9 @@
 #include "provisioning/server.hpp"
 
 #include <array>
+#include <cstdint>
 #include <cstring>
+#include <optional>
 #include <string>
 
 // ESP-IDF headers are not -Wundef clean. Suppress locally (per architecture
@@ -71,9 +73,15 @@ constexpr std::string_view kTokenHeader = "X-PRD-Setup-Token";
 httpd_handle_t g_server = nullptr;
 SessionToken g_token;
 RateLimiter g_limiter;
+RateLimiter g_report_limiter{1};
+
+// The HTTP task retires an old report as soon as it accepts a retry, before the app
+// task has had a chance to publish the next state. Application state is loaded once per request.
+std::optional<std::uint32_t> g_retired_diagnostic_revision;
 
 SubmissionSink g_sink = nullptr;
 UpdateSink g_update_sink = nullptr;
+DisplaySettingsSink g_display_settings_sink = nullptr;
 void* g_context = nullptr;
 
 // --- The published flow state, and the one channel that carries it -------
@@ -123,10 +131,8 @@ std::uint8_t random_byte(void* /*context*/) {
 
 // The one coherent copy a request is answered from.
 //
-// ⛔ CALLED ONCE PER REQUEST, AT ENTRY. That is the whole coherence rule: every decision and every
-// response field below comes from this value, so an answer describes the state before a transition
-// or the state after it and never half of each. handle_submit() used to read the surfaces twice and
-// the setup state separately, three reads of three independently updated globals.
+// The entry snapshot keeps each gate coherent. Report reads take a second snapshot after the
+// body to verify that the requested revision and local setup surface are still current.
 //
 // ⬅️ AND NOTHING IS HELD AFTERWARDS. xQueuePeek copies the item under the queue's own critical
 // section and releases it before returning, so no synchronisation primitive is alive while a handler
@@ -148,6 +154,9 @@ std::uint8_t random_byte(void* /*context*/) {
         return ServerSnapshot{};
     }
 
+    if (g_retired_diagnostic_revision == snapshot.setup_revision) {
+        snapshot.validation_failure = {};
+    }
     return snapshot;
 }
 
@@ -242,8 +251,12 @@ esp_err_t send_asset(httpd_req_t* const request, const std::uint8_t* const begin
     httpd_resp_set_hdr(request, "Cache-Control", "no-store");
     httpd_resp_set_hdr(request, "X-Content-Type-Options", "nosniff");
 
+    // These linker labels delimit one embedded file. Subtract addresses because
+    // the labels are declared as separate arrays in C++.
+    const auto byte_count =
+        reinterpret_cast<std::uintptr_t>(end) - reinterpret_cast<std::uintptr_t>(begin);
     return httpd_resp_send(request, reinterpret_cast<const char*>(begin),
-                           static_cast<ssize_t>(end - begin));
+                           static_cast<ssize_t>(byte_count));
 }
 
 esp_err_t handle_index(httpd_req_t* const request) {
@@ -295,10 +308,14 @@ void refuse(httpd_req_t* const request, const GateOutcome outcome) {
     diagnostics::log(diagnostics::LogLevel::Warning, kTag,
                      "setup submission refused reason=" + std::string{log_label(outcome)});
 
-    // The body names nothing. A caller probing the gate learns the status and no more.
+    // The body is generic. A throttled request also gets the refill interval.
     const std::string status = std::to_string(status_for(outcome)) + " Refused";
     httpd_resp_set_status(request, status.c_str());
     httpd_resp_set_type(request, "application/json");
+    if (outcome == GateOutcome::TooManyRequests) {
+        static_assert(kRateRefillIntervalMs == 1000);
+        httpd_resp_set_hdr(request, "Retry-After", "1");
+    }
     (void)httpd_resp_send(request, "{\"accepted\":false}", HTTPD_RESP_USE_STRLEN);
 }
 
@@ -323,7 +340,7 @@ void unavailable(httpd_req_t* const request) {
 
 [[nodiscard]] std::string_view field(const cJSON* const root, const char* const name) {
     const cJSON* const item = cJSON_GetObjectItemCaseSensitive(root, name);
-    if (item == nullptr || !cJSON_IsString(item) || item->valuestring == nullptr) {
+    if (item == nullptr || cJSON_IsString(item) == 0 || item->valuestring == nullptr) {
         return {};
     }
 
@@ -352,7 +369,7 @@ class ParsedBody {
         // home network name is credential material under §§7.3, 13.2 and 13.5.
         for (const char* const name : {"wifiSsid", "wifiPassword", "printerApiKey"}) {
             cJSON* const item = cJSON_GetObjectItemCaseSensitive(root_, name);
-            if (item != nullptr && cJSON_IsString(item)) {
+            if (item != nullptr && cJSON_IsString(item) != 0) {
                 scrub::text(item->valuestring);
             }
         }
@@ -420,17 +437,52 @@ class ParsedBody {
     return g_sink(submitted, g_context);
 }
 
-// POST /api/setup.
+esp_err_t send_diagnostic_report(httpd_req_t* const request, const ServerSnapshot& snapshot,
+                                 const cJSON* const root) {
+    // Only the action and the advertised revision belong in this request.
+    const std::string_view revision = field(root, "reportId");
+    if (cJSON_IsObject(root) == 0 || cJSON_GetArraySize(root) != 2 ||
+        field(root, "stage") != "diagnostic-report" || revision.empty()) {
+        refuse(request, GateOutcome::BodyMissing);
+        return ESP_OK;
+    }
+
+    // A slow request body can outlive its attempt. Recheck only this read action,
+    // since ordinary setup submissions are admitted against their entry snapshot.
+    const ServerSnapshot current = snapshot_for_request();
+    const bool still_current = snapshot.setup_revision == current.setup_revision &&
+                               permits_mutation(arrival_surface(request, current.surfaces));
+    const std::string report =
+        still_current
+            ? diagnostic_report(current, revision, app_model::current_build_info().version)
+            : std::string{};
+    httpd_resp_set_type(request, "application/json");
+    if (report.empty()) {
+        httpd_resp_set_status(request, "409 Conflict");
+        return httpd_resp_send(request, "{}", HTTPD_RESP_USE_STRLEN);
+    }
+
+    std::string response{"{"};
+    append_json_string(response, FieldName{"diagnosticReport"}, report);
+    response += '}';
+    return httpd_resp_send(request, response.c_str(), static_cast<ssize_t>(response.size()));
+}
+
+enum class SetupPost : std::uint8_t { Submission, DiagnosticReport };
+
+// POST /api/setup and POST /api/diagnostic-report.
 //
 // ⚠️ IT VALIDATES. IT DOES NOT SAVE. Milestone 3.7 has nowhere to put a configuration and
 // says so by having no Save action on the page; this endpoint exists so that the §14.4
 // protections around it are real and exercised rather than scaffolding written for a later
 // checkpoint. M3.8 gives app_core's sink a body that changes something.
-esp_err_t handle_submit(httpd_req_t* const request) {
-    // ⛔ ONE SNAPSHOT FOR THE WHOLE REQUEST — the arrival check, the gate's origin membership and the
-    // stage admission below. Those were three separate reads of state the application task was
-    // writing, so a submission arriving as provisioning moved could be refused on one instant's
-    // surfaces and admitted on another instant's setup state.
+esp_err_t handle_setup_post(httpd_req_t* const request, const SetupPost action) {
+    const bool report_request = action == SetupPost::DiagnosticReport;
+    if (report_request) {
+        httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+        httpd_resp_set_hdr(request, "X-Content-Type-Options", "nosniff");
+    }
+    // Use one entry snapshot for the arrival, origin and setup stage checks.
     const ServerSnapshot snapshot = snapshot_for_request();
 
     RequestFacts facts;
@@ -444,7 +496,7 @@ esp_err_t handle_submit(httpd_req_t* const request) {
     facts.content_type = header(request, "Content-Type");
     const std::string content_type{facts.content_type};
     facts.token = header(request, kTokenHeader);
-    facts.content_length = static_cast<std::size_t>(request->content_len);
+    facts.content_length = request->content_len;
 
     // The three header reads share one static buffer, so each view is invalidated by the
     // next read. Re-pointed at the owned copies before the gate sees them.
@@ -453,7 +505,9 @@ esp_err_t handle_submit(httpd_req_t* const request) {
     const std::string token{facts.token};
     facts.token = token;
 
-    const GateOutcome gate = evaluate(facts, snapshot.surfaces, g_token, g_limiter, now_ms());
+    // Choose the budget by the registered route, before reading a byte of either body.
+    RateLimiter& limiter = report_request ? g_report_limiter : g_limiter;
+    const GateOutcome gate = evaluate(facts, snapshot.surfaces, g_token, limiter, now_ms());
 
     if (gate != GateOutcome::Allow) {
         refuse(request, gate);
@@ -479,9 +533,28 @@ esp_err_t handle_submit(httpd_req_t* const request) {
         return ESP_OK;
     }
 
-    const ParsedBody parsed{cJSON_ParseWithLength(body.c_str(), body.size())};
+    const char* parse_end = nullptr;
+    const ParsedBody parsed{
+        report_request ? cJSON_ParseWithLengthOpts(body.c_str(), body.size() + 1, &parse_end, 1)
+                       : cJSON_ParseWithLength(body.c_str(), body.size())};
     cJSON* const root = parsed.get();
     if (root == nullptr) {
+        refuse(request, GateOutcome::BodyMissing);
+        return ESP_OK;
+    }
+
+    if (report_request) {
+        // cJSON exposes NUL-terminated keys and values; reject escaped NULs before
+        // comparing either, and require the parser to consume the full declared body.
+        if (parse_end != body.data() + body.size() || body.find(R"(\u0000)") != std::string::npos) {
+            refuse(request, GateOutcome::BodyMissing);
+            return ESP_OK;
+        }
+        return send_diagnostic_report(request, snapshot, root);
+    }
+
+    const std::string_view stage_text = field(root, "stage");
+    if (stage_text == "diagnostic-report") {
         refuse(request, GateOutcome::BodyMissing);
         return ESP_OK;
     }
@@ -495,7 +568,6 @@ esp_err_t handle_submit(httpd_req_t* const request) {
 
     // Absent or unrecognised means the Wi-Fi stage. A caller cannot reach the printer stage
     // by omitting the field, which is the safe direction for a default to fail in.
-    const std::string_view stage_text = field(root, "stage");
     const Stage stage = stage_text == "printer" ? Stage::Printer : Stage::Wifi;
 
     // ⛔ THE PRINTER STAGE REQUIRES A VALIDATED WI-FI STAGE. Refused here as well as in
@@ -518,6 +590,10 @@ esp_err_t handle_submit(httpd_req_t* const request) {
     const bool validated = report.accepted(stage);
     const SubmissionHandoff handoff =
         validated ? deliver(submission, report, stage) : SubmissionHandoff::Unavailable;
+
+    if (handoff == SubmissionHandoff::Accepted) {
+        g_retired_diagnostic_revision = snapshot.setup_revision;
+    }
 
     if (submit_answer(validated, handoff) == SubmitAnswer::Unavailable) {
         // ⛔ NOTHING IS LOGGED HERE, AND THE OMISSION IS THE POINT.
@@ -593,6 +669,14 @@ esp_err_t handle_submit(httpd_req_t* const request) {
     return httpd_resp_send(request, response.c_str(), static_cast<ssize_t>(response.size()));
 }
 
+esp_err_t handle_submit(httpd_req_t* const request) {
+    return handle_setup_post(request, SetupPost::Submission);
+}
+
+esp_err_t handle_diagnostic_report(httpd_req_t* const request) {
+    return handle_setup_post(request, SetupPost::DiagnosticReport);
+}
+
 // POST /api/update. The same physical-surface, exact-Origin, JSON, CSRF and rate gate as setup;
 // unlike setup its body has no value to parse or echo. app_core remains the authority that binds
 // the action to the currently advertised release and acquires exclusivity.
@@ -606,7 +690,7 @@ esp_err_t handle_update(httpd_req_t* const request) {
     const std::string content_type{facts.content_type};
     facts.token = header(request, kTokenHeader);
     const std::string token{facts.token};
-    facts.content_length = static_cast<std::size_t>(request->content_len);
+    facts.content_length = request->content_len;
     facts.origin = origin;
     facts.content_type = content_type;
     facts.token = token;
@@ -636,6 +720,57 @@ esp_err_t handle_update(httpd_req_t* const request) {
     return httpd_resp_send(request, "{\"accepted\":true}", HTTPD_RESP_USE_STRLEN);
 }
 
+// POST /api/display. Reuse the ordinary settings surface and its write gate.
+esp_err_t handle_display_settings(httpd_req_t* const request) {
+    const ServerSnapshot snapshot = snapshot_for_request();
+    const std::string origin{header(request, "Origin")};
+    const std::string content_type{header(request, "Content-Type")};
+    const std::string token{header(request, kTokenHeader)};
+    const RequestFacts facts{arrival_surface(request, snapshot.surfaces), origin, content_type,
+                             token, request->content_len};
+    const GateOutcome gate = evaluate(facts, snapshot.surfaces, g_token, g_limiter, now_ms());
+    if (gate != GateOutcome::Allow) {
+        refuse(request, gate);
+        return ESP_OK;
+    }
+
+    // The page sends a pair of one-digit enumerators (mode, backlight), or "demo".
+    std::array<char, 6> body{};
+    const scrub::Scope body_scrub{body.data(), body.size()};
+    if (facts.content_length > body.size() ||
+        httpd_req_recv(request, body.data(), facts.content_length) !=
+            static_cast<int>(facts.content_length)) {
+        refuse(request, GateOutcome::BodyMissing);
+        return ESP_OK;
+    }
+
+    DisplayRequest action;
+    if (std::string_view{body.data(), facts.content_length} == R"("demo")") {
+        action.action = DisplayAction::Demo;
+    } else if (facts.content_length == 5U && body[0] == '[' && body[1] >= '0' && body[1] <= '1' &&
+               body[2] == ',' && body[3] >= '0' && body[3] <= '2' && body[4] == ']') {
+        action.preferences = {static_cast<app_model::DisplayMode>(body[1] - '0'),
+                              static_cast<app_model::Backlight>(body[3] - '0')};
+    } else {
+        refuse(request, GateOutcome::BodyMissing);
+        return ESP_OK;
+    }
+
+    const auto current = snapshot_for_request();
+    const bool enabled = action.action == DisplayAction::Demo
+                             ? current.display_settings.demo_available
+                             : current.display_settings.adjustable;
+    if (!enabled || !permits_mutation(arrival_surface(request, current.surfaces)) ||
+        g_display_settings_sink == nullptr || !g_display_settings_sink(action, g_context)) {
+        unavailable(request);
+        return ESP_OK;
+    }
+
+    httpd_resp_set_type(request, "application/json");
+    httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+    return httpd_resp_send(request, "{\"accepted\":true}", HTTPD_RESP_USE_STRLEN);
+}
+
 // Four initialisers, not seven: httpd_uri_t's is_websocket, handle_ws_control_frames and
 // supported_subprotocol exist only under CONFIG_HTTPD_WS_SUPPORT, which this project does
 // not enable. Spelling them would not compile — and would also be claiming a capability the
@@ -643,13 +778,15 @@ esp_err_t handle_update(httpd_req_t* const request) {
 //
 // EVERY ROUTE IS AN EXACT MATCH. No wildcard handler, so a path this component did not name
 // is a 404 from esp_http_server rather than something reaching our code.
-const std::array<httpd_uri_t, 6> kRoutes{{
+const std::array<httpd_uri_t, 8> kRoutes{{
     {"/", HTTP_GET, &handle_index, nullptr},
     {"/style.css", HTTP_GET, &handle_style, nullptr},
     {"/app.js", HTTP_GET, &handle_script, nullptr},
     {"/api/status", HTTP_GET, &handle_status, nullptr},
     {"/api/setup", HTTP_POST, &handle_submit, nullptr},
+    {"/api/diagnostic-report", HTTP_POST, &handle_diagnostic_report, nullptr},
     {"/api/update", HTTP_POST, &handle_update, nullptr},
+    {"/api/display", HTTP_POST, &handle_display_settings, nullptr},
 }};
 
 } // namespace
@@ -672,6 +809,7 @@ bool start(const Config& config) {
 
     g_sink = config.sink;
     g_update_sink = config.update_sink;
+    g_display_settings_sink = config.display_settings_sink;
     g_context = config.context;
 
     // ⛔ THE CHANNEL EXISTS BEFORE httpd_start() CREATES THE TASK THAT READS IT, and is seeded below
@@ -707,6 +845,8 @@ bool start(const Config& config) {
 
     g_token.regenerate(&random_byte, nullptr);
     g_limiter.reset();
+    g_report_limiter.reset();
+    g_retired_diagnostic_revision.reset();
 
     httpd_config_t settings = HTTPD_DEFAULT_CONFIG();
 
@@ -764,6 +904,7 @@ void stop() {
     g_url.clear();
     g_sink = nullptr;
     g_update_sink = nullptr;
+    g_display_settings_sink = nullptr;
     g_context = nullptr;
 
     // ⬅️ AFTER httpd_stop(), WHICH JOINS. httpd_stop() sends its own control message and then spins
@@ -783,13 +924,13 @@ bool running() {
 // ⬅️ log_label(SetupState) IS NOT HERE ANY MORE. It moved to server_view.cpp, which the host suite
 // can compile, because status_body() needs it and this translation unit includes esp_http_server.h.
 
-void publish(const SetupState state, const std::string_view reason) {
+void publish(const SetupState state, const std::string_view reason,
+             const app_model::PrinterValidationFailure validation_failure) {
     // ⬅️ THE WRITE ORDER NO LONGER CARRIES THE GUARANTEE, AND THAT IS THE IMPROVEMENT. This used to
     // assign the reason before the state so that a page reading Failed could not find the previous
     // attempt's reason — a discipline that depended on the reader seeing the two writes in order,
     // which nothing guaranteed. They are now one value, handed over once.
-    g_published.setup_state = state;
-    (void)g_published.setup_reason.assign(reason);
+    g_published.set_setup_state(state, reason, validation_failure);
     republish();
 
     // ⬅️ THE LAST LINK, AND THE ONE NOBODY HAD TIMED. Everything before this happens on the
@@ -799,6 +940,11 @@ void publish(const SetupState state, const std::string_view reason) {
     // log could not tell them apart.
     diagnostics::timeline(kTag, "browser-state-published", "state",
                           static_cast<std::int64_t>(state));
+}
+
+void publish_display_settings(const DisplaySettings& settings) {
+    g_published.display_settings = settings;
+    republish();
 }
 
 void publish_update(const std::string_view version, const bool installing) {

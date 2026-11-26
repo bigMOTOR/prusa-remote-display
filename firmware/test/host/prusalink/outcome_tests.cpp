@@ -42,7 +42,7 @@ TEST(OutcomeTests, ASuccessfulExchangeIsTheOnlyUsableResult) {
 
     EXPECT_EQ(ok.phase, ConnectionPhase::Connected);
     EXPECT_TRUE(ok.usable);
-    EXPECT_TRUE(ok.error.empty());
+    EXPECT_TRUE(ok.error().empty());
 
     // Any other 2xx is equally usable: the contract does not promise exactly 200.
     EXPECT_TRUE(classify(network::HttpOutcome::Ok, 204, DecodeError::None).usable);
@@ -55,7 +55,7 @@ TEST(OutcomeTests, AuthenticationFailuresAreTheirOwnCategory) {
             classify(network::HttpOutcome::Ok, status, DecodeError::None);
         EXPECT_EQ(outcome.phase, ConnectionPhase::Unauthorized) << status;
         EXPECT_FALSE(outcome.usable) << status;
-        EXPECT_EQ(outcome.error, "unauthorized") << status;
+        EXPECT_EQ(outcome.error(), "unauthorized") << status;
     }
 
     // NEGATIVE CONTROL: a neighbouring 4xx must NOT read as an authentication failure.
@@ -107,10 +107,10 @@ TEST(OutcomeTests, TransportFailuresNeverReadAsAuthenticationOrSchemaFaults) {
 
     // The labels stay distinct so diagnostics can tell them apart even though the
     // user-visible phase is the same.
-    EXPECT_EQ(classify(network::HttpOutcome::ConnectFailed, 0, DecodeError::None).error,
+    EXPECT_EQ(classify(network::HttpOutcome::ConnectFailed, 0, DecodeError::None).error(),
               "unreachable");
-    EXPECT_EQ(classify(network::HttpOutcome::Timeout, 0, DecodeError::None).error, "timeout");
-    EXPECT_EQ(classify(network::HttpOutcome::Rejected, 0, DecodeError::None).error,
+    EXPECT_EQ(classify(network::HttpOutcome::Timeout, 0, DecodeError::None).error(), "timeout");
+    EXPECT_EQ(classify(network::HttpOutcome::Rejected, 0, DecodeError::None).error(),
               "request-rejected");
 }
 
@@ -122,7 +122,7 @@ TEST(OutcomeTests, AnOversizedBodyIsAResponseFaultNotAnUnreachablePrinter) {
 
     EXPECT_EQ(outcome.phase, ConnectionPhase::InvalidResponse);
     EXPECT_FALSE(outcome.usable);
-    EXPECT_EQ(outcome.error, "response-too-large");
+    EXPECT_EQ(outcome.error(), "response-too-large");
 }
 
 TEST(OutcomeTests, DecodeFailuresOnAGoodExchangeBecomeInvalidResponse) {
@@ -136,9 +136,9 @@ TEST(OutcomeTests, DecodeFailuresOnAGoodExchangeBecomeInvalidResponse) {
               ConnectionPhase::InvalidResponse);
 
     // Syntax and schema keep distinct labels — the fault a maintainer chases differs.
-    EXPECT_EQ(classify(network::HttpOutcome::Ok, 200, DecodeError::Malformed).error,
+    EXPECT_EQ(classify(network::HttpOutcome::Ok, 200, DecodeError::Malformed).error(),
               "malformed-body");
-    EXPECT_EQ(classify(network::HttpOutcome::Ok, 200, DecodeError::MissingField).error,
+    EXPECT_EQ(classify(network::HttpOutcome::Ok, 200, DecodeError::MissingField).error(),
               "schema-mismatch");
 }
 
@@ -176,7 +176,7 @@ TEST(OutcomeTests, NoInputCombinationProducesAPhaseThePollerCannotActOn) {
                 // A usable result and a non-empty error are mutually exclusive by
                 // construction; a caller reads one or the other and must not have to
                 // reconcile them.
-                EXPECT_EQ(outcome.usable, outcome.error.empty());
+                EXPECT_EQ(outcome.usable, outcome.error().empty());
             }
         }
     }
@@ -210,7 +210,7 @@ TEST(OutcomeTests, EveryErrorLabelComesFromTheFixedSet) {
             for (const DecodeError decode : kEveryDecode) {
                 const AttemptOutcome outcome = classify(transport, status, decode);
 
-                if (outcome.error.empty()) {
+                if (outcome.error().empty()) {
                     EXPECT_TRUE(outcome.usable);
                     continue;
                 }
@@ -218,13 +218,13 @@ TEST(OutcomeTests, EveryErrorLabelComesFromTheFixedSet) {
                 bool found = false;
 
                 for (const std::string_view allowed : kAllowed) {
-                    if (outcome.error == allowed) {
+                    if (outcome.error() == allowed) {
                         found = true;
                         break;
                     }
                 }
 
-                EXPECT_TRUE(found) << "unlisted label: " << outcome.error;
+                EXPECT_TRUE(found) << "unlisted label: " << outcome.error();
             }
         }
     }

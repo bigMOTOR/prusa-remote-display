@@ -25,6 +25,7 @@
 #include "dto.hpp"
 #include "normalize.hpp"
 #include "status_timeline.hpp"
+#include "validation/user_demo.hpp"
 
 // The Printing telemetry timeline, end to end.
 //
@@ -1052,3 +1053,96 @@ TEST(PrintingTimelineIsolationTests, TheKconfigSymbolDefaultsOff) {
 
 } // namespace
 } // namespace prd::validation
+
+TEST(UserDemoTests, RunsOnceWithOnlySyntheticFieldsAndCanExitOrRestart) {
+    using namespace prd::app_model;
+    using namespace std::chrono_literals;
+    prd::validation::UserDemo demo;
+    constexpr auto boot = 42s;
+    EXPECT_FALSE(demo.advance(boot).has_value());
+    ASSERT_TRUE(demo.start(boot));
+    EXPECT_FALSE(demo.start(boot + 1s));
+
+    const std::vector<std::pair<std::chrono::milliseconds, SubjectState>> states{
+        {0ms, SubjectState::Ready},         {2500ms, SubjectState::Preparing},
+        {5500ms, SubjectState::Printing},   {9500ms, SubjectState::Paused},
+        {12500ms, SubjectState::Printing},  {15500ms, SubjectState::Printing},
+        {19000ms, SubjectState::Printing},  {22000ms, SubjectState::Printing},
+        {24500ms, SubjectState::Completed}, {28000ms, SubjectState::Ready},
+    };
+    for (const auto& [offset, subject] : states) {
+        const auto frame = demo.advance(boot + offset);
+        ASSERT_TRUE(frame.has_value()) << offset.count();
+        EXPECT_EQ(frame->subject, subject);
+        EXPECT_TRUE(frame->printer_name.empty());
+        EXPECT_TRUE(frame->job_name.empty());
+        EXPECT_EQ(frame->provisioning, ProvisioningPhase::Inactive);
+        EXPECT_EQ(frame->confidence, Confidence::Current);
+        EXPECT_EQ(frame->subject_condition,
+                  offset == 15500ms ? SubjectCondition::Error : SubjectCondition::None);
+        EXPECT_FALSE(demo.advance(boot + offset + 1ms).has_value());
+    }
+    EXPECT_FALSE(demo.expired(boot + 30999ms));
+    EXPECT_TRUE(demo.expired(boot + 31000ms));
+    EXPECT_FALSE(demo.advance(boot + 31000ms).has_value());
+    demo.stop();
+    EXPECT_FALSE(demo.active());
+
+    ASSERT_TRUE(demo.start(boot + 32s));
+    ASSERT_TRUE(demo.advance(boot + 32s).has_value());
+    demo.stop();
+    EXPECT_FALSE(demo.advance(boot + 40s).has_value());
+}
+
+TEST(UserDemoTests, SetupValidationAndHigherPriorityOperationsCanTakeBackThePanel) {
+    using namespace prd::app_model;
+    AppState live;
+    live.boot.phase = BootPhase::Ready;
+    live.provisioning = ProvisioningPhase::SetupActive;
+    auto allowed = [&] { return prd::validation::may_present_user_demo(live); };
+    EXPECT_TRUE(allowed());
+
+    live.provisioning = ProvisioningPhase::ValidatingConfiguration;
+    EXPECT_FALSE(allowed());
+    live.provisioning = ProvisioningPhase::SetupActive;
+    for (auto operation : {DeviceOperation::DeviceFault, DeviceOperation::FirmwareUpdating,
+                           DeviceOperation::RecoveryMode, DeviceOperation::FactoryResetting}) {
+        live.device_operation = operation;
+        EXPECT_FALSE(allowed());
+    }
+    live.device_operation = DeviceOperation::None;
+    live.modal_surface = ModalSurface::FactoryResetConfirmation;
+    EXPECT_FALSE(allowed());
+}
+
+TEST(DisplayPrinterStatusIntegrationTests, LocalBuddyIdleMustPostdateFinishedAndAnyLoss) {
+    using namespace prd::app_model;
+    using namespace std::chrono_literals;
+    constexpr std::string_view idle = R"({"printer":{"state":"IDLE"}})";
+    constexpr std::string_view done =
+        R"({"printer":{"state":"FINISHED"},"job":{"id":173,"progress":100}})";
+    prd::app_store::Store live;
+    (void)live.dispatch(Event::boot_phase(0ms, BootPhase::Ready));
+    (void)live.dispatch(
+        Event::display_preferences(1ms, {DisplayMode::PrinterStatus, Backlight::Standard}));
+    ASSERT_TRUE(prd::validation::apply_status_body(live, idle, 10ms, {1, 1}).mutated);
+    ASSERT_TRUE(project(live.state()).at_visual_rest);
+    ASSERT_TRUE(prd::validation::apply_status_body(live, done, 11ms, {1, 2}).mutated);
+    ASSERT_EQ(project(live.state()).subject, SubjectState::Completed);
+    (void)prd::validation::apply_status_body(live, idle, 12ms, {1, 1});
+    EXPECT_EQ(project(live.state()).subject, SubjectState::Completed);
+    (void)live.dispatch(Event::display_idle_timer_fired(14ms));
+    EXPECT_EQ(project(live.state()).subject, SubjectState::Completed);
+    ASSERT_TRUE(prd::validation::apply_status_body(live, idle, 15ms, {1, 3}).mutated);
+    EXPECT_TRUE(project(live.state()).at_visual_rest);
+
+    (void)live.dispatch(Event::confidence_aged(16000ms));
+    EXPECT_EQ(project(live.state()).confidence, Confidence::Unavailable);
+    EXPECT_FALSE(project(live.state()).show_operational_form);
+    ConnectionObservation connected;
+    connected.phase = ConnectionPhase::Connected;
+    (void)live.dispatch(Event::connection_observed(16001ms, connected));
+    EXPECT_FALSE(project(live.state()).show_operational_form);
+    ASSERT_TRUE(prd::validation::apply_status_body(live, idle, 16002ms, {1, 4}).mutated);
+    EXPECT_TRUE(project(live.state()).at_visual_rest);
+}

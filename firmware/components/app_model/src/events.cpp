@@ -112,6 +112,9 @@ std::string_view log_label(const EventType type) {
     case EventType::DisplayBrightnessObserved:
         return "display-brightness-observed";
 
+    case EventType::DisplayPreferencesObserved:
+        return "display-preferences-observed";
+
     case EventType::ButtonGestureObserved:
         return "button-gesture-observed";
 
@@ -165,9 +168,10 @@ Event Event::configuration_observed(const Timestamp moment,
     return event;
 }
 
-Event Event::provisioning_phase(const Timestamp moment, const ProvisioningPhase phase) {
+Event Event::provisioning_phase(const Timestamp moment, const ProvisioningPhase phase,
+                                const PrinterValidationFailure failure) {
     Event event = make(EventType::ProvisioningPhaseObserved, moment);
-    event.provisioning.phase = phase;
+    event.provisioning = {phase, failure};
     return event;
 }
 
@@ -277,6 +281,12 @@ Event Event::display_brightness(const Timestamp moment, const std::uint8_t brigh
 }
 
 // --- Physical input --------------------------------------------------------
+
+Event Event::display_preferences(const Timestamp moment, const DisplayPreferences preferences) {
+    Event event = make(EventType::DisplayPreferencesObserved, moment);
+    event.preferences = {preferences.mode, preferences.backlight};
+    return event;
+}
 
 Event Event::button_gesture(const Timestamp moment, const ButtonGesture gesture) {
     Event event = make(EventType::ButtonGestureObserved, moment);

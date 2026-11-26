@@ -146,6 +146,16 @@ struct Brightness {
     std::uint8_t dimmed_light_percent_of_quiet{55U};
 };
 
+[[nodiscard]] constexpr Brightness preset_levels(const Backlight backlight, Brightness standard) {
+    constexpr int kStep = 15;
+    const int offset = backlight == Backlight::Low    ? -kStep
+                       : backlight == Backlight::High ? kStep
+                                                      : 0;
+    standard.active_percent = static_cast<std::uint8_t>(standard.active_percent + offset);
+    standard.quiet_percent = static_cast<std::uint8_t>(standard.quiet_percent + offset);
+    return standard;
+}
+
 // Which of the two On levels a situation asks for.
 enum class Tier : std::uint8_t {
     // Something a person is expected to read: a live job, setup, an actionable condition, a modal
@@ -262,6 +272,7 @@ struct Situation {
     // therefore exactly one activity — the single transient acknowledgement of UIBD 001 §5.1 — and
     // every failed poll after it leaves this field where it already was.
     Observation observation{Observation::Lost};
+    DisplayMode display_mode{DisplayMode::Timer};
 };
 
 [[nodiscard]] bool operator==(const Situation& lhs, const Situation& rhs);
@@ -307,6 +318,9 @@ enum class Step : std::uint8_t {
 // raise brightness would be an ambient loop, which UI Behaviour Decision 001 §9 prohibits.
 [[nodiscard]] Step next_step(DisplayPower power, std::uint32_t since_activity_ms, bool held_awake,
                              const Timings& timings);
+
+[[nodiscard]] Step next_step_for(const AppState& state, std::uint32_t since_activity_ms,
+                                 bool held_awake, const Timings& ordinary);
 
 // Wrap-safe elapsed milliseconds.
 //

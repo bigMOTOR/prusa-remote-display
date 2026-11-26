@@ -128,6 +128,7 @@ struct Presentation {
     DeviceOperation device_operation{DeviceOperation::None};
     BootPhase boot_phase{BootPhase::Starting};
     ProvisioningPhase provisioning{ProvisioningPhase::Inactive};
+    PrinterValidationFailure setup_failure{};
 
     // R8's candidate printer configuration, projected — owner ruling D-4, 2026-08-16.
     //

@@ -96,21 +96,34 @@
 
   // --- Scenarios ------------------------------------------------------------
 
-  async function printerFailure(expected) {
+  function wifiStatus() {
+    var feedback = byId("setupFeedback");
+    return feedback.hidden || feedback.classList.contains("checking") ? byId("wifiSummary") : feedback;
+  }
+
+  function wifiStatusText() {
+    var status = wifiStatus();
+    if (status.id === "wifiSummary") return status.textContent;
+    return [byId("setupFeedbackReason").textContent, byId("setupFeedbackAction").textContent].join(" ").trim();
+  }
+
+  async function printerFailure(expected, host = "192.168.1.50") {
     checkTruthy("reached printer step", await reachPrinterStep());
-    type("printerHost", "192.168.1.50");
+    type("printerHost", host);
     type("printerApiKey", "PLACEHOLDERKEY123");
     submit("printerForm");
     for (var i = 0; i < 40 && byId("wifiForm").hidden; i += 1) await wait(150);
     check("failure returned to Wi-Fi", byId("wifiForm").hidden, false);
     check("printer hidden until Wi-Fi recheck", byId("printerForm").hidden, true);
-    check("specific recovery copy", byId("wifiSummary").textContent, expected);
-    check("failure styled as error", css("wifiSummary", "borderLeftColor"), ERROR);
+    check("specific recovery copy", wifiStatusText(), expected);
+    check("reason shown in the setup feedback heading", byId("setupFeedbackReason").hidden, false);
+    check("action shown separately", byId("setupFeedbackAction").hidden, false);
+    check("failure styled as error", css(wifiStatus().id, "borderLeftColor"), ERROR);
     check("retry enabled", byId("wifiSubmit").disabled, false);
     checkTruthy("mobile copy does not overflow", D.documentElement.scrollWidth <= W.innerWidth);
     if (new URLSearchParams(window.location.search).has("failure-shot")) return;
     checkTruthy("retained fields reappear after Wi-Fi recheck", await reachPrinterStep());
-    check("host preserved", byId("printerHost").value, "192.168.1.50");
+    check("host preserved", byId("printerHost").value, host);
     check("port preserved", byId("printerPort").value, "80");
     check("key preserved", byId("printerApiKey").value, "PLACEHOLDERKEY123");
     check("key remains concealed", byId("printerApiKey").type, "password");
@@ -118,11 +131,44 @@
   }
 
   var scenarios = {
+    "display-settings-and-demo": async function () {
+      for (var i = 0; i < 30 && byId("showDemo").hidden; i += 1) await wait(50);
+      checkTruthy("demo available before setup details", byId("showDemo").getClientRects().length);
+      checkTruthy("display controls follow primary Wi-Fi",
+                  byId("wifiForm").getBoundingClientRect().bottom <=
+                    byId("displaySettings").getBoundingClientRect().top);
+      check("default timer selected", byId("displayMode").value, "0");
+      check("default standard backlight selected", byId("backlight").value, "1");
+      byId("displayMode").value = "1";
+      byId("backlight").value = "2";
+      byId("displaySave").click();
+      checkTruthy("settings save settled", await waitInteractive("displaySave", 3000));
+      check("save acknowledged", byId("displaySaveStatus").textContent, "Display settings saved.");
+
+      byId("showDemo").click();
+      for (var j = 0; j < 30 && byId("demoStatus").textContent === "Starting demo…"; j += 1)
+        await wait(50);
+      check("demo exit instruction", byId("demoStatus").textContent,
+            "Demo running. Press the display button to exit.");
+      check("repeat demo hidden while playing", byId("showDemo").hidden, true);
+      check("save disabled while playing", byId("displaySave").disabled, true);
+      for (var k = 0; k < 30 && byId("showDemo").hidden; k += 1) await wait(100);
+      check("demo returned to the settings page", byId("demoStatus").textContent, "Demo ended.");
+      check("saved mode retained", byId("displayMode").value, "1");
+      check("saved backlight retained", byId("backlight").value, "2");
+      check("initial setup remains available", byId("wifiForm").hidden, false);
+    },
     "printer-unreachable": async function () {
-      await printerFailure("That Wi-Fi worked, but the printer did not answer. Check its power, address and port. Check this Wi-Fi again, then correct the printer details.");
+      await printerFailure("Couldn’t reach the printer Check the printer’s power. Check this Wi-Fi again, then verify the printer address and port.", "printer.local");
     },
     "printer-unauthorized": async function () {
-      await printerFailure("That Wi-Fi worked, but the printer rejected the API key. Check the PrusaLink API key on the printer. Check this Wi-Fi again, then correct the key.");
+      await printerFailure("PrusaLink denied access Check this Wi-Fi again, then verify the API key in PrusaLink on your printer.");
+    },
+    "printer-incomplete-response": async function () {
+      await printerFailure("The printer response was incomplete Check the printer firmware. Check this Wi-Fi again, then verify the PrusaLink address.");
+    },
+    "printer-server-error": async function () {
+      await printerFailure("PrusaLink returned a server error. Wait a moment, then check this Wi-Fi again and retry.");
     },
     "printer-unsupported": async function () {
       await printerFailure("That Wi-Fi worked, but the printer interface is not supported. Check that the address is for a supported PrusaLink printer. Check this Wi-Fi again before retrying.");
@@ -130,12 +176,110 @@
     "printer-unusable-response": async function () {
       await printerFailure("That Wi-Fi worked, but the printer response could not be used. Check the PrusaLink address and printer firmware. Check this Wi-Fi again before retrying.");
     },
+    "diagnostic-report-retry": async function () {
+      var card = byId("diagnostic");
+      var report = byId("diagnosticReport");
+      var open = byId("diagnosticOpen");
+      var note = byId("diagnosticNote");
+      var feedback = byId("setupFeedback");
+      var action = byId("setupFeedbackAction");
+      var panel = byId("diagnosticPanel");
+      var lead = byId("lead");
+      var wifiLead = lead.textContent;
+      var reducedMotion = W.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      async function failPrinter(expected) {
+        submit("printerForm");
+        for (var i = 0; i < 40 && card.hidden; i += 1) await wait(150);
+        check("failure returned to Wi-Fi", byId("wifiForm").hidden, false);
+        check("printer hidden until Wi-Fi recheck", byId("printerForm").hidden, true);
+        check("Wi-Fi lead restored after printer failure", lead.textContent, wifiLead);
+        check("Wi-Fi network preserved", byId("wifiSsid").value, "ProbeNet");
+        check("Wi-Fi password preserved", byId("wifiPassword").value === "placeholder123", true);
+        check("failure advice", wifiStatusText(), expected);
+        checkTruthy("reason is above the Wi-Fi lead", feedback.getBoundingClientRect().bottom <= lead.getBoundingClientRect().top);
+        checkTruthy("report follows the primary action", byId("wifiSubmit").getBoundingClientRect().bottom <= open.getBoundingClientRect().top);
+        checkTruthy("mobile contents fit", D.documentElement.scrollWidth <= W.innerWidth);
+        check("report offered", card.hidden, false);
+        check("contents remain hidden before opening", report.hidden, true);
+        check("contents remain empty before opening", report.value, "");
+        check("note remains hidden before opening", note.hidden, true);
+      }
+
+      function checkAppearance(label, element) {
+        check(label + " motion", element.getAnimations().length, reducedMotion ? 0 : 1);
+        checkTruthy(label + " visible during motion", Number(W.getComputedStyle(element).opacity) >= 0.88);
+      }
+
+      async function showReport(stage, status) {
+        open.click();
+        for (var i = 0; i < 40 && report.hidden; i += 1) await wait(20);
+        check("manual report visible", report.hidden, false);
+        checkAppearance("report opening", panel);
+        check("report is read-only", report.readOnly, true);
+        check("disclosure is expanded", open.getAttribute("aria-expanded"), "true");
+        check("collapse label", open.textContent, "Hide diagnostic report");
+        check("manual selection instruction", note.textContent, "Select the text if you need to share it.");
+        report.select();
+        check("complete report can be selected", report.selectionEnd - report.selectionStart, report.value.length);
+        checkTruthy("report stage", report.value.includes(stage));
+        checkTruthy("report status", report.value.includes(status));
+        checkTruthy("no submitted private values in report",
+          ["ProbeNet", "placeholder123", "192.168.1.50", "PLACEHOLDERKEY123"].every(function (value) {
+            return !report.value.includes(value);
+          }));
+      }
+
+      checkTruthy("reached first printer step", await reachPrinterStep());
+      var printerLead = lead.textContent;
+      checkTruthy("printer lead differs from Wi-Fi lead", printerLead !== wifiLead);
+      type("printerHost", "192.168.1.50");
+      type("printerPort", "8080");
+      type("printerApiKey", "PLACEHOLDERKEY123");
+      await failPrinter("The printer response was incomplete Check the printer firmware. Check this Wi-Fi again, then verify the PrusaLink address.");
+      checkAppearance("first failure message", feedback);
+      checkAppearance("first report offer", open);
+      await showReport("Stage: PrusaLink status check", "HTTP status: 200");
+      open.click();
+      check("manual collapse immediately hides report", panel.hidden, true);
+      check("manual collapse clears selected report", report.value, "");
+      check("manual collapse restores disclosure state", open.getAttribute("aria-expanded"), "false");
+      await showReport("Stage: PrusaLink status check", "HTTP status: 200");
+
+      submit("wifiForm");
+      check("retry retires the failure action synchronously", action.textContent, "");
+      check("retry announces the new check synchronously", byId("setupFeedbackReason").textContent, "Checking this Wi-Fi…");
+      check("retry leaves the Wi-Fi form unanimated", byId("wifiForm").getAnimations().length, 0);
+      check("retry hides the card synchronously", css("diagnostic", "display"), "none");
+      check("retry clears the old report synchronously", report.value, "");
+      check("retry cancels card and report motion", card.getAnimations({ subtree: true }).length, 0);
+      for (var i = 0; i < 40 && byId("printerForm").hidden; i += 1) await wait(150);
+      check("printer step restored through Wi-Fi check", byId("printerForm").hidden, false);
+      check("Wi-Fi form hidden on printer step", byId("wifiForm").hidden, true);
+      check("printer lead restored through Wi-Fi check", lead.textContent, printerLead);
+      check("report remains absent on printer step", card.hidden, true);
+      check("report remains empty on printer step", report.value, "");
+      check("address preserved on printer step", byId("printerHost").value, "192.168.1.50");
+      check("port preserved on printer step", byId("printerPort").value, "8080");
+      check("key preserved on printer step", byId("printerApiKey").value, "PLACEHOLDERKEY123");
+      check("key remains concealed on printer step", byId("printerApiKey").type, "password");
+
+      await failPrinter("PrusaLink denied access Check this Wi-Fi again, then verify the API key in PrusaLink on your printer.");
+      checkAppearance("replacement failure message", feedback);
+      checkAppearance("replacement report offer", open);
+      await showReport("Stage: PrusaLink version check", "HTTP status: 403");
+      checkTruthy("replacement reports denied access", report.value.includes("PrusaLink denied access."));
+      checkTruthy("replacement reports interrupted body", report.value.includes("Response body: The connection failed while reading it."));
+      checkTruthy("superseded report is absent", !report.value.includes("HTTP status: 200"));
+      for (const animation of panel.getAnimations()) await animation.finished;
+      check("report opacity after motion", css("diagnosticPanel", "opacity"), "1");
+    },
     "wifi-initial": async function () {
       check("ssid value", byId("wifiSsid").value, "");
       check("password value", byId("wifiPassword").value, "");
       check("password concealed", byId("wifiPassword").type, "password");
       check("printer step hidden", byId("printerForm").hidden, true);
-      check("wifi summary hidden", byId("wifiSummary").hidden, true);
+      check("wifi summary hidden", wifiStatus().hidden, true);
       check("done hidden", byId("done").hidden, true);
       check("submit label", byId("wifiSubmit").textContent, "Check this Wi-Fi");
       // The reveal is inside the field, not beside it.
@@ -157,9 +301,9 @@
       check("ssid message colour", css("wifiSsidError", "color"), ERROR);
       // An empty password is a legitimate open network and must NOT be marked.
       check("password not marked", marked("wifiPassword"), false);
-      check("summary visible", byId("wifiSummary").hidden, false);
-      check("summary text", byId("wifiSummary").textContent, "One field needs attention.");
-      check("summary is error", css("wifiSummary", "borderLeftColor"), ERROR);
+      check("summary visible", wifiStatus().hidden, false);
+      check("summary text", wifiStatusText(), "One field needs attention.");
+      check("summary is error", css(wifiStatus().id, "borderLeftColor"), ERROR);
       check("still on step 1", byId("printerForm").hidden, true);
     },
 
@@ -173,7 +317,7 @@
         "A Wi-Fi password needs at least 8 characters.");
       check("ssid not marked", marked("wifiSsid"), false);
       check("DOM value preserved", byId("wifiPassword").value, "short");
-      check("summary is error", css("wifiSummary", "borderLeftColor"), ERROR);
+      check("summary is error", css(wifiStatus().id, "borderLeftColor"), ERROR);
     },
 
     "wifi-validating": async function () {
@@ -189,10 +333,10 @@
     "wifi-failure": async function () {
       fillWifi("ProbeNet", "placeholder123");
       submit("wifiForm");
-      for (var i = 0; i < 40 && byId("wifiSummary").hidden; i += 1) await wait(150);
-      check("summary visible", byId("wifiSummary").hidden, false);
-      check("summary is error", css("wifiSummary", "borderLeftColor"), ERROR);
-      check("summary text", byId("wifiSummary").textContent,
+      for (var i = 0; i < 40 && wifiStatus().hidden; i += 1) await wait(150);
+      check("summary visible", wifiStatus().hidden, false);
+      check("summary is error", css(wifiStatus().id, "borderLeftColor"), ERROR);
+      check("summary text", wifiStatusText(),
         "The display could not join that network. Check the name and the password.");
       check("button re-enabled", byId("wifiSubmit").disabled, false);
       check("button label restored", byId("wifiSubmit").textContent, "Check this Wi-Fi");
@@ -204,8 +348,8 @@
     "wifi-retry": async function () {
       fillWifi("ProbeNet", "wrongpassword");
       submit("wifiForm");
-      for (var i = 0; i < 40 && byId("wifiSummary").hidden; i += 1) await wait(150);
-      check("failed once", byId("wifiSummary").hidden, false);
+      for (var i = 0; i < 40 && wifiStatus().hidden; i += 1) await wait(150);
+      check("failed once", wifiStatus().hidden, false);
       // Edit and resubmit — a recoverable failure, D-6.
       type("wifiPassword", "placeholder123");
       submit("wifiForm");
@@ -274,10 +418,10 @@
       submit("wifiForm");
       checkTruthy("became interactive again", await waitInteractive("wifiSubmit", 4000));
 
-      check("summary visible", byId("wifiSummary").hidden, false);
-      check("summary text", byId("wifiSummary").textContent,
+      check("summary visible", wifiStatus().hidden, false);
+      check("summary text", wifiStatusText(),
         "The display could not start that check. Nothing was saved; try again.");
-      check("summary is error", css("wifiSummary", "borderLeftColor"), ERROR);
+      check("summary is error", css(wifiStatus().id, "borderLeftColor"), ERROR);
 
       check("button re-enabled", byId("wifiSubmit").disabled, false);
       check("button label restored", byId("wifiSubmit").textContent, "Check this Wi-Fi");
@@ -293,17 +437,17 @@
 
       // ⛔ AND IT MUST NOT SAY THE DISPLAY WENT QUIET. It answered — with a 503.
       checkTruthy("does not claim silence",
-        byId("wifiSummary").textContent.indexOf("did not answer") === -1);
+        wifiStatusText().indexOf("did not answer") === -1);
       // Nor may it leak why: allocation and queue state are not actionable and not the user's.
       ["unavailable", "alloc", "queue", "heap"].forEach(function (word) {
         checkTruthy("no internal reason leaked: " + word,
-          byId("wifiSummary").textContent.toLowerCase().indexOf(word) === -1);
+          wifiStatusText().toLowerCase().indexOf(word) === -1);
       });
 
       // Retry must remain possible: the form still submits, which is the whole of the recovery.
       submit("wifiForm");
       await wait(400);
-      check("retry was accepted by the page", byId("wifiSummary").hidden, false);
+      check("retry was accepted by the page", wifiStatus().hidden, false);
     },
 
     "printer-unavailable-503": async function () {
@@ -459,9 +603,9 @@
       // THE INVARIANT: an accepted submission must reach a named terminal state and hand the
       // page back. Never an indefinite Checking….
       check("became interactive again", await waitInteractive("wifiSubmit", 12000), true);
-      check("summary shown", byId("wifiSummary").hidden, false);
-      check("summary is an error", css("wifiSummary", "borderLeftColor"), ERROR);
-      check("named reason, not a generic one", byId("wifiSummary").textContent,
+      check("summary shown", wifiStatus().hidden, false);
+      check("summary is an error", css(wifiStatus().id, "borderLeftColor"), ERROR);
+      check("named reason, not a generic one", wifiStatusText(),
         "The display could not join that network. Check the name and the password.");
       check("button label restored", byId("wifiSubmit").textContent, "Check this Wi-Fi");
       check("still on step 1", byId("printerForm").hidden, true);
@@ -475,25 +619,25 @@
       submit("wifiForm");
 
       check("became interactive again", await waitInteractive("wifiSubmit", 12000), true);
-      check("summary shown", byId("wifiSummary").hidden, false);
-      check("summary is an error", css("wifiSummary", "borderLeftColor"), ERROR);
+      check("summary shown", wifiStatus().hidden, false);
+      check("summary is an error", css(wifiStatus().id, "borderLeftColor"), ERROR);
 
       // ⛔ THE EXACT WORDS THE OWNER RULED, AND THE ONLY ACTION THAT WORKS. Not "check the name
       // and the password": neither was tested, because the driver never answered. Not "try
       // again": the station is quarantined and a retry could not be judged either.
-      check("names the condition and the action", byId("wifiSummary").textContent,
+      check("names the condition and the action", wifiStatusText(),
         "Wi-Fi unavailable. Restart the display.");
 
-      check("does not blame the credential", byId("wifiSummary").textContent.indexOf("password"),
+      check("does not blame the credential", wifiStatusText().indexOf("password"),
         -1);
       check("does not invite a retry that cannot be judged",
-        byId("wifiSummary").textContent.indexOf("try again"), -1);
+        wifiStatusText().indexOf("try again"), -1);
 
       // No internal reason is disclosed: not the driver call, not the ring, not the deadline.
       var leaked = ["driver", "stalled", "evidence", "ring", "deadline", "esp", "timeout"];
       for (var i = 0; i < leaked.length; i += 1) {
         checkTruthy("no internal reason leaked: " + leaked[i],
-          byId("wifiSummary").textContent.toLowerCase().indexOf(leaked[i]) === -1);
+          wifiStatusText().toLowerCase().indexOf(leaked[i]) === -1);
       }
 
       check("button label restored", byId("wifiSubmit").textContent, "Check this Wi-Fi");
@@ -508,7 +652,7 @@
       submit("wifiForm");
 
       check("became interactive again", await waitInteractive("wifiSubmit", 12000), true);
-      var stalled = byId("wifiSummary").textContent;
+      var stalled = wifiStatusText();
 
       check("the stall text is the actionable one", stalled,
         "Wi-Fi unavailable. Restart the display.");
@@ -533,8 +677,8 @@
       submit("wifiForm");
 
       check("became interactive again", await waitInteractive("wifiSubmit", 12000), true);
-      check("summary is an error", css("wifiSummary", "borderLeftColor"), ERROR);
-      check("same actionable outcome", byId("wifiSummary").textContent,
+      check("summary is an error", css(wifiStatus().id, "borderLeftColor"), ERROR);
+      check("same actionable outcome", wifiStatusText(),
         "Wi-Fi unavailable. Restart the display.");
       check("still on step 1", byId("printerForm").hidden, true);
     },
@@ -546,13 +690,13 @@
       submit("wifiForm");
 
       check("became interactive again", await waitInteractive("wifiSubmit", 12000), true);
-      check("summary shown", byId("wifiSummary").hidden, false);
-      check("summary is an error", css("wifiSummary", "borderLeftColor"), ERROR);
+      check("summary shown", wifiStatus().hidden, false);
+      check("summary is an error", css(wifiStatus().id, "borderLeftColor"), ERROR);
 
       // ⛔ THE CONDITION AND THE ONE ACTION LEFT. The attempt was abandoned, the display tried to
       // rejoin the network it had been using, and that network did not come back. The only thing the
       // user can do is enter Wi-Fi details, and the sentence says exactly that.
-      check("names the condition and the action", byId("wifiSummary").textContent,
+      check("names the condition and the action", wifiStatusText(),
         "The display could not rejoin your previous network. Your saved configuration was not " +
           "replaced; enter your Wi-Fi details again.");
 
@@ -562,19 +706,19 @@
       // that no activation pointer moved, so the configuration the display was running was not
       // replaced.
       checkTruthy("states the narrow guarantee",
-        byId("wifiSummary").textContent.indexOf("Your saved configuration was not replaced") !== -1);
+        wifiStatusText().indexOf("Your saved configuration was not replaced") !== -1);
 
       // And it must not make the broader claims that are not true here.
       check("does not claim nothing was saved",
-        byId("wifiSummary").textContent.indexOf("Nothing was saved"), -1);
+        wifiStatusText().indexOf("Nothing was saved"), -1);
       check("does not claim nothing was changed",
-        byId("wifiSummary").textContent.indexOf("Nothing was changed"), -1);
+        wifiStatusText().indexOf("Nothing was changed"), -1);
 
       // No internal reason is disclosed: not the generations, not the store, not the withdrawal.
       var leaked = ["generation", "storage", "withdraw", "pair", "flash", "esp"];
       for (var i = 0; i < leaked.length; i += 1) {
         checkTruthy("no internal reason leaked: " + leaked[i],
-          byId("wifiSummary").textContent.toLowerCase().indexOf(leaked[i]) === -1);
+          wifiStatusText().toLowerCase().indexOf(leaked[i]) === -1);
       }
 
       check("button label restored", byId("wifiSubmit").textContent, "Check this Wi-Fi");
@@ -590,7 +734,7 @@
       submit("wifiForm");
 
       check("became interactive again", await waitInteractive("wifiSubmit", 12000), true);
-      var restore = byId("wifiSummary").textContent;
+      var restore = wifiStatusText();
 
       // Not the credential failure: the previous network's password was the display's own, stored
       // and previously proven, so sending the user to check a password would be false.
@@ -619,8 +763,8 @@
       submit("wifiForm");
 
       check("became interactive again", await waitInteractive("wifiSubmit", 12000), true);
-      check("summary shown", byId("wifiSummary").hidden, false);
-      check("summary is an error", css("wifiSummary", "borderLeftColor"), ERROR);
+      check("summary shown", wifiStatus().hidden, false);
+      check("summary is an error", css(wifiStatus().id, "borderLeftColor"), ERROR);
 
       // ⛔ THE NARROW GUARANTEE AND A RESTART, BECAUSE THREE ROUTES SHARE THIS REASON AND THEY LEAVE
       // THE DEVICE IN DIFFERENT STATES. Only the PREFLIGHT route leaves the radio untouched and
@@ -629,28 +773,28 @@
       // had already joined the candidate and is taking it down. So the page may claim only what holds
       // on all three — that no activation pointer moved — and a restart is the one action that can
       // change the outcome, because retyping would be refused again for the same reason.
-      check("names the condition and the action", byId("wifiSummary").textContent,
+      check("names the condition and the action", wifiStatusText(),
         "The display could not verify its saved network. Your saved configuration was not " +
           "replaced; restart the display and try again.");
 
       checkTruthy("states the narrow guarantee",
-        byId("wifiSummary").textContent.indexOf("Your saved configuration was not replaced") !== -1);
+        wifiStatusText().indexOf("Your saved configuration was not replaced") !== -1);
 
       // ⛔ AND IT MUST NOT GENERALISE THE PREFLIGHT-ONLY ACCOUNT TO THE OTHER TWO ROUTES.
       check("does not claim nothing was changed",
-        byId("wifiSummary").textContent.indexOf("Nothing was changed"), -1);
+        wifiStatusText().indexOf("Nothing was changed"), -1);
       check("does not claim nothing was saved",
-        byId("wifiSummary").textContent.indexOf("Nothing was saved"), -1);
+        wifiStatusText().indexOf("Nothing was saved"), -1);
       check("does not claim the radio was untouched",
-        byId("wifiSummary").textContent.toLowerCase().indexOf("untouched"), -1);
-      check("does not invite a bare retry", byId("wifiSummary").textContent.indexOf("try again;"),
+        wifiStatusText().toLowerCase().indexOf("untouched"), -1);
+      check("does not invite a bare retry", wifiStatusText().indexOf("try again;"),
         -1);
 
       // No internal reason is disclosed: not the generations, not the pointers, not the store.
       var leaked = ["generation", "pointer", "rollback", "pair", "flash", "nvs", "esp"];
       for (var i = 0; i < leaked.length; i += 1) {
         checkTruthy("no internal reason leaked: " + leaked[i],
-          byId("wifiSummary").textContent.toLowerCase().indexOf(leaked[i]) === -1);
+          wifiStatusText().toLowerCase().indexOf(leaked[i]) === -1);
       }
 
       check("button label restored", byId("wifiSubmit").textContent, "Check this Wi-Fi");
@@ -666,7 +810,7 @@
       submit("wifiForm");
 
       check("became interactive again", await waitInteractive("wifiSubmit", 12000), true);
-      var rollback = byId("wifiSummary").textContent;
+      var rollback = wifiStatusText();
 
       checkTruthy("rollback text differs from the restore-failure text",
         rollback !== "The display could not rejoin your previous network. Your saved " +
@@ -696,7 +840,7 @@
       fillWifi("ProbeNet", "wrongpassword");
       submit("wifiForm");
       check("first attempt terminated", await waitInteractive("wifiSubmit", 12000), true);
-      check("first attempt failed", byId("wifiSummary").hidden, false);
+      check("first attempt failed", wifiStatus().hidden, false);
 
       type("wifiPassword", "correcthorse");
       submit("wifiForm");
@@ -714,15 +858,15 @@
       fillWifi("ProbeNet", "wrongpassA");
       submit("wifiForm");
       check("A terminated", await waitInteractive("wifiSubmit", 12000), true);
-      var firstText = byId("wifiSummary").textContent;
+      var firstText = wifiStatusText();
 
       // A SECOND wrong password must get its own full attempt and its own named failure — not be
       // refused because the previous one gave up. That was a real hardware defect once.
       type("wifiPassword", "wrongpassB");
       submit("wifiForm");
       check("B terminated too", await waitInteractive("wifiSubmit", 12000), true);
-      check("B reported its own failure", byId("wifiSummary").textContent, firstText);
-      check("B is an error", css("wifiSummary", "borderLeftColor"), ERROR);
+      check("B reported its own failure", wifiStatusText(), firstText);
+      check("B is an error", css(wifiStatus().id, "borderLeftColor"), ERROR);
       check("still recoverable", byId("wifiSubmit").disabled, false);
     },
 
@@ -730,9 +874,9 @@
       fillWifi("NoSuchNetworkAnywhere", "placeholder123");
       submit("wifiForm");
       check("bounded, not indefinite", await waitInteractive("wifiSubmit", 12000), true);
-      check("timeout has its own wording", byId("wifiSummary").textContent,
+      check("timeout has its own wording", wifiStatusText(),
         "That network did not finish connecting. Check the password, or move the display closer to the router.");
-      check("is an error", css("wifiSummary", "borderLeftColor"), ERROR);
+      check("is an error", css(wifiStatus().id, "borderLeftColor"), ERROR);
     },
 
     // ⛔ THE 2026-08-18 HANG, REPRODUCED. The device panicked mid-attempt, rebooted, and came
@@ -750,19 +894,19 @@
       submit("wifiForm");
 
       check("became interactive again", await waitInteractive("wifiSubmit", 12000), true);
-      check("summary is an error", css("wifiSummary", "borderLeftColor"), ERROR);
+      check("summary is an error", css(wifiStatus().id, "borderLeftColor"), ERROR);
 
       // The candidate WAS written and verified; only the pointer failed to move. So the page may
       // claim the narrow guarantee and nothing wider, and the retry action is unchanged.
-      check("names the condition and the action", byId("wifiSummary").textContent,
+      check("names the condition and the action", wifiStatusText(),
         "The display could not save that configuration. Your saved configuration was not " +
           "replaced; try again.");
       checkTruthy("states the narrow guarantee",
-        byId("wifiSummary").textContent.indexOf("Your saved configuration was not replaced") !== -1);
+        wifiStatusText().indexOf("Your saved configuration was not replaced") !== -1);
       check("does not claim nothing was changed",
-        byId("wifiSummary").textContent.indexOf("Nothing was changed"), -1);
+        wifiStatusText().indexOf("Nothing was changed"), -1);
       check("does not claim nothing was saved",
-        byId("wifiSummary").textContent.indexOf("Nothing was saved"), -1);
+        wifiStatusText().indexOf("Nothing was saved"), -1);
 
       check("still on step 1", byId("printerForm").hidden, true);
     },
@@ -772,22 +916,22 @@
       submit("wifiForm");
 
       check("became interactive again", await waitInteractive("wifiSubmit", 12000), true);
-      check("summary is an error", css("wifiSummary", "borderLeftColor"), ERROR);
+      check("summary is an error", css(wifiStatus().id, "borderLeftColor"), ERROR);
 
       // ⛔ THE ONE FAILURE THAT MAY HAVE MOVED A POINTER. It must make NO persistence claim at all —
       // not even the narrow one — and must send the user to a restart so the display can finish
       // what it started.
-      check("names the condition and the action", byId("wifiSummary").textContent,
+      check("names the condition and the action", wifiStatusText(),
         "The display could not finish saving the configuration. Restart the display before " +
           "trying setup again.");
       check("does not claim nothing was saved",
-        byId("wifiSummary").textContent.indexOf("Nothing was saved"), -1);
+        wifiStatusText().indexOf("Nothing was saved"), -1);
       check("does not claim nothing was changed",
-        byId("wifiSummary").textContent.indexOf("Nothing was changed"), -1);
+        wifiStatusText().indexOf("Nothing was changed"), -1);
       check("does not claim the saved configuration survived",
-        byId("wifiSummary").textContent.indexOf("was not replaced"), -1);
+        wifiStatusText().indexOf("was not replaced"), -1);
       checkTruthy("asks for a restart",
-        byId("wifiSummary").textContent.indexOf("Restart the display") !== -1);
+        wifiStatusText().indexOf("Restart the display") !== -1);
 
       check("still on step 1", byId("printerForm").hidden, true);
     },
@@ -797,19 +941,19 @@
       submit("wifiForm");
 
       check("became interactive again", await waitInteractive("wifiSubmit", 12000), true);
-      check("summary is an error", css("wifiSummary", "borderLeftColor"), ERROR);
+      check("summary is an error", css(wifiStatus().id, "borderLeftColor"), ERROR);
 
       // ⛔ A FALLBACK EXISTS TO BE SAFE FOR REASONS NOBODY ANTICIPATED, and a guarantee about flash is
       // the one thing it can never be safe about. Today it also carries the four printer failures,
       // every one of which is published after both candidate records were written and verified.
-      check("says only what it can know", byId("wifiSummary").textContent,
+      check("says only what it can know", wifiStatusText(),
         "The display could not complete that request. Check the details you entered and try again.");
       check("does not claim nothing was saved",
-        byId("wifiSummary").textContent.indexOf("Nothing was saved"), -1);
+        wifiStatusText().indexOf("Nothing was saved"), -1);
       check("does not claim nothing was changed",
-        byId("wifiSummary").textContent.indexOf("Nothing was changed"), -1);
+        wifiStatusText().indexOf("Nothing was changed"), -1);
       check("does not claim the saved configuration survived",
-        byId("wifiSummary").textContent.indexOf("was not replaced"), -1);
+        wifiStatusText().indexOf("was not replaced"), -1);
 
       check("still on step 1", byId("printerForm").hidden, true);
     },
@@ -820,26 +964,26 @@
 
       check("the page recovers instead of hanging", await waitInteractive("wifiSubmit", 12000),
         true);
-      check("summary shown", byId("wifiSummary").hidden, false);
-      check("says what happened", byId("wifiSummary").textContent,
+      check("summary shown", wifiStatus().hidden, false);
+      check("says what happened", wifiStatusText(),
         "Setup was interrupted when the display restarted. Check what the display is showing " +
           "before trying again.");
-      check("is an error", css("wifiSummary", "borderLeftColor"), ERROR);
+      check("is an error", css(wifiStatus().id, "borderLeftColor"), ERROR);
 
       // ⛔ THE PAGE CANNOT KNOW WHERE THE RESTART LANDED. Before any write, between the two candidate
       // writes, or after a pointer moved — all three are the same observation from here, so no
       // persistence claim of any kind may be made.
       check("does not claim nothing was saved",
-        byId("wifiSummary").textContent.indexOf("Nothing was saved"), -1);
+        wifiStatusText().indexOf("Nothing was saved"), -1);
       check("does not claim nothing was changed",
-        byId("wifiSummary").textContent.indexOf("Nothing was changed"), -1);
+        wifiStatusText().indexOf("Nothing was changed"), -1);
       check("does not claim the saved configuration survived",
-        byId("wifiSummary").textContent.indexOf("was not replaced"), -1);
+        wifiStatusText().indexOf("was not replaced"), -1);
 
       // ⬅️ AND THE FOUR ACTIONS STAY DISTINCT. Storage says try again, promotion says restart, this
       // one says look at the display, and the fallback says review the details. Asserted here rather
       // than in isolation, because a collapse would otherwise pass every individual expectation.
-      var restarted = byId("wifiSummary").textContent;
+      var restarted = wifiStatusText();
       checkTruthy("differs from the storage-failure text",
         restarted !== "The display could not save that configuration. Your saved configuration " +
           "was not replaced; try again.");

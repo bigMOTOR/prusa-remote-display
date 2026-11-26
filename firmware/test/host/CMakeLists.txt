@@ -307,8 +307,8 @@ target_include_directories(
         # prusalink, Milestone 4. Everything except the worker task is free of ESP-IDF by
         # design — the scanner, the decoder, the normalizer, the error taxonomy and the
         # request builder — so the layer that meets a real printer's output is exercised
-        # here against the same code the firmware runs. The worker's own file includes
-        # FreeRTOS and cannot be compiled in this build; it is not.
+        # here against the same code the firmware runs. The worker uses the synchronous
+        # FreeRTOS shim below.
         ../../components/prusalink/include
         ../../components/prusalink/src
         ../../components/json_reader/include
@@ -401,13 +401,81 @@ target_include_directories(prd_public_https_adapter_tests PRIVATE support/public
 target_compile_options(prd_public_https_adapter_tests PRIVATE -Wall -Wextra -Wpedantic -Werror=format)
 add_test(NAME public_https_adapter COMMAND prd_public_https_adapter_tests)
 
+# Exercise the LAN HTTP adapter with the same SDK boundary as the public HTTPS tests.
+add_executable(prd_http_adapter_tests network/http_adapter_tests.cpp
+    ../../components/network/src/http.cpp
+    ../../components/network/src/http_body.cpp
+    ../../components/network/src/request_budget.cpp)
+target_include_directories(prd_http_adapter_tests PRIVATE support/public_https
+    ../../components/network/include ../../components/network/src
+    ../../components/diagnostics/include)
+target_compile_options(prd_http_adapter_tests PRIVATE -Wall -Wextra -Wpedantic -Werror=format)
+add_test(NAME http_adapter COMMAND prd_http_adapter_tests)
+set_tests_properties(http_adapter PROPERTIES TIMEOUT 10)
+
 # Compile the real OTA adapter with a narrowly scoped test-only IDF API boundary.
 target_sources(prd_host_tests PRIVATE ota/device_boot_tests.cpp
     ../../components/ota/src/device_boot.cpp)
 set_source_files_properties(../../components/ota/src/device_boot.cpp PROPERTIES
     INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/support/ota")
 
+# Run the real Validate worker with a synchronous scheduler and scripted transport.
+target_sources(prd_host_tests PRIVATE prusalink/worker_validation_tests.cpp
+    ../../components/prusalink/src/worker.cpp)
+set_source_files_properties(../../components/prusalink/src/worker.cpp PROPERTIES
+    INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/support/prusalink")
+
 # Observe the actual acquire loads under a deterministic, bounded schedule. This
 # seam adds no ring fields and is not part of any ESP-IDF target configuration.
 set_source_files_properties(../../components/network/src/station_events.cpp PROPERTIES
     COMPILE_DEFINITIONS PRD_STATION_RING_TEST_INTERLEAVING=1)
+
+# Dispatch through the real provisioning server's registered routes. Host tests
+# can script the cJSON boundary without an ESP-IDF install. Point this option at
+# an existing ESP-IDF components/json/cJSON directory to exercise the same
+# requests with the device's actual parser.
+set(PRD_HOST_CJSON_DIR "" CACHE PATH "Existing ESP-IDF cJSON source directory for admission tests")
+enable_language(ASM)
+set(PRD_ADMISSION_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../components/provisioning/assets")
+set(PRD_ADMISSION_ASSETS_ASM "${CMAKE_CURRENT_BINARY_DIR}/provisioning_assets.S")
+configure_file(support/provisioning/embedded_assets.S.in "${PRD_ADMISSION_ASSETS_ASM}" @ONLY)
+set_source_files_properties("${PRD_ADMISSION_ASSETS_ASM}" PROPERTIES
+    OBJECT_DEPENDS "${PRD_ADMISSION_ASSETS_DIR}/index.html;${PRD_ADMISSION_ASSETS_DIR}/style.css;${PRD_ADMISSION_ASSETS_DIR}/app.js")
+add_executable(prd_provisioning_admission_tests
+    "${PRD_ADMISSION_ASSETS_ASM}"
+    provisioning/server_admission_tests.cpp
+    ../../components/provisioning/src/server.cpp
+    ../../components/provisioning/src/server_view.cpp
+    ../../components/provisioning/src/request_guard.cpp
+    ../../components/provisioning/src/request_validation.cpp
+    ../../components/provisioning/src/credential_scrub.cpp
+    ../../components/provisioning/src/escaping.cpp
+    ../../components/provisioning/src/session_token.cpp
+    ../../components/provisioning/src/surface.cpp
+    ../../components/app_model/src/build_info.cpp
+    ../../components/json_reader/src/reader.cpp)
+target_include_directories(prd_provisioning_admission_tests PRIVATE
+    support/provisioning
+    support/public_https
+    ../../components/provisioning/include
+    ../../components/provisioning/src
+    ../../components/app_model/include
+    ../../components/diagnostics/include
+    ../../components/json_reader/include)
+if(PRD_HOST_CJSON_DIR)
+    enable_language(C)
+    target_sources(prd_provisioning_admission_tests PRIVATE "${PRD_HOST_CJSON_DIR}/cJSON.c")
+    target_include_directories(prd_provisioning_admission_tests SYSTEM PRIVATE "${PRD_HOST_CJSON_DIR}")
+    message(STATUS "prd: provisioning admission uses cJSON from ${PRD_HOST_CJSON_DIR}")
+else()
+    target_sources(prd_provisioning_admission_tests PRIVATE support/provisioning/scripted_json/cjson_stub.cpp)
+    target_include_directories(prd_provisioning_admission_tests PRIVATE support/provisioning/scripted_json)
+    target_compile_definitions(prd_provisioning_admission_tests PRIVATE PRD_SCRIPTED_CJSON=1)
+    message(STATUS "prd: provisioning admission scripts the cJSON boundary")
+endif()
+target_compile_definitions(prd_provisioning_admission_tests PRIVATE
+    PRD_PROVISIONING_ASSETS_DIR="${PRD_ADMISSION_ASSETS_DIR}")
+target_link_libraries(prd_provisioning_admission_tests PRIVATE GTest::gtest_main)
+target_compile_options(prd_provisioning_admission_tests PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic;-Wshadow;-Wconversion;-Wsign-conversion;-Wformat=2;-Werror=return-type;-Werror=format>)
+gtest_discover_tests(prd_provisioning_admission_tests)

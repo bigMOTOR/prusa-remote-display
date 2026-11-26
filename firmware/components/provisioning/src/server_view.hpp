@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include "app_model/bounded_string.hpp"
+#include "app_model/build_info.hpp"
 
 #include "provisioning/server.hpp"
 #include "request_validation.hpp"
@@ -61,8 +62,20 @@ struct ServerSnapshot {
     // Owner ruling D-3's reason text. The longest label provisioning_flow can produce is
     // "printer-unusable-response" at 25 bytes; 32 is headroom, not a target.
     app_model::BoundedString<32> setup_reason;
+    app_model::PrinterValidationFailure validation_failure{};
+    std::uint32_t setup_revision{0};
     app_model::BoundedString<32> update_version;
     bool update_installing{false};
+    DisplaySettings display_settings;
+
+    void set_setup_state(SetupState state, std::string_view reason,
+                         app_model::PrinterValidationFailure failure) {
+        ++setup_revision;
+        setup_state = state;
+        (void)setup_reason.assign(reason);
+        validation_failure =
+            state == SetupState::Failed ? failure : app_model::PrinterValidationFailure{};
+    }
 };
 
 // Whether a printer-stage submission may be accepted.
@@ -110,6 +123,12 @@ struct CsrfToken {
 // build is fixed for the life of the image, and the token belongs to the HTTP task alone.
 [[nodiscard]] std::string status_body(const ServerSnapshot& snapshot, Surface arrival,
                                       std::string_view version, CsrfToken token);
+
+// A report is bound to the failed setup revision advertised to this page. The caller
+// must first pass the same setup-session gate used for ordinary form submissions.
+[[nodiscard]] std::string diagnostic_report(const ServerSnapshot& snapshot,
+                                            std::string_view requested_revision,
+                                            const app_model::SemanticVersion& version);
 
 // --- What POST /api/setup is allowed to answer -----------------------------
 //

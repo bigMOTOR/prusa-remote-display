@@ -33,13 +33,21 @@ def check():
         payload = response.read(1024 * 1024 + 1)
     if len(payload) > 1024 * 1024:
         raise ValueError("release metadata exceeds measurement bound")
-    assets = [asset for asset in json.loads(payload)["assets"]
+    release = json.loads(payload)
+    tag = release["tag_name"]
+    if re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", tag) is None:
+        raise ValueError("unexpected stable release tag")
+    assets = [asset for asset in release["assets"]
               if asset["name"] == "prusa_remote_display.bin"]
     if len(assets) != 1:
         raise ValueError("exactly one published OTA image required")
-    url = assets[0]["browser_download_url"]
+    asset = assets[0]
+    asset_id = asset["id"]
+    if type(asset_id) is not int or asset_id <= 0:
+        raise ValueError("invalid published image ID")
+    url = asset["browser_download_url"]
     prefix = "https://github.com/bigMOTOR/prusa-remote-display/releases/download/"
-    if not url.startswith(prefix) or not url.endswith("/prusa_remote_display.bin"):
+    if url != f"{prefix}{tag}/prusa_remote_display.bin":
         raise ValueError("unexpected published image route")
     request = urllib.request.Request(url, headers={**headers, "Accept": "application/octet-stream"})
     try:
@@ -64,6 +72,7 @@ def check():
                                for key, value in response.headers.items()) + 2
         finally:
             response.close()
+    print(f"real GitHub OTA release tag={tag}; asset ID={asset_id}")
     print(f"real GitHub download URL bytes={size}; shared firmware limit={maximum}; "
           f"redirect response header bytes={header_bytes}")
     if size * 2 > maximum:

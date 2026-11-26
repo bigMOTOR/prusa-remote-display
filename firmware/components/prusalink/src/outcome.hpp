@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "app_model/device_data.hpp"
+#include "app_model/printer_validation.hpp"
 #include "network/http.hpp"
 
 #include "decode.hpp"
@@ -22,10 +23,8 @@
 // the inputs rather than of scattered checks at call sites — and it is why this can
 // be proved exhaustively on the host.
 //
-// ⛔ NOTHING HERE CAN CARRY A SECRET. The inputs are two enums and a number. The
-// error label it returns is chosen from a fixed set of literals below, so no value
-// from the printer, the configuration or the credential store can reach a log through
-// this path.
+// The inputs are two enums and a number. The reason and its error label come from a fixed set
+// that cannot contain text from the printer, the configuration or the credential store.
 
 namespace prd::prusalink {
 
@@ -33,8 +32,10 @@ namespace prd::prusalink {
 struct AttemptOutcome {
     app_model::ConnectionPhase phase{app_model::ConnectionPhase::PrinterUnavailable};
 
+    app_model::PrinterValidationReason reason{app_model::PrinterValidationReason::None};
+
     // A short fixed label for §7.5's lastError. Empty when the attempt succeeded.
-    std::string_view error;
+    [[nodiscard]] std::string_view error() const;
 
     // Whether the response was usable end to end: transport, status and decode.
     bool usable{false};

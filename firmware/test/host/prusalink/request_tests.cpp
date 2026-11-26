@@ -117,7 +117,7 @@ TEST(TargetVerdictTests, ARefusedTargetIsClassifiedAsUnusableRatherThanUnreachab
     const AttemptOutcome off_lan = classify_target(TargetVerdict::NotOnLan);
     EXPECT_FALSE(off_lan.usable);
     EXPECT_EQ(off_lan.phase, app_model::ConnectionPhase::Unconfigured);
-    EXPECT_EQ(off_lan.error, "printer-not-on-lan");
+    EXPECT_EQ(off_lan.error(), "printer-not-on-lan");
 
     const AttemptOutcome unusable = classify_target(TargetVerdict::HostUnusable);
     EXPECT_EQ(unusable.phase, app_model::ConnectionPhase::Unconfigured);

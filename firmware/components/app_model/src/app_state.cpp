@@ -22,9 +22,9 @@ bool content_equals(const AppState& lhs, const AppState& rhs) {
     }
 
     // Device-owned flows.
-    if (lhs.provisioning != rhs.provisioning || lhs.modal_surface != rhs.modal_surface ||
-        lhs.device_fault != rhs.device_fault || lhs.recovery_mode != rhs.recovery_mode ||
-        lhs.factory_resetting != rhs.factory_resetting ||
+    if (lhs.provisioning != rhs.provisioning || lhs.setup_failure != rhs.setup_failure ||
+        lhs.modal_surface != rhs.modal_surface || lhs.device_fault != rhs.device_fault ||
+        lhs.recovery_mode != rhs.recovery_mode || lhs.factory_resetting != rhs.factory_resetting ||
         lhs.factory_reset_failed != rhs.factory_reset_failed ||
         lhs.device_operation != rhs.device_operation) {
         return false;

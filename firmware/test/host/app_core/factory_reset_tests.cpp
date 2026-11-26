@@ -318,15 +318,18 @@ TEST(FactoryResetTests, NothingOutsideTheSevenNamedKeysIsRemoved) {
 
 TEST(FactoryResetTests, TheEraseCountIsBoundedByTheNamedKeys) {
     // A reset that enumerated or wildcarded would show up here as an erase count that does not
-    // match the named inventory. Eight: seven records and markers, plus the journal.
+    // match the named inventory. Nine includes the display preferences and the journal.
     test::FakeKeyValue store;
     provision(store);
     arm_recovery_record(store);
+    ASSERT_TRUE(config::save_display_preferences(
+        store, {app_model::DisplayMode::PrinterStatus, app_model::Backlight::Low}));
 
     const std::size_t before = store.erase_key_calls();
     EXPECT_EQ(factory_reset::run(store), factory_reset::Outcome::Complete);
 
-    EXPECT_EQ(store.erase_key_calls() - before, 8U);
+    EXPECT_EQ(store.erase_key_calls() - before, 9U);
+    EXPECT_EQ(config::load_display_preferences(store).mode, app_model::DisplayMode::Timer);
 }
 
 // --- The recovery record in the inventory, and its failure matrix ---------

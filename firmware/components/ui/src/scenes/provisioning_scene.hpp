@@ -15,13 +15,9 @@
 #include "theme/theme.hpp"
 #include "ui/ui.hpp"
 
-// The provisional provisioning composition — Milestone 3.6.
-//
-// ⚠️ PROVISIONAL, AND NOT A COMPOSITION CANDIDATE. Owner ruling R3: this scene is
-// deliberately minimal and exists only to make Milestone 3.5's setup access point usable
-// on hardware. It does NOT participate in the Operational Family freeze, it is NOT an
-// accepted composition, and it must not cause corrective UI design work. It is built from
-// existing Production UI §4 roles and §3 tokens and introduces no new one of either.
+// R3 fixes the ordinary setup layout. The owner accepted a separate setup-failure composition
+// on 2026-11-26 from prusa-diagnostics-preview.html (SHA-256 0b8816be5…).
+// The change applies after a failed attempt in the current setup session.
 //
 // WHAT IT DRAWS. A text column on the left, a Wi-Fi QR code on the right, and the session
 // password full width beneath both:
@@ -31,6 +27,8 @@
 //                      leaves the phase if the access point fails to start.
 //     SetupActive      the title, the network name, the address once M3.7's server is
 //                      listening, the password, and the code that joins the same network.
+//     SetupFailed      reason and next action above the QR and manual setup fields. The QR
+//                      and fields keep the recovery layout while the same session is retried.
 //     RecoveryMode     the recovery title and ONE instruction, in Production UI §8's Status
 //                      Message. No network, no password, no address, no code — Milestone 3.10
 //                      raises no access point automatically, so there is nothing to show and
@@ -57,9 +55,8 @@
 //
 // PRESENCE, NOT PLACEHOLDERS. A row is shown if and only if its value exists. UI Design
 // Decision 003: "Information that does not yet exist shall remain absent rather than
-// represented by placeholders." Row positions are fixed, so a hidden row leaves its space
-// rather than moving the rows below it — Production UI §2: "Hidden components shall not
-// cause unrelated layout movement."
+// represented by placeholders." Ordinary setup keeps R3's fixed positions. Setup failure
+// arranges the manual fields together and keeps them below the changing reason and action.
 
 namespace prd::ui::scene {
 
@@ -69,8 +66,7 @@ class ProvisioningScene {
     // failed. Render task only.
     [[nodiscard]] bool build(lv_obj_t* parent);
 
-    // Applies a presentation. Only the provisioning phase is read; nothing else in the
-    // presentation is relevant to this scene.
+    // Applies the provisioning phase or a higher-priority device statement.
     void apply(const app_model::Presentation& presentation);
 
     // Applies a session. Idempotent, and independent of which scene is visible: the
@@ -85,9 +81,8 @@ class ProvisioningScene {
     // One render tick. Returns whether the composition is still moving, so the render loop keeps
     // its ramp cadence while a statement is appearing and settles to the idle wait afterwards.
     //
-    // ⬅️ BOTH HALVES ANIMATE, AND NEITHER MOVES. Owner ruling R3 freezes the QR and session
-    // GEOMETRY; nothing here repositions or resizes anything. What the clock carries is each
-    // object's own opacity, so the settled composition is the pixels the ruling froze.
+    // Ordinary setup animates opacity at the frozen R3 geometry. The first failure also moves
+    // the complete QR block to the recovery band; retries keep it there.
     [[nodiscard]] bool step(bool panel_visible, std::uint32_t now);
 
     [[nodiscard]] bool built() const {
@@ -162,8 +157,7 @@ class ProvisioningScene {
     // ⛔ IT NO LONGER BORROWS THE SESSION TITLE. Until 2026-09-12 a statement promoted `title_` to
     // StateTitle and widened it, then restored both on the way out — which is why the session
     // composition's geometry had to be re-stated on every other path. The statement now has its
-    // own object, so `title_` is Body at the column measure for its whole life and owner ruling
-    // R3's frozen geometry cannot be disturbed by a fault that happens to arrive.
+    // own object, so statements leave the setup-session layout alone.
     void draw_statement(text::TextId title, text::TextId message, text::MessageTone tone,
                         std::string_view subject);
 
@@ -182,6 +176,10 @@ class ProvisioningScene {
     void start_session_reveal();
 
     void set_row(RowIndex index, std::string_view value);
+    void layout_session(bool recovery);
+    void layout_recovery_content();
+    void layout_recovery_rows(std::int32_t minimum_y, std::int32_t row_gap);
+    void step_recovery_geometry(bool panel_visible, std::uint32_t now);
 
     // Rebuilds the code from the retained session, or hides it. Called on every path that
     // changes the session, so the drawn code and the drawn password can never disagree.
@@ -189,6 +187,7 @@ class ProvisioningScene {
 
     lv_obj_t* root_{nullptr};
     lv_obj_t* title_{nullptr};
+    lv_obj_t* action_{nullptr};
     std::array<Row, kRowCount> rows_{};
 
     // The light field carrying the four-module quiet zone, and the code inside it.
@@ -216,6 +215,10 @@ class ProvisioningScene {
     HoldClock phase_clock_{};
     app_model::ProvisioningPhase phase_{app_model::ProvisioningPhase::Inactive};
     bool phase_seen_{false};
+    bool recovery_layout_{false};
+    HoldClock recovery_geometry_clock_{};
+    bool recovery_geometry_running_{false};
+    std::int32_t recovery_qr_y_{0};
     bool phase_running_{false};
     std::int32_t phase_from_level_{0};
     std::int32_t phase_level_{0};

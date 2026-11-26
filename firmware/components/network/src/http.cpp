@@ -111,6 +111,42 @@ enum class Continue : std::uint8_t { Yes, Deadline, Abandoned };
     return verdict == Continue::Abandoned ? HttpOutcome::Cancelled : HttpOutcome::Timeout;
 }
 
+[[nodiscard]] HttpOutcome read_body(esp_http_client_handle_t client, const HttpRequest& request,
+                                    const std::int64_t started_us, BodyBuffer& buffer) {
+    std::array<char, kReadChunk> chunk{};
+
+    for (;;) {
+        const Continue verdict = may_continue(request, started_us);
+
+        if (verdict != Continue::Yes) {
+            return outcome_for(verdict);
+        }
+
+        (void)esp_http_client_set_timeout_ms(client, slice_timeout_ms(request, started_us));
+
+        const int read = esp_http_client_read(client, chunk.data(), static_cast<int>(kReadChunk));
+
+        if (read == kReadTimedOut) {
+            // A slice with no data. Re-check the deadline and cancellation before retrying.
+            continue;
+        }
+
+        if (read < 0) {
+            return HttpOutcome::TransportFailed;
+        }
+
+        if (read == 0) {
+            // A peer that stopped mid-body is a transport failure.
+            return esp_http_client_is_complete_data_received(client) ? HttpOutcome::Ok
+                                                                     : HttpOutcome::TransportFailed;
+        }
+
+        if (!buffer.append(std::string_view{chunk.data(), static_cast<std::size_t>(read)})) {
+            return HttpOutcome::ResponseTooLarge;
+        }
+    }
+}
+
 } // namespace
 
 std::string_view log_label(const HttpOutcome outcome) {
@@ -267,50 +303,7 @@ HttpResponse get(const HttpRequest& request, BodyBuffer& buffer) {
     if (!settled) {
         response.status = static_cast<std::uint16_t>(esp_http_client_get_status_code(client));
 
-        std::array<char, kReadChunk> chunk{};
-        HttpOutcome outcome = HttpOutcome::Ok;
-
-        for (;;) {
-            const Continue verdict = may_continue(request, started_us);
-
-            if (verdict != Continue::Yes) {
-                outcome = outcome_for(verdict);
-                break;
-            }
-
-            (void)esp_http_client_set_timeout_ms(client, slice_timeout_ms(request, started_us));
-
-            const int read =
-                esp_http_client_read(client, chunk.data(), static_cast<int>(kReadChunk));
-
-            if (read == kReadTimedOut) {
-                // A slice with no data. The loop re-checks the deadline, which is what terminates
-                // a trickling or silent server.
-                continue;
-            }
-
-            if (read < 0) {
-                outcome = HttpOutcome::TransportFailed;
-                break;
-            }
-
-            if (read == 0) {
-                // Complete when the client agrees the body is finished; otherwise the peer stopped
-                // mid-body, which is a transport failure rather than a short response.
-                if (!esp_http_client_is_complete_data_received(client)) {
-                    outcome = HttpOutcome::TransportFailed;
-                }
-
-                break;
-            }
-
-            if (!buffer.append(std::string_view{chunk.data(), static_cast<std::size_t>(read)})) {
-                outcome = HttpOutcome::ResponseTooLarge;
-                break;
-            }
-        }
-
-        response.outcome = outcome;
+        response.outcome = read_body(client, request, started_us, buffer);
         response.body_length = buffer.length();
     }
 

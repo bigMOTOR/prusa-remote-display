@@ -29,6 +29,7 @@ namespace {
 
 using prd::provisioning::admits_printer_stage;
 using prd::provisioning::CsrfToken;
+using prd::provisioning::diagnostic_report;
 using prd::provisioning::kUnavailableBody;
 using prd::provisioning::ServerSnapshot;
 using prd::provisioning::SetupState;
@@ -75,6 +76,147 @@ constexpr std::string_view kToken = "0123456789abcdef0123456789abcdef";
     snapshot.setup_state = SetupState::Failed;
     (void)snapshot.setup_reason.assign("printer-unusable-response");
     return snapshot;
+}
+
+TEST(ServerViewCoherenceTests, FailureEvidenceFollowsTheCurrentSetupResult) {
+    using prd::app_model::PrinterValidationReason;
+    using prd::app_model::PrinterValidationStage;
+
+    ServerSnapshot snapshot = failed_on_station_b();
+    const auto original = status_body(snapshot, Surface::StationLan, kVersion, CsrfToken{kToken});
+
+    snapshot.set_setup_state(
+        SetupState::Failed, "printer-unusable-response",
+        {PrinterValidationStage::Status, PrinterValidationReason::SchemaMismatch, 200});
+    EXPECT_EQ(snapshot.validation_failure.stage, PrinterValidationStage::Status);
+    EXPECT_EQ(snapshot.validation_failure.reason, PrinterValidationReason::SchemaMismatch);
+    EXPECT_EQ(snapshot.validation_failure.http_status, 200);
+    EXPECT_EQ(status_body(snapshot, Surface::StationLan, kVersion, CsrfToken{kToken}), original);
+
+    snapshot.set_setup_state(SetupState::Validating, {}, {});
+    EXPECT_EQ(snapshot.validation_failure.reason, PrinterValidationReason::None);
+    EXPECT_EQ(snapshot.validation_failure.http_status, 0);
+}
+
+TEST(SetupDiagnosticTests, StatusAdvertisesOnlyTheCurrentFailedSetupAccessPointRevision) {
+    using prd::app_model::PrinterValidationReason;
+    using prd::app_model::PrinterValidationStage;
+    ServerSnapshot snapshot = editing_on_station_a();
+    snapshot.set_setup_state(
+        SetupState::Failed, "test-raw-private-marker",
+        {PrinterValidationStage::Status, PrinterValidationReason::MalformedBody, 200});
+    const auto status = [&snapshot](Surface surface, CsrfToken token) {
+        return status_body(snapshot, surface, kVersion, token);
+    };
+    const std::string current = status(Surface::SetupAccessPoint, CsrfToken{kToken});
+    EXPECT_TRUE(contains(current, R"("diagnosticReportId":"1")"));
+    EXPECT_FALSE(contains(current, "PrusaLink status check"));
+    EXPECT_FALSE(contains(current, R"("diagnosticReport":)"));
+
+    EXPECT_FALSE(contains(status(Surface::StationLan, CsrfToken{kToken}), "diagnosticReportId"));
+    EXPECT_FALSE(contains(status(Surface::Unknown, CsrfToken{kToken}), "diagnosticReportId"));
+    EXPECT_FALSE(contains(status(Surface::SetupAccessPoint, CsrfToken{}), "diagnosticReportId"));
+
+    snapshot.set_setup_state(SetupState::Validating, {}, {});
+    EXPECT_FALSE(
+        contains(status(Surface::SetupAccessPoint, CsrfToken{kToken}), "diagnosticReportId"));
+    snapshot.set_setup_state(SetupState::Failed, "wifi-unreachable", {});
+    EXPECT_FALSE(
+        contains(status(Surface::SetupAccessPoint, CsrfToken{kToken}), "diagnosticReportId"));
+}
+
+TEST(SetupDiagnosticTests, ReportContainsOnlyTheKnownFirmwareStageSummaryAndStatus) {
+    using prd::app_model::PrinterValidationReason;
+    using prd::app_model::PrinterValidationStage;
+    const prd::app_model::SemanticVersion version{1, 2, 0, ""};
+    auto snapshot = editing_on_station_a();
+
+    snapshot.set_setup_state(
+        SetupState::Failed, "test-key-ssid-raw-body",
+        {PrinterValidationStage::Status, PrinterValidationReason::Timeout, 503});
+    EXPECT_EQ(diagnostic_report(snapshot, "1", version),
+              "Prusa Remote Display setup diagnostic\nFirmware: 1.2.0\n"
+              "Stage: PrusaLink status check\nSummary: PrusaLink returned a server error.\n"
+              "HTTP status: 503");
+    EXPECT_TRUE(diagnostic_report(snapshot, "", version).empty());
+    EXPECT_TRUE(diagnostic_report(snapshot, "0", version).empty());
+
+    snapshot.set_setup_state(SetupState::Validating, {}, {});
+    EXPECT_TRUE(diagnostic_report(snapshot, "1", version).empty());
+
+    snapshot.set_setup_state(
+        SetupState::Failed, "test-password-and-address",
+        {PrinterValidationStage::VersionProbe, PrinterValidationReason::Timeout, 0});
+    EXPECT_TRUE(diagnostic_report(snapshot, "1", version).empty());
+    const std::string silence = diagnostic_report(snapshot, "3", version);
+    EXPECT_TRUE(contains(silence, "Stage: PrusaLink version check"));
+    EXPECT_TRUE(contains(silence, "No HTTP response arrived"));
+    EXPECT_FALSE(contains(silence, "HTTP status:"));
+
+    snapshot.set_setup_state(
+        SetupState::Failed, "test-ssid",
+        {PrinterValidationStage::VersionProbe, PrinterValidationReason::Unauthorized, 401});
+    EXPECT_TRUE(contains(diagnostic_report(snapshot, "4", version), "PrusaLink denied access."));
+    snapshot.set_setup_state(
+        SetupState::Failed, "test-host-raw-json",
+        {PrinterValidationStage::Status, PrinterValidationReason::SchemaMismatch, 200});
+    EXPECT_TRUE(contains(diagnostic_report(snapshot, "5", version), "expected PrusaLink data."));
+    snapshot.set_setup_state(SetupState::Failed, "not-a-PrusaLink-result", {});
+    EXPECT_TRUE(diagnostic_report(snapshot, "6", version).empty());
+}
+
+TEST(SetupDiagnosticTests, LocalFailuresReportTheLocalStageWithoutAPrinterResponse) {
+    using prd::app_model::PrinterValidationReason;
+    using prd::app_model::PrinterValidationStage;
+    const prd::app_model::SemanticVersion version{1, 2, 0, ""};
+    auto snapshot = editing_on_station_a();
+
+    snapshot.set_setup_state(
+        SetupState::Failed, "test-host-ssid-password",
+        {PrinterValidationStage::AddressCheck, PrinterValidationReason::NameNotResolved, 0});
+    EXPECT_EQ(diagnostic_report(snapshot, "1", version),
+              "Prusa Remote Display setup diagnostic\nFirmware: 1.2.0\n"
+              "Stage: Printer address check\n"
+              "Summary: The display could not resolve the printer name.");
+
+    snapshot.set_setup_state(
+        SetupState::Failed, "test-host-ssid-password",
+        {PrinterValidationStage::RequestPreparation, PrinterValidationReason::RequestRejected, 0});
+    EXPECT_EQ(diagnostic_report(snapshot, "2", version),
+              "Prusa Remote Display setup diagnostic\nFirmware: 1.2.0\n"
+              "Stage: PrusaLink request preparation\n"
+              "Summary: The display could not send the PrusaLink request.");
+}
+
+TEST(SetupDiagnosticTests, TransportFailureDistinguishesReceivedHeadersFromInterruptedBody) {
+    using prd::app_model::PrinterValidationReason;
+    using prd::app_model::PrinterValidationStage;
+    const prd::app_model::SemanticVersion version{1, 2, 0, ""};
+    auto snapshot = editing_on_station_a();
+
+    snapshot.set_setup_state(
+        SetupState::Failed, {},
+        {PrinterValidationStage::Status, PrinterValidationReason::TransportFailed, 200});
+    EXPECT_EQ(diagnostic_report(snapshot, "1", version),
+              "Prusa Remote Display setup diagnostic\nFirmware: 1.2.0\n"
+              "Stage: PrusaLink status check\nSummary: PrusaLink returned HTTP headers.\n"
+              "HTTP status: 200\nResponse body: The connection failed while reading it.");
+
+    snapshot.set_setup_state(
+        SetupState::Failed, "printer-unauthorized",
+        {PrinterValidationStage::VersionProbe, PrinterValidationReason::TransportFailed, 403});
+    EXPECT_EQ(diagnostic_report(snapshot, "2", version),
+              "Prusa Remote Display setup diagnostic\nFirmware: 1.2.0\n"
+              "Stage: PrusaLink version check\nSummary: PrusaLink denied access.\n"
+              "HTTP status: 403\nResponse body: The connection failed while reading it.");
+
+    snapshot.set_setup_state(
+        SetupState::Failed, {},
+        {PrinterValidationStage::Status, PrinterValidationReason::TransportFailed, 0});
+    EXPECT_EQ(diagnostic_report(snapshot, "3", version),
+              "Prusa Remote Display setup diagnostic\nFirmware: 1.2.0\n"
+              "Stage: PrusaLink status check\n"
+              "Summary: The connection failed before the response could be read.");
 }
 
 // --- Coherence: old or new, never a mixture -----------------------------------------------------

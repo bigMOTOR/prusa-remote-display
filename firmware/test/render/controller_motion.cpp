@@ -25,6 +25,7 @@
 #include "status_timeline.hpp"
 #include "theme/theme.hpp"
 #include "ui/ui.hpp"
+#include "validation/user_demo.hpp"
 
 namespace {
 constexpr int kWidth = 320, kHeight = 240, kRows = prd::ui::kDefaultDrawBufferRows;
@@ -189,8 +190,9 @@ prd::app_model::Timestamp at(std::int64_t ms) {
 int main(int argc, char** argv) {
     using namespace prd;
     require(argc == 2 || (argc == 3 && (std::string(argv[2]) == "--remaining" ||
-                                        std::string(argv[2]) == "--recovery")),
-            "output directory [--remaining|--recovery]");
+                                        std::string(argv[2]) == "--recovery" ||
+                                        std::string(argv[2]) == "--user-demo")),
+            "output directory [--remaining|--recovery|--user-demo]");
     const std::string out = argv[1];
     lv_init();
     require(ui::fonts::verify(), "every generated font fits its actual reserved line box");
@@ -252,6 +254,84 @@ int main(int argc, char** argv) {
         tick(0);
         tick(ui::theme::kOperationalMotionMs);
     };
+    if (argc == 3 && std::string(argv[2]) == "--user-demo") {
+        ui::SetupSession fixture;
+        (void)fixture.ssid.assign("PRD-Setup-0123");
+        (void)fixture.password.assign("fixture123");
+        (void)fixture.url.assign("http://192.0.2.1");
+        ui::controller::set_setup_session(fixture);
+        auto setup = app_model::project(prd::test::booted_device());
+        setup.layer = app_model::PresentationLayer::RecoveryOrProvisioning;
+        setup.provisioning = app_model::ProvisioningPhase::SetupActive;
+        settle(setup);
+        require(labels().count("PRD-Setup-0123") == 1, "setup fixture is genuinely visible");
+
+        validation::UserDemo demo;
+        require(demo.start(at(0)), "demo starts");
+        const auto ready = demo.advance(at(0));
+        require(ready.has_value(), "initial demo Ready");
+        ui::controller::apply(*ready);
+        tick(0);
+        const auto entry = digest();
+        tick(550);
+        require(digest() != entry, "setup-to-demo has visible production entry motion");
+        tick(550);
+        save(out + "/01-demo-ready.rgb565");
+
+        const std::array<unsigned, 9> changes{2500,  5500,  9500,  12500, 15500,
+                                              19000, 22000, 24500, 28000};
+        for (const auto timestamp : changes) {
+            const auto next = demo.advance(at(timestamp));
+            require(next.has_value(), "exact demo step present");
+            const auto prior_frame = digest();
+            ui::controller::apply(*next);
+            tick(0);
+            const auto boundary = digest();
+            tick(550);
+            // 92% → 100% changes the reading within Printing. The product shows its new
+            // value immediately. The actual state changes use the production motion.
+            require(timestamp == 22000 || digest() != boundary,
+                    "intra-demo state uses the production motion");
+            tick(550);
+            require(digest() != prior_frame, "every new stage changes the visible frame");
+            const auto visible = labels();
+            require(visible.count("PRD-Setup-0123") == 0 && visible.count("fixture123") == 0 &&
+                        visible.count("http://192.0.2.1") == 0,
+                    "no setup identity, credential or address in a demo frame");
+            save(out + "/demo-" + std::to_string(timestamp) + ".rgb565");
+            std::printf("demo %u settled %016llx\n", timestamp,
+                        static_cast<unsigned long long>(digest()));
+        }
+
+        require(demo.expired(at(31000)), "demo has a finite endpoint");
+        demo.stop();
+        ui::controller::apply(states[2]);
+        tick(0);
+        const auto monitoring_entry = digest();
+        tick(550);
+        require(digest() != monitoring_entry, "demo-to-monitoring uses operational motion");
+        tick(550);
+        require(labels().count("Printing") == 1, "current operational view can resume");
+        save(out + "/post-demo-monitoring.rgb565");
+
+        settle(setup);
+        require(demo.start(at(40000)), "second demo starts cleanly");
+        const auto restarted = demo.advance(at(40000));
+        require(restarted.has_value(), "second Ready exists");
+        settle(*restarted);
+        demo.stop();
+        ui::controller::apply(setup);
+        tick(0);
+        const auto setup_entry = digest();
+        tick(550);
+        require(digest() != setup_entry, "demo-to-setup has visible production entry motion");
+        tick(550);
+        require(labels().count("PRD-Setup-0123") == 1, "early exit can restore setup");
+        std::puts("PASS user-demo production controller, setup entry, nine steps, both exits");
+        lv_display_delete(display);
+        lv_deinit();
+        return 0;
+    }
     const std::array<app_model::Presentation, 7> age_states{
         states[0], states[1], states[2], states[3], states[4], states[5], unknown};
     const char* age_names[] = {"Ready",     "Preparing", "Printing", "Paused",

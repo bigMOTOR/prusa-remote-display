@@ -57,6 +57,8 @@
 // digits. If a composition ever needs a word at display size, that face's subset has to
 // grow with it.
 
+#include "app_model/printer_validation.hpp"
+
 namespace prd::ui::text {
 
 // Every user-visible string the Phase C compositions draw.
@@ -292,6 +294,17 @@ enum class TextId : std::uint8_t {
     ObservationAgeSeconds = 56,
     ObservationAgeMinutes = 57,
     ObservationUpdated = 58,
+    SetupPrinterSilent = 59,
+    SetupPrinterDenied = 60,
+    SetupPrinterBadReply = 61,
+    SetupPrinterServerError = 62,
+    SetupPrinterNoConnection = 63,
+    SetupPrinterUnreachable = 64,
+    SetupPrinterIncomplete = 65,
+    SetupCheckPrinterPower = 66,
+    SetupCheckPrinterAddress = 67,
+    SetupRetry = 68,
+    SetupScan = 69,
 };
 
 // ⛔ FIVE IDS FOR TWO SENTENCES, DELIBERATELY. FactoryResetRestartDisplay, StorageRestartDisplay,
@@ -299,11 +312,14 @@ enum class TextId : std::uint8_t {
 // entries so the four causes can be reworded independently — sharing one id would mean a change
 // written for one fault silently rewording three others, which is the "a sentence is a claim about
 // every route that emits it" rule applied to the catalogue itself.
-inline constexpr std::size_t kTextIdCount = 59;
+inline constexpr std::size_t kTextIdCount = 70;
 
 // The English string. Never empty, and always within the generated glyph subset —
 // both properties are asserted at compile time in text.cpp.
 [[nodiscard]] std::string_view lookup(TextId text_id);
+
+[[nodiscard]] TextId setup_failed_title(app_model::PrinterValidationFailure failure);
+[[nodiscard]] TextId setup_failed_action(TextId title);
 
 // Index-addressable, so a test can walk every id without repeating the list and
 // without being able to miss one.

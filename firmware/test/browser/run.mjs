@@ -21,6 +21,8 @@ import {
   start,
   submissions,
   updateSubmissions,
+  diagnosticSubmissions,
+  displaySubmissions,
   awaitResult,
   polls,
 } from "./serve.mjs";
@@ -72,7 +74,19 @@ const accepted = (stage, extra = {}) => ({ accepted: true, stage, ...extra });
 // Per scenario: what /api/status returns over successive polls, what /api/setup answers, and
 // optionally the status script to switch to once a stage is accepted.
 const SCENARIOS = [
-  ...["printer-unreachable", "printer-unauthorized", "printer-unsupported", "printer-unusable-response"].map((reason) => ({
+  {
+    name: "display-settings-and-demo",
+    statuses: ["editing"],
+    display: { canAdjustDisplay: true, canShowDemo: true, displaySettingsRevision: "0",
+               displayMode: "0", backlight: "1" },
+    expectDisplayPosts: ["[1,2]", '"demo"'],
+    expectPosts: 0,
+    shot: true,
+  },
+  ...[
+    "printer-unreachable", "printer-unauthorized", "printer-unsupported",
+    "printer-unusable-response", "printer-server-error",
+  ].map((reason) => ({
     name: reason,
     reason,
     statuses: ["editing"],
@@ -81,6 +95,37 @@ const SCENARIOS = [
     expectPosts: 3,
     shot: true,
   })),
+  {
+    name: "printer-incomplete-response",
+    statuses: ["editing"],
+    setup: { wifi: accepted("wifi"), printer: accepted("printer") },
+    after: {
+      wifi: ["validating", "wifi-validated"],
+      printer: ["validating", {
+        setupState: "failed", setupReason: "printer-unusable-response", printerResponseIncomplete: true,
+      }],
+    },
+    expectPosts: 3,
+  },
+  {
+    name: "diagnostic-report-retry",
+    statuses: ["editing"],
+    setup: { wifi: accepted("wifi"), printer: accepted("printer") },
+    after: {
+      wifi: ["validating", "wifi-validated"],
+      printer: [
+        ["validating", { setupState: "failed", setupReason: "printer-unusable-response",
+          printerResponseIncomplete: true, diagnosticReportId: "7" }],
+        ["validating", { setupState: "failed", setupReason: "printer-unauthorized", diagnosticReportId: "8" }],
+      ],
+    },
+    reports: {
+      "7": "Prusa Remote Display setup diagnostic\nFirmware: 1.2.0\nStage: PrusaLink status check\nSummary: PrusaLink returned HTTP headers.\nHTTP status: 200\nResponse body: The connection failed while reading it.",
+      "8": "Prusa Remote Display setup diagnostic\nFirmware: 1.2.0\nStage: PrusaLink version check\nSummary: PrusaLink denied access.\nHTTP status: 403\nResponse body: The connection failed while reading it.",
+    },
+    expectPosts: 4,
+    expectReportIds: ["7", "7", "8"],
+  },
   { name: "wifi-initial", statuses: ["editing"], setup: {} },
   {
     name: "wifi-empty",
@@ -742,7 +787,14 @@ async function main() {
     await discard(profile);
 
     const posts = submissions();
+    const displayPosts = displaySubmissions();
+    const displayBodies = scenario.expectDisplayPosts ?? [];
+    if (JSON.stringify(displayPosts.map((post) => post.raw)) !== JSON.stringify(displayBodies) ||
+        displayPosts.some((post) => post.headers["x-prd-setup-token"] !== "harness-token")) {
+      problems.push("display action did not send just the expected body with the setup token");
+    }
     const updatePosts = updateSubmissions();
+    const reportPosts = diagnosticSubmissions();
     const problems = [...result.failures];
 
     if (scenario.expectPosts !== undefined && posts.length !== scenario.expectPosts) {
@@ -768,6 +820,19 @@ async function main() {
       }
       if (post.headers["x-prd-setup-token"] !== "harness-token") {
         problems.push(`update CSRF token: got ${JSON.stringify(post.headers["x-prd-setup-token"])}`);
+      }
+    }
+
+    const expectedReports = scenario.expectReportIds ?? [];
+    if (reportPosts.length !== expectedReports.length) {
+      problems.push(`diagnostic request count: expected ${expectedReports.length}, got ${reportPosts.length}`);
+    }
+    for (const [index, post] of reportPosts.entries()) {
+      if (!post.parsed || Object.keys(post.parsed).length !== 2 ||
+          post.parsed.stage !== "diagnostic-report" ||
+          post.parsed.reportId !== expectedReports[index] ||
+          post.headers["x-prd-setup-token"] !== "harness-token") {
+        problems.push(`diagnostic request ${index + 1} did not use only its current report ID and session token`);
       }
     }
 

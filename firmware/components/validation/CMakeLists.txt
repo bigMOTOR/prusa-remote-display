@@ -3,10 +3,9 @@
 
 # Hardware-validation support flows, moved out of app_core in Milestone 2 Phase B.
 #
-# Not part of the production dependency graph: nothing product-facing depends on this,
-# and every flow inside it is compiled out unless a validation flag selects it. It sits
-# beside app_core rather than under it, and it must never depend on app_core — the
-# composition root calls these, not the other way round.
+# Bench flows use the validation flags. The ordinary user demo reuses the pure synthetic
+# timeline and status decoder, without enabling any bench flow. app_core owns admission
+# and returns the actual device to its normal presentation when the demo ends.
 
 set(PRD_OPTIONAL_REVIEW_SOURCES)
 set(PRD_TIMELINE_SOURCE "src/printing_timeline_flow.cpp")

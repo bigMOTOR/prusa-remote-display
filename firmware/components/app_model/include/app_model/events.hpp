@@ -10,6 +10,7 @@
 #include "app_model/device_data.hpp"
 #include "app_model/observation.hpp"
 #include "app_model/printer_data.hpp"
+#include "app_model/printer_validation.hpp"
 #include "app_model/state_layers.hpp"
 #include "app_model/values.hpp"
 
@@ -123,6 +124,7 @@ enum class EventType {
     // every later rule, exactly like a user pressing the button.
     DisplayWakeRequested,
     DisplayBrightnessObserved,
+    DisplayPreferencesObserved,
 
     // --- Physical input ---
     ButtonGestureObserved,
@@ -174,6 +176,7 @@ struct ConfigurationObservation {
 
 struct ProvisioningObservation {
     ProvisioningPhase phase{ProvisioningPhase::Inactive};
+    PrinterValidationFailure failure{};
 };
 
 // ⛔ NO SSID FIELD, ON THE SAME GROUND AS NetworkState — see device_data.hpp. The observation is the
@@ -368,6 +371,11 @@ struct DisplayBrightnessObservation {
     std::uint8_t brightness_percent{100};
 };
 
+struct DisplayPreferencesObservation {
+    DisplayMode mode;
+    Backlight backlight;
+};
+
 struct ButtonGestureObservation {
     ButtonGesture gesture{ButtonGesture::ShortPress};
 };
@@ -438,6 +446,7 @@ struct Event {
         AlertObservation alert;
         OtaObservation ota;
         DisplayBrightnessObservation brightness;
+        DisplayPreferencesObservation preferences;
         ButtonGestureObservation button;
     };
 
@@ -459,7 +468,8 @@ struct Event {
 
     [[nodiscard]] static Event configuration_observed(Timestamp moment,
                                                       const ConfigurationObservation& observation);
-    [[nodiscard]] static Event provisioning_phase(Timestamp moment, ProvisioningPhase phase);
+    [[nodiscard]] static Event provisioning_phase(Timestamp moment, ProvisioningPhase phase,
+                                                  PrinterValidationFailure failure = {});
 
     [[nodiscard]] static Event network_observed(Timestamp moment,
                                                 const NetworkObservation& observation);
@@ -493,6 +503,9 @@ struct Event {
     [[nodiscard]] static Event display_wake(Timestamp moment);
     [[nodiscard]] static Event display_brightness(Timestamp moment,
                                                   std::uint8_t brightness_percent);
+
+    [[nodiscard]] static Event display_preferences(Timestamp moment,
+                                                   DisplayPreferences preferences);
 
     [[nodiscard]] static Event button_gesture(Timestamp moment, ButtonGesture gesture);
 

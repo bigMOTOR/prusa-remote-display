@@ -470,8 +470,27 @@ TEST(OperationalContentTests, PreparingsSubtitleCannotReturnWithoutAMachineSuppl
     // The owner-selected remaining-time templates add two entries for Printing estimates;
     // they cannot invent a Preparing activity or make its third line visible.
     // Observation-age templates and the compact heading qualify freshness, never Preparing activity.
-    EXPECT_EQ(kTextIdCount, 59U) << "a catalogue entry was added; if it is a Preparing subtitle, "
-                                    "API Research Report §16.4 has to have been superseded first";
+    // These reason and action entries are consumed only in SetupFailed.
+    constexpr std::size_t kPriorTextCount = 59U;
+    constexpr std::array kSetupFailureTitles{
+        TextId::SetupPrinterSilent,
+        TextId::SetupPrinterDenied,
+        TextId::SetupPrinterBadReply,
+        TextId::SetupPrinterServerError,
+        TextId::SetupPrinterNoConnection,
+        TextId::SetupPrinterUnreachable,
+        TextId::SetupPrinterIncomplete,
+        TextId::SetupCheckPrinterPower,
+        TextId::SetupCheckPrinterAddress,
+        TextId::SetupRetry,
+        TextId::SetupScan,
+    };
+    EXPECT_EQ(kTextIdCount, kPriorTextCount + kSetupFailureTitles.size())
+        << "a catalogue entry was added; if it is a Preparing subtitle, "
+           "API Research Report §16.4 has to have been superseded first";
+    for (std::size_t index = 0; index < kSetupFailureTitles.size(); ++index) {
+        EXPECT_EQ(prd::ui::text::text_id_at(kPriorTextCount + index), kSetupFailureTitles[index]);
+    }
 
     for (std::size_t index = 0; index < kTextIdCount; ++index) {
         const auto word = prd::ui::text::lookup(prd::ui::text::text_id_at(index));

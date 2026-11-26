@@ -109,7 +109,70 @@ constexpr std::array<TextId, kTextIdCount> kEveryId{
     TextId::ObservationAgeSeconds,
     TextId::ObservationAgeMinutes,
     TextId::ObservationUpdated,
+    TextId::SetupPrinterSilent,
+    TextId::SetupPrinterDenied,
+    TextId::SetupPrinterBadReply,
+    TextId::SetupPrinterServerError,
+    TextId::SetupPrinterNoConnection,
+    TextId::SetupPrinterUnreachable,
+    TextId::SetupPrinterIncomplete,
+    TextId::SetupCheckPrinterPower,
+    TextId::SetupCheckPrinterAddress,
+    TextId::SetupRetry,
+    TextId::SetupScan,
 };
+
+TEST(SetupFailureTextTests, KnownEvidenceSelectsAnActionAndMissingEvidenceKeepsTheExistingTitle) {
+    using prd::app_model::PrinterValidationReason;
+    using prd::app_model::PrinterValidationStage;
+    using prd::ui::text::setup_failed_title;
+    constexpr auto request = PrinterValidationStage::Status;
+
+    EXPECT_EQ(setup_failed_title({request, PrinterValidationReason::Timeout, 0}),
+              TextId::SetupPrinterSilent);
+    EXPECT_EQ(setup_failed_title({request, PrinterValidationReason::TransportFailed, 403}),
+              TextId::SetupPrinterDenied);
+    EXPECT_EQ(setup_failed_title({request, PrinterValidationReason::SchemaMismatch, 200}),
+              TextId::SetupPrinterBadReply);
+    EXPECT_EQ(setup_failed_title({request, PrinterValidationReason::EndpointUnsupported, 404}),
+              TextId::SetupPrinterBadReply);
+    EXPECT_EQ(setup_failed_title({request, PrinterValidationReason::Timeout, 200}),
+              TextId::SetupPrinterIncomplete);
+    EXPECT_EQ(setup_failed_title({request, PrinterValidationReason::Timeout, 503}),
+              TextId::SetupPrinterServerError);
+    EXPECT_EQ(setup_failed_title({request, PrinterValidationReason::Unreachable, 0}),
+              TextId::SetupPrinterUnreachable);
+    EXPECT_EQ(setup_failed_title({PrinterValidationStage::AddressCheck,
+                                  PrinterValidationReason::NameNotResolved, 0}),
+              TextId::SetupPrinterNoConnection);
+    EXPECT_EQ(setup_failed_title({request, PrinterValidationReason::Cancelled, 0}),
+              TextId::StateSetupFailed);
+    EXPECT_EQ(setup_failed_title({}), TextId::StateSetupFailed);
+}
+
+TEST(SetupFailureTextTests, EachPanelTitlePreservesItsReasonAndAction) {
+    using prd::ui::text::setup_failed_action;
+    constexpr struct {
+        TextId title;
+        std::string_view reason;
+        std::string_view action;
+    } cases[] = {
+        {TextId::SetupPrinterUnreachable, "Printer unreachable",
+         "Check printer power and address."},
+        {TextId::SetupPrinterDenied, "Printer access denied", "Check the PrusaLink API key."},
+        {TextId::SetupPrinterIncomplete, "Printer response incomplete",
+         "Check the PrusaLink address."},
+        {TextId::SetupPrinterSilent, "No reply", "Try again."},
+        {TextId::SetupPrinterBadReply, "Bad reply", "Scan the QR code."},
+        {TextId::SetupPrinterServerError, "Server error", "Try again."},
+        {TextId::SetupPrinterNoConnection, "No link", "Scan the QR code."},
+        {TextId::StateSetupFailed, "That did not work", "Scan the QR code."},
+    };
+    for (const auto& item : cases) {
+        EXPECT_EQ(lookup(item.title), item.reason);
+        EXPECT_EQ(lookup(setup_failed_action(item.title)), item.action);
+    }
+}
 
 } // namespace
 
