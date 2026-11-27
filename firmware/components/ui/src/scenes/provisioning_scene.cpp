@@ -189,6 +189,7 @@ bool ProvisioningScene::build(lv_obj_t* const parent) {
     lv_obj_set_style_text_align(title_, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     lv_obj_set_pos(title_, kColumnX, kTitleY);
     lv_label_set_text(title_, "");
+    recovery_title_motion_.attach(title_);
 
     action_ = theme::bare_label(root_);
     if (action_ == nullptr) {
@@ -463,20 +464,28 @@ void ProvisioningScene::layout_recovery_rows(const std::int32_t progress) {
     }
 }
 
-void ProvisioningScene::place_recovery_copy(const std::int32_t qr_y) {
+void ProvisioningScene::place_recovery_copy(const std::int32_t qr_y, const std::int32_t progress) {
     if (!session_drawable_) {
+        recovery_title_motion_.stop(title_);
         return;
     }
-    // The exact reason fits beside the QR at Body size until its StateTitle box clears.
-    // Keep the approved full-width action below it once the action's own box is clear.
-    const bool full_title = qr_y >= kFailureTitleY + theme::kLineTitle;
-    const auto width = full_title ? theme::kCanvasContent.width : kColumnWidth;
+    const auto width = progress == 0 ? kColumnWidth : theme::kCanvasContent.width;
+    const auto role =
+        progress == kRecoveryProgressEnd ? theme::TextRole::StateTitle : theme::TextRole::Body;
     if (lv_obj_get_style_width(title_, LV_PART_MAIN) != width) {
         lv_obj_set_width(title_, width);
-        theme::apply_text_style(title_,
-                                full_title ? theme::TextRole::StateTitle : theme::TextRole::Body,
-                                theme::Colour::Primary);
     }
+    if (lv_obj_get_style_text_font(title_, LV_PART_MAIN) != fonts::for_role(role)) {
+        theme::apply_text_style(title_, role, theme::Colour::Primary);
+    }
+    if (progress > 0 && progress < kRecoveryProgressEnd) {
+        recovery_title_motion_.update(title_, static_cast<float>(progress) / kRecoveryProgressEnd,
+                                      kColumnWidth, kRecoveryQrY - kQrBlockRect.y,
+                                      kFailureActionY + theme::kLineBody - kFailureTitleY);
+    } else {
+        recovery_title_motion_.stop(title_);
+    }
+    // Keep the approved full-width action below the title once its own box is clear.
     if (phase_ == app_model::ProvisioningPhase::SetupFailed &&
         qr_y >= kFailureActionY + theme::kLineBody) {
         lv_obj_remove_flag(action_, LV_OBJ_FLAG_HIDDEN);
@@ -492,7 +501,7 @@ void ProvisioningScene::place_recovery_entry(const std::int32_t progress) {
     if (lv_obj_get_style_y(qr_panel_, LV_PART_MAIN) != qr_y) {
         lv_obj_set_y(qr_panel_, qr_y);
     }
-    place_recovery_copy(qr_y);
+    place_recovery_copy(qr_y, progress);
 
     if (progress >= kManualReflow) {
         if (recovery_progress_ < kManualReflow) {
@@ -537,6 +546,7 @@ void ProvisioningScene::layout_session(const bool recovery) {
         }
     } else {
         recovery_entry_clock_.clear();
+        recovery_title_motion_.stop(title_);
         theme::apply_text_style(title_, theme::TextRole::Body, theme::Colour::Primary);
         lv_obj_set_width(title_, kColumnWidth);
     }
@@ -882,7 +892,7 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
     }
 
     if (recovery_layout_) {
-        place_recovery_copy(lv_obj_get_style_y(qr_panel_, LV_PART_MAIN));
+        place_recovery_copy(lv_obj_get_style_y(qr_panel_, LV_PART_MAIN), recovery_progress_);
     }
     if (recovery_layout_ && !recovery_entry_clock_.armed &&
         (layout_changed || returning_from_statement)) {

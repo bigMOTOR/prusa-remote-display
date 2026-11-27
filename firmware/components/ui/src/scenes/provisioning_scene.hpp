@@ -9,6 +9,7 @@
 
 #include "app_model/presentation.hpp"
 #include "components/message_form.hpp"
+#include "scenes/setup_title_motion.hpp"
 #include "scenes/unavailable_motion.hpp"
 // text::TextId names which catalogue entry a composition draws — see draw_statement().
 #include "text/text.hpp"
@@ -184,7 +185,7 @@ class ProvisioningScene {
     void layout_session(bool recovery);
     void set_row_style(std::size_t index, bool recovery);
     void layout_recovery_rows(std::int32_t progress = LV_BEZIER_VAL_MAX);
-    void place_recovery_copy(std::int32_t qr_y);
+    void place_recovery_copy(std::int32_t qr_y, std::int32_t progress);
     void place_recovery_entry(std::int32_t progress);
 
     // Rebuilds the code from the retained session, or hides it. Called on every path that
@@ -194,6 +195,7 @@ class ProvisioningScene {
     lv_obj_t* root_{nullptr};
     lv_obj_t* title_{nullptr};
     lv_obj_t* action_{nullptr};
+    SetupTitleMotion recovery_title_motion_{};
     std::array<Row, kRowCount> rows_{};
 
     // The light field carrying the four-module quiet zone, and the code inside it.
