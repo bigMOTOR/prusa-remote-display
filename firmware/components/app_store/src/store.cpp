@@ -16,17 +16,47 @@ app_model::DataFreshness Store::observation_freshness_at(const app_model::Timest
     return app_model::classify_freshness(now - state_.printer.observed_at, policy_.freshness);
 }
 
-bool Store::printer_attempt_grace_elapsed(const app_model::Timestamp now) const {
-    const auto freshness = app_model::classify_freshness(
-        now - state_.printer_connection.last_attempt_at, policy_.freshness);
-    return app_model::confidence_from(freshness, true) != app_model::Confidence::Current;
-}
-
 void Store::age_observation_if_due(const app_model::Timestamp now) {
     if (state_.printer.ever_observed && now > state_.last_event_at &&
         observation_freshness_at(now) != state_.printer_connection.freshness) {
         (void)dispatch(app_model::Event::confidence_aged(now));
     }
+}
+
+void Store::age_observation_after_ordinary_sleep(const app_model::Timestamp now) {
+    using app_model::AccessCondition;
+    using app_model::ConnectionPhase;
+    using app_model::DataFreshness;
+    const auto freshness = observation_freshness_at(now);
+    if (freshness != DataFreshness::Stale && freshness != DataFreshness::Expired) {
+        return;
+    }
+
+    const auto phase = state_.printer_connection.phase;
+    if (phase == ConnectionPhase::PrinterUnavailable || phase == ConnectionPhase::InvalidResponse ||
+        phase == ConnectionPhase::Degraded) {
+        // Let recent transport replies drive loss at the ordinary retry cadence. Once they go
+        // quiet, the deadline still comes from the last accepted status body.
+        const auto attempt_age = app_model::classify_freshness(
+            now - state_.printer_connection.last_attempt_at, policy_.freshness);
+        if (state_.display.observation_interrupted &&
+            app_model::confidence_from(attempt_age, true) == app_model::Confidence::Current) {
+            return;
+        }
+    } else if (state_.display.observation_interrupted) {
+        // Station loss can leave the previous printer phase Connected. A worker restart or
+        // local target refusal can likewise go quiet without a status body.
+        const bool retained_completed =
+            state_.subject == app_model::SubjectState::Completed &&
+            state_.access_condition == AccessCondition::None &&
+            (phase == ConnectionPhase::Connected || phase == ConnectionPhase::Probing ||
+             phase == ConnectionPhase::Unconfigured);
+        if (!retained_completed) {
+            return;
+        }
+    }
+
+    age_observation_if_due(now);
 }
 
 DispatchOutcome Store::dispatch(const app_model::Event& event) {

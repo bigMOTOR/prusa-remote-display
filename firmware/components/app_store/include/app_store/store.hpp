@@ -97,10 +97,10 @@ class Store {
 
     // The observation's age under this store's reducer policy, without publishing a revision.
     [[nodiscard]] app_model::DataFreshness observation_freshness_at(app_model::Timestamp now) const;
-    // The last accepted poll's age has crossed the same grace as a current observation.
-    [[nodiscard]] bool printer_attempt_grace_elapsed(app_model::Timestamp now) const;
     // Observe a crossed boundary using the same policy.
     void age_observation_if_due(app_model::Timestamp now);
+    // Printer Status can retain a subject after the ordinary sleep deadline.
+    void age_observation_after_ordinary_sleep(app_model::Timestamp now);
 
     // False when the table is full, or when called during a notification.
     bool add_observer(ObserverFn observer, void* context);

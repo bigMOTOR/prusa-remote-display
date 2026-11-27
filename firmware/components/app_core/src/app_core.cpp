@@ -446,21 +446,7 @@ void display_tick(const std::uint32_t now_ms) {
             } else if (ordinary_power == DisplayPower::Off && step == Step::Hold &&
                        (state.display.power != DisplayPower::Off ||
                         state.confidence == app_model::Confidence::Degraded)) {
-                // Timer is already dark. A transient failure report gets the same grace as a
-                // current observation to let ordinary retries continue driving loss. Once
-                // reports go quiet, the retained observation still ages from its last body.
-                const auto now = platform::monotonic_time();
-                const auto freshness = g_store.observation_freshness_at(now);
-                const auto phase = state.printer_connection.phase;
-                using app_model::ConnectionPhase;
-                const bool transient_failure = phase == ConnectionPhase::PrinterUnavailable ||
-                                               phase == ConnectionPhase::InvalidResponse ||
-                                               phase == ConnectionPhase::Degraded;
-                if ((freshness == DataFreshness::Stale || freshness == DataFreshness::Expired) &&
-                    (!state.display.observation_interrupted ||
-                     (transient_failure && g_store.printer_attempt_grace_elapsed(now)))) {
-                    g_store.age_observation_if_due(now);
-                }
+                g_store.age_observation_after_ordinary_sleep(platform::monotonic_time());
             }
         }
 

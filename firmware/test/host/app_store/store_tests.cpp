@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "app_model/presentation.hpp"
 #include "app_store/store.hpp"
 #include "support/state_builders.hpp"
 
@@ -381,4 +382,71 @@ TEST(StoreTests, AutonomouslyAgesOnlyAtCrossedBoundariesOfItsPolicy) {
     EXPECT_EQ(store.state().confidence, Confidence::Degraded);
     store.age_observation_if_due(prd::test::at_ms(21));
     EXPECT_EQ(store.state().confidence, Confidence::Unavailable);
+}
+
+TEST(StoreTests, RetainedCompletionAgesAfterWifiLossOrBodylessPrinterReport) {
+    using namespace prd::app_model;
+    const auto last_body = at_ms(1240000);
+    for (const auto phase :
+         {ConnectionPhase::Connected, ConnectionPhase::Probing, ConnectionPhase::Unconfigured}) {
+        SCOPED_TRACE(log_label(phase));
+        Store store{printing_device(last_body)};
+        NetworkObservation network;
+        network.phase = NetworkPhase::Connected;
+        store.dispatch(Event::network_observed(last_body, network));
+        store.dispatch(Event::display_preferences(
+            last_body, {DisplayMode::PrinterStatus, Backlight::Standard}));
+        store.dispatch(
+            Event::printer_snapshot(last_body, printer_snapshot(PrinterState::Finished, 2)));
+        store.dispatch(Event::display_idle_timer_fired(last_body));
+        ASSERT_EQ(store.state().subject, SubjectState::Completed);
+        ASSERT_EQ(store.state().display.power, DisplayPower::Dimmed);
+
+        if (phase == ConnectionPhase::Connected) {
+            network.phase = NetworkPhase::Unavailable;
+            store.dispatch(Event::network_observed(last_body + at_ms(9000), network));
+            EXPECT_EQ(store.state().printer_connection.last_attempt_at, last_body);
+        } else {
+            ConnectionObservation report;
+            report.phase = phase;
+            store.dispatch(Event::connection_observed(last_body + at_ms(9000), report));
+        }
+        ASSERT_TRUE(store.state().display.observation_interrupted);
+        EXPECT_EQ(store.state().printer_connection.phase, phase);
+
+        store.age_observation_after_ordinary_sleep(last_body + at_ms(15000));
+        EXPECT_EQ(store.state().confidence, Confidence::Current);
+        store.age_observation_after_ordinary_sleep(last_body + at_ms(15100));
+        EXPECT_TRUE(project(store.state()).stale_indicator);
+        EXPECT_EQ(store.state().confidence, Confidence::Degraded);
+        store.age_observation_after_ordinary_sleep(last_body + at_ms(60000));
+        EXPECT_EQ(store.state().confidence, Confidence::Degraded);
+        store.age_observation_after_ordinary_sleep(last_body + at_ms(60100));
+        const auto expired = project(store.state());
+        EXPECT_EQ(expired.confidence, Confidence::Unavailable);
+        EXPECT_TRUE(expired.observation_lost_acknowledgement);
+        EXPECT_FALSE(expired.progress.known);
+        EXPECT_FALSE(expired.nozzle.current.known);
+        store.age_observation_after_ordinary_sleep(last_body + at_ms(68000));
+        EXPECT_EQ(project(store.state()).observation_lost_generation,
+                  expired.observation_lost_generation);
+        EXPECT_EQ(store.state().printer.observed_at, last_body);
+    }
+}
+
+TEST(StoreTests, RecentTransportRetriesStillDriveRetainedCompletionLoss) {
+    using namespace prd::app_model;
+    Store store{printing_device(at_ms(0))};
+    store.dispatch(Event::printer_snapshot(at_ms(0), printer_snapshot(PrinterState::Finished, 2)));
+    ConnectionObservation report;
+    report.phase = ConnectionPhase::PrinterUnavailable;
+    for (std::int64_t time = 9000; time <= 63000; time += 9000) {
+        store.age_observation_after_ordinary_sleep(at_ms(time - 100));
+        EXPECT_EQ(store.state().confidence,
+                  time <= 18000 ? Confidence::Current : Confidence::Degraded);
+        store.dispatch(Event::connection_observed(at_ms(time), report));
+        EXPECT_EQ(store.state().confidence, time == 9000    ? Confidence::Current
+                                            : time == 63000 ? Confidence::Unavailable
+                                                            : Confidence::Degraded);
+    }
 }
