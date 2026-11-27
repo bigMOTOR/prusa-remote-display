@@ -87,7 +87,7 @@ class ProvisioningScene {
     // its ramp cadence while a statement is appearing and settles to the idle wait afterwards.
     //
     // Ordinary setup animates opacity at the frozen R3 geometry. The first failure also moves
-    // the complete QR block to the recovery band; retries keep it there.
+    // the complete QR block and manual rows into their recovery layout; retries keep it there.
     [[nodiscard]] bool step(bool panel_visible, std::uint32_t now);
 
     [[nodiscard]] bool built() const {
@@ -182,8 +182,10 @@ class ProvisioningScene {
 
     void set_row(RowIndex index, std::string_view value);
     void layout_session(bool recovery);
-    void layout_recovery_rows();
-    void place_recovery_qr(std::int32_t y);
+    void set_row_style(std::size_t index, bool recovery);
+    void layout_recovery_rows(std::int32_t progress = LV_BEZIER_VAL_MAX);
+    void place_recovery_copy(std::int32_t qr_y);
+    void place_recovery_entry(std::int32_t progress);
 
     // Rebuilds the code from the retained session, or hides it. Called on every path that
     // changes the session, so the drawn code and the drawn password can never disagree.
@@ -219,8 +221,9 @@ class ProvisioningScene {
     app_model::ProvisioningPhase phase_{app_model::ProvisioningPhase::Inactive};
     bool phase_seen_{false};
     bool recovery_layout_{false};
-    // The single QR travels only when a drawn ordinary offer first enters recovery.
-    HoldClock recovery_qr_clock_{};
+    // One clock moves the intact QR and manual fields on the first recovery entry.
+    HoldClock recovery_entry_clock_{};
+    std::int32_t recovery_progress_{LV_BEZIER_VAL_MAX};
     bool phase_running_{false};
     std::int32_t phase_from_level_{0};
     std::int32_t phase_level_{0};

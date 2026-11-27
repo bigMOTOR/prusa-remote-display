@@ -32,26 +32,25 @@ void Store::age_observation_after_ordinary_sleep(const app_model::Timestamp now)
         return;
     }
 
-    const auto phase = state_.printer_connection.phase;
-    if (phase == ConnectionPhase::PrinterUnavailable || phase == ConnectionPhase::InvalidResponse ||
-        phase == ConnectionPhase::Degraded) {
-        // Let recent transport replies drive loss at the ordinary retry cadence. Once they go
-        // quiet, the deadline still comes from the last accepted status body.
-        const auto attempt_age = app_model::classify_freshness(
-            now - state_.printer_connection.last_attempt_at, policy_.freshness);
-        if (state_.display.observation_interrupted &&
-            app_model::confidence_from(attempt_age, true) == app_model::Confidence::Current) {
+    if (state_.display.preferences.mode == app_model::DisplayMode::PrinterStatus &&
+        state_.subject == app_model::SubjectState::Completed &&
+        state_.access_condition == AccessCondition::None) {
+        // Once Timer would be Off, the retained completion follows the last usable body.
+        // Transport retries and version-only replies cannot extend either age boundary.
+        age_observation_if_due(now);
+        return;
+    }
+
+    if (state_.display.observation_interrupted) {
+        const auto phase = state_.printer_connection.phase;
+        if (phase != ConnectionPhase::PrinterUnavailable &&
+            phase != ConnectionPhase::InvalidResponse && phase != ConnectionPhase::Degraded) {
             return;
         }
-    } else if (state_.display.observation_interrupted) {
-        // Station loss can leave the previous printer phase Connected. A worker restart or
-        // local target refusal can likewise go quiet without a status body.
-        const bool retained_completed =
-            state_.subject == app_model::SubjectState::Completed &&
-            state_.access_condition == AccessCondition::None &&
-            (phase == ConnectionPhase::Connected || phase == ConnectionPhase::Probing ||
-             phase == ConnectionPhase::Unconfigured);
-        if (!retained_completed) {
+        // Preserve the ordinary retry grace outside the retained completion.
+        const auto attempt_age = app_model::classify_freshness(
+            now - state_.printer_connection.last_attempt_at, policy_.freshness);
+        if (app_model::confidence_from(attempt_age, true) == app_model::Confidence::Current) {
             return;
         }
     }

@@ -434,7 +434,52 @@ TEST(StoreTests, RetainedCompletionAgesAfterWifiLossOrBodylessPrinterReport) {
     }
 }
 
-TEST(StoreTests, RecentTransportRetriesStillDriveRetainedCompletionLoss) {
+TEST(StoreTests, RetainedCompletionUsesBodyAgeDespiteFailedAndBodylessReports) {
+    using namespace prd::app_model;
+    const auto last_body = at_ms(1240000);
+    for (const auto phase : {ConnectionPhase::InvalidResponse, ConnectionPhase::PrinterUnavailable,
+                             ConnectionPhase::Degraded, ConnectionPhase::Connected}) {
+        for (const bool repeats : {false, true}) {
+            SCOPED_TRACE(log_label(phase));
+            SCOPED_TRACE(repeats);
+            Store store{printing_device(last_body)};
+            store.dispatch(Event::display_preferences(
+                last_body, {DisplayMode::PrinterStatus, Backlight::Standard}));
+            store.dispatch(
+                Event::printer_snapshot(last_body, printer_snapshot(PrinterState::Finished, 2)));
+            store.dispatch(Event::display_idle_timer_fired(last_body));
+            ASSERT_EQ(store.state().subject, SubjectState::Completed);
+            ASSERT_EQ(store.state().display.power, DisplayPower::Dimmed);
+
+            ConnectionObservation report;
+            report.phase = phase;
+            for (int time = 9000; time <= 64000; time += 100) {
+                if (time == 9000 || (repeats && time % 9000 == 0)) {
+                    store.dispatch(Event::connection_observed(last_body + at_ms(time), report));
+                    EXPECT_EQ(store.state().printer_connection.last_attempt_at,
+                              last_body + at_ms(time));
+                }
+                store.age_observation_after_ordinary_sleep(last_body + at_ms(time));
+                const auto view = project(store.state());
+                EXPECT_EQ(view.confidence, time <= 15000   ? Confidence::Current
+                                           : time <= 60000 ? Confidence::Degraded
+                                                           : Confidence::Unavailable);
+                EXPECT_EQ(view.stale_indicator, time > 15000 && time <= 60000);
+                EXPECT_EQ(store.state().printer.observed_at, last_body);
+            }
+            report.phase = ConnectionPhase::Connected;
+            store.dispatch(Event::connection_observed(last_body + at_ms(65000), report));
+            EXPECT_EQ(store.state().confidence, Confidence::Unavailable);
+            store.dispatch(Event::printer_snapshot(last_body + at_ms(66000),
+                                                   printer_snapshot(PrinterState::Idle, 3)));
+            EXPECT_EQ(store.state().confidence, Confidence::Current);
+            EXPECT_EQ(store.state().subject, SubjectState::Ready);
+            EXPECT_FALSE(project(store.state()).stale_indicator);
+        }
+    }
+}
+
+TEST(StoreTests, TimerStillUsesOrdinaryTransportRetryGrace) {
     using namespace prd::app_model;
     Store store{printing_device(at_ms(0))};
     store.dispatch(Event::printer_snapshot(at_ms(0), printer_snapshot(PrinterState::Finished, 2)));

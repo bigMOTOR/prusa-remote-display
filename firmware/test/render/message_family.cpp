@@ -1240,8 +1240,8 @@ int main(int argc, char** argv) {
     require(recovery_qr_top(settled_setup) == kSetupQrTop,
             "first failure QR starts at the unchanged validation coordinate");
     require(!visible_label(setup_screen, "Checking that network") &&
-                !visible_label(setup_screen, "That did not work"),
-            "old checking is gone and final failure copy waits for the QR to clear");
+                visible_label(setup_screen, "That did not work"),
+            "the truthful reason replaces Checking in the first failed frame");
     save_setup_phase("first-failure-start");
     const auto first_failure = pixels;
     int previous_qr_top = kSetupQrTop;
@@ -1250,9 +1250,8 @@ int main(int argc, char** argv) {
         const auto qr_top = recovery_qr_top(settled_setup);
         require(qr_top >= previous_qr_top && qr_top - previous_qr_top < kFailureQrTop - kSetupQrTop,
                 "first failure moves the intact QR down without snapping or reversing");
-        require((visible_label(setup_screen, "That did not work") != nullptr) ==
-                    (qr_top >= kRecoveryTitleBottom),
-                "the current reason becomes visible as soon as its final box is clear");
+        require(visible_label(setup_screen, "That did not work"),
+                "the current reason stays visible for the entire QR travel");
         if (elapsed > kRecoveryQrEntryMs) {
             require(qr_top == kFailureQrTop, "the QR remains at the accepted recovery endpoint");
         }
@@ -1394,8 +1393,8 @@ int main(int argc, char** argv) {
     require(tick(0), "failure interrupts the running setup scene entry");
     require(recovery_qr_top(settled_setup) == kSetupQrTop &&
                 !visible_label(setup_screen, "Join this network") &&
-                !visible_label(setup_screen, "Printer response incomplete"),
-            "the full QR starts at the interrupted offer position and retires its old title");
+                visible_label(setup_screen, "Printer response incomplete"),
+            "the full QR and the truthful reason appear in the interrupted offer's first frame");
     tick(60);
     const auto interrupted_top = recovery_qr_top(settled_setup);
     require(interrupted_top > kSetupQrTop && interrupted_top < kFailureQrTop,
@@ -2277,18 +2276,6 @@ int main(int argc, char** argv) {
             controller::apply(failed);
             recovery_qr_visible = true;
             tick(0);
-            const auto first_wide_failure = pixels;
-            constexpr auto manual_top = kRecoveryActionBottom;
-            const auto manual_unchanged = [&] {
-                for (int y = manual_top; y < h; ++y) {
-                    const auto start = y * w;
-                    if (!std::equal(pixels.begin() + start, pixels.begin() + start + kSetupQrLeft,
-                                    first_wide_failure.begin() + start)) {
-                        return false;
-                    }
-                }
-                return true;
-            };
             const auto qr_matches = [&](const int candidate_top) {
                 for (int row = 0; row < kSetupQrSide; ++row) {
                     const auto source = wide_offer.begin() + (kSetupQrTop + row) * w + kSetupQrLeft;
@@ -2301,8 +2288,12 @@ int main(int argc, char** argv) {
             };
             require(qr_matches(kSetupQrTop), "wide recovery starts on the validation QR");
             int last_qr_top = kSetupQrTop;
-            unsigned reason_at = 0;
             unsigned action_at = 0;
+            std::array<lv_area_t, 7> preceding{};
+            std::array<bool, 7> previous_ink{};
+            std::array<bool, 3> manual_moved{};
+            const std::array moving{test.reason, manual[0], manual[1], manual[2],
+                                    manual[3],   manual[4], manual[5]};
             for (unsigned time = 0; time <= kRecoveryQrEntryMs; ++time) {
                 if (time > 0) {
                     tick(1);
@@ -2310,38 +2301,90 @@ int main(int argc, char** argv) {
                 const auto qr_top = recovery_qr_top(wide_offer);
                 require(qr_top >= last_qr_top && qr_top - last_qr_top <= 2,
                         "wide recovery advances monotonically without a pixel jump");
-                const bool reason_visible = qr_top >= kRecoveryTitleBottom;
                 const bool action_visible = qr_top >= kRecoveryActionBottom;
-                if (!reason_at && reason_visible) {
-                    reason_at = time;
-                }
                 if (!action_at && action_visible) {
                     action_at = time;
                 }
                 last_qr_top = qr_top;
-                require((visible_label(screen, test.reason) != nullptr) == reason_visible &&
-                            (visible_label(screen, test.action) != nullptr) == action_visible,
-                        "each line appears at the first clear frame and stays visible");
-                check_manual(reason_visible ? test.reason : "", action_visible ? test.action : "",
-                             qr_top);
-                require(manual_unchanged(),
-                        "all manual glyph pixels remain fixed and fully visible");
+                require((visible_label(screen, test.action) != nullptr) == action_visible,
+                        "the action appears at its first clear frame and stays visible");
+                require(!visible_label(screen, "Checking that network"),
+                        "the previous Checking text is absent throughout failure entry");
+                std::array<lv_area_t, moving.size()> boxes{};
+                std::array<bool, moving.size()> drawn{};
+                for (std::size_t index = 0; index < moving.size(); ++index) {
+                    auto* const label = visible_label(screen, moving[index]);
+                    require(label, "the exact cause and each complete manual label are retained");
+                    lv_obj_get_coords(label, &boxes[index]);
+                    const auto& box = boxes[index];
+                    if (lv_obj_get_style_text_opa(label, LV_PART_MAIN) < LV_OPA_MIN) {
+                        require(index >= 3, "reason and network stay readable through the entry");
+                        continue;
+                    }
+                    drawn[index] = true;
+                    require(box.x1 >= theme::kCanvasContent.x && box.x2 < w &&
+                                box.y1 >= theme::kCanvasContent.y && box.y2 < h &&
+                                (box.x2 < kSetupQrLeft || box.y2 < qr_top ||
+                                 box.y1 >= qr_top + kSetupQrSide),
+                            "every painted box stays in the canvas outside the complete QR");
+                    for (std::size_t previous = 0; previous < index; ++previous) {
+                        if (drawn[previous]) {
+                            const auto& other = boxes[previous];
+                            require(box.y2 < other.y1 || box.y1 > other.y2,
+                                    "animated labels never paint over another label");
+                        }
+                    }
+                    if (index > 0 && previous_ink[index] && box.y1 != preceding[index].y1) {
+                        require(std::abs(box.y1 - preceding[index].y1) <= 1,
+                                "a visible manual label does not snap");
+                        manual_moved[(index - 1) / 2] = true;
+                    }
+                }
+                if (time == 0) {
+                    const auto& reason = boxes[0];
+                    unsigned ink = 0;
+                    for (auto y = reason.y1; y <= reason.y2; ++y) {
+                        for (auto x = reason.x1; x <= reason.x2; ++x) {
+                            ink += pixels[y * w + x] != pixels[0] ? 1U : 0U;
+                        }
+                    }
+                    require(ink > 0 && reason.y2 < boxes[1].y1 && reason.x2 < kSetupQrLeft,
+                            "the first failed frame paints the exact reason beside the intact QR");
+                    require(drawn[3] && drawn[4] && drawn[5] && drawn[6] &&
+                                boxes[1].x1 == boxes[5].x1 && boxes[5].y1 < boxes[3].y1 &&
+                                boxes[4].x2 >= kSetupQrLeft,
+                            "manual fields start with the Checking order and full password width");
+                }
+                preceding = boxes;
+                previous_ink = drawn;
             }
-            require(reason_at > 0 && reason_at < action_at && action_at < kRecoveryQrEntryMs &&
-                        last_qr_top == kFailureQrTop,
-                    "both final lines arrive progressively before the QR finishes");
-            std::printf("QR entry %.*s / %s: reason=%u ms, action=%u ms, endpoint=%d\n",
+            require(action_at > 0 && action_at < kRecoveryQrEntryMs &&
+                        last_qr_top == kFailureQrTop &&
+                        std::all_of(
+                            manual_moved.begin(), manual_moved.end(),
+                            [](const bool moved) { return moved; }),
+                    "QR, action and all three manual rows settle through the shared entry");
+            std::printf("QR and manual entry %.*s / %s: reason=0 ms, action=%u ms, endpoint=%d\n",
                         static_cast<int>(wide_network.size()), wide_network.data(), test.reason,
-                        reason_at, action_at, last_qr_top);
+                        action_at, last_qr_top);
+            const auto settled_positions = preceding;
             unsigned time = kRecoveryQrEntryMs;
             for (const auto target : {824U, 825U, 826U, 934U, 935U, 936U, 1100U}) {
                 while (time < target) {
                     const auto step = std::min(16U, target - time);
                     tick(step);
                     time += step;
-                    require(qr_matches(kFailureQrTop) && manual_unchanged(),
-                            "wide recovery holds the final QR and manual rows through the ramp");
+                    require(qr_matches(kFailureQrTop),
+                            "wide recovery holds the final QR through the copy ramp");
                     check_manual(test.reason, test.action, kFailureQrTop);
+                    for (std::size_t index = 1; index < moving.size(); ++index) {
+                        lv_area_t box{};
+                        lv_obj_get_coords(visible_label(screen, moving[index]), &box);
+                        const auto& settled = settled_positions[index];
+                        require(box.x1 == settled.x1 && box.y1 == settled.y1 &&
+                                    box.x2 == settled.x2 && box.y2 == settled.y2,
+                                "manual boxes hold their final positions through the copy ramp");
+                    }
                 }
             }
             require(!tick(16), "wide recovery copy settles without idle work");

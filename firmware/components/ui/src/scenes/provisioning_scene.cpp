@@ -42,7 +42,13 @@ constexpr std::string_view kTag = diagnostics::tag::kUi;
 //   - A full-width StateTitle row does not fit beside a 164 px block and a 40 px password
 //     row: 24 + 164 + 40 exceeds the 216 px of content height. The title therefore joins
 //     the text column, at Body, and that is the one presentation the QR cost.
-constexpr std::uint32_t kRecoveryQrEntryMs = 180;
+constexpr std::uint32_t kRecoveryEntryMs = 180;
+constexpr std::int32_t kRecoveryProgressEnd = LV_BEZIER_VAL_MAX;
+// Address and Password exchange vertical order. Reflow the wider password at the
+// invisible point of the exchange, while the intact QR remains the primary route.
+constexpr std::int32_t kManualFadeOutEnd = kRecoveryProgressEnd / 6;
+constexpr std::int32_t kManualReflow = kRecoveryProgressEnd / 4;
+constexpr std::int32_t kManualFadeInStart = kRecoveryProgressEnd / 3;
 constexpr std::int32_t kFailureTitleY = theme::kCanvasContent.y;
 constexpr std::int32_t kFailureCopyGap = theme::kSpace1 / 2;
 constexpr std::int32_t kFailureActionY = kFailureTitleY + theme::kLineTitle + kFailureCopyGap;
@@ -340,9 +346,9 @@ void ProvisioningScene::apply_qr() {
     }
 
     was_drawn_ = false;
-    if (recovery_qr_clock_.armed) {
-        recovery_qr_clock_.clear();
-        place_recovery_qr(kRecoveryQrY);
+    if (recovery_entry_clock_.armed) {
+        recovery_entry_clock_.clear();
+        place_recovery_entry(kRecoveryProgressEnd);
     }
 }
 
@@ -419,81 +425,133 @@ void ProvisioningScene::set_row(const RowIndex index, const std::string_view val
     }
 }
 
-void ProvisioningScene::layout_recovery_rows() {
-    // Preserve the approved settled layout, including a wrapped generated password.
+void ProvisioningScene::set_row_style(const std::size_t index, const bool recovery) {
+    const RowBox& box = kRowBoxes[index];
+    Row& current = rows_[index];
+    const auto width = recovery ? kColumnWidth : box.width;
+    const auto alignment = recovery ? LV_TEXT_ALIGN_LEFT : box.align;
+    lv_obj_set_width(current.caption, width);
+    lv_obj_set_style_text_align(current.caption, alignment, LV_PART_MAIN);
+    lv_obj_set_width(current.value, width);
+    lv_obj_set_style_text_align(current.value, alignment, LV_PART_MAIN);
+    theme::apply_text_style(current.value, recovery ? theme::TextRole::Body : kValueRoles[index],
+                            recovery ? theme::Colour::Primary : kValueColours[index]);
+}
+
+void ProvisioningScene::layout_recovery_rows(const std::int32_t progress) {
+    // Measure the real wrapped rows after the password takes the recovery width and role.
     constexpr auto gap_count = static_cast<std::int32_t>(kRowCount) - 1;
     std::array<std::int32_t, kRowCount> row_heights{};
     std::int32_t height = theme::kSpaceCompact * gap_count;
+    lv_obj_update_layout(root_);
     for (std::size_t index = 0; index < kRowCount; ++index) {
         lv_obj_t* const value = rows_[index].value;
-        lv_obj_update_layout(value);
         row_heights[index] =
             theme::kLineCaption + std::max(theme::kLineBody, lv_obj_get_height(value));
         height += row_heights[index];
     }
 
+    const auto shift = theme::kSpace1 - (theme::kSpace1 * progress / kRecoveryProgressEnd);
     auto y = kRecoveryQrY + std::max<std::int32_t>(0, (kQrBlock - height) / 2);
     for (std::size_t index = 0; index < kRowCount; ++index) {
-        lv_obj_set_pos(rows_[index].caption, kColumnX, y);
-        lv_obj_set_pos(rows_[index].value, kColumnX, y + theme::kLineCaption);
+        const auto row_y = index == static_cast<std::size_t>(RowIndex::Network)
+                               ? lv_map(progress, 0, kRecoveryProgressEnd, kNetworkY, y)
+                               : y + shift;
+        lv_obj_set_pos(rows_[index].caption, kColumnX, row_y);
+        lv_obj_set_pos(rows_[index].value, kColumnX, row_y + theme::kLineCaption);
         y += row_heights[index] + theme::kSpaceCompact;
     }
 }
 
-void ProvisioningScene::place_recovery_qr(const std::int32_t y) {
-    if (lv_obj_get_style_y(qr_panel_, LV_PART_MAIN) != y) {
-        lv_obj_set_y(qr_panel_, y);
-    }
+void ProvisioningScene::place_recovery_copy(const std::int32_t qr_y) {
     if (!session_drawable_) {
         return;
     }
+    // The exact reason fits beside the QR at Body size until its StateTitle box clears.
+    // Keep the approved full-width action below it once the action's own box is clear.
+    const bool full_title = qr_y >= kFailureTitleY + theme::kLineTitle;
+    const auto width = full_title ? theme::kCanvasContent.width : kColumnWidth;
+    if (lv_obj_get_style_width(title_, LV_PART_MAIN) != width) {
+        lv_obj_set_width(title_, width);
+        theme::apply_text_style(title_,
+                                full_title ? theme::TextRole::StateTitle : theme::TextRole::Body,
+                                theme::Colour::Primary);
+    }
+    if (phase_ == app_model::ProvisioningPhase::SetupFailed &&
+        qr_y >= kFailureActionY + theme::kLineBody) {
+        lv_obj_remove_flag(action_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(action_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
 
-    // Reveal each final line box as soon as the complete QR and its quiet zone clear it.
-    const auto show_copy = [y](lv_obj_t* label, const std::int32_t bottom, const bool present) {
-        if (present && y >= bottom) {
-            lv_obj_remove_flag(label, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+void ProvisioningScene::place_recovery_entry(const std::int32_t progress) {
+    constexpr auto half = kRecoveryProgressEnd / 2;
+    const auto travel = kRecoveryQrY - kQrBlockRect.y;
+    const auto qr_y = kQrBlockRect.y + ((travel * progress + half) / kRecoveryProgressEnd);
+    if (lv_obj_get_style_y(qr_panel_, LV_PART_MAIN) != qr_y) {
+        lv_obj_set_y(qr_panel_, qr_y);
+    }
+    place_recovery_copy(qr_y);
+
+    if (progress >= kManualReflow) {
+        if (recovery_progress_ < kManualReflow) {
+            set_row_style(static_cast<std::size_t>(RowIndex::Password), true);
+            set_row_style(static_cast<std::size_t>(RowIndex::Address), true);
         }
-    };
-    show_copy(title_, kFailureTitleY + theme::kLineTitle, true);
-    show_copy(action_, kFailureActionY + theme::kLineBody,
-              phase_ == app_model::ProvisioningPhase::SetupFailed);
+        const auto entry =
+            lv_map(progress, kManualReflow, kRecoveryProgressEnd, 0, kRecoveryProgressEnd);
+        layout_recovery_rows(entry);
+        auto* const network = row(RowIndex::Network).value;
+        const auto primary = theme::colour(theme::Colour::Primary);
+        const auto secondary = theme::colour(theme::Colour::Secondary);
+        const auto level =
+            lv_map(entry, 0, kRecoveryProgressEnd, 0, theme::opacity(theme::Opacity::Full));
+        const auto colour = lv_color_mix(primary, secondary, static_cast<std::uint8_t>(level));
+        if (!lv_color_eq(lv_obj_get_style_text_color(network, LV_PART_MAIN), colour)) {
+            lv_obj_set_style_text_color(network, colour, LV_PART_MAIN);
+        }
+    } else {
+        const auto drift = theme::kSpace1 * progress / kManualReflow;
+        for (const auto index : {RowIndex::Password, RowIndex::Address}) {
+            const auto y = kRowBoxes[static_cast<std::size_t>(index)].y + drift;
+            Row& current = row(index);
+            lv_obj_set_y(current.caption, y);
+            lv_obj_set_y(current.value, y + theme::kLineCaption);
+        }
+    }
+    recovery_progress_ = progress;
 }
 
 void ProvisioningScene::layout_session(const bool recovery) {
     recovery_layout_ = recovery;
-    theme::apply_text_style(title_, recovery ? theme::TextRole::StateTitle : theme::TextRole::Body,
-                            theme::Colour::Primary);
-    lv_obj_set_width(title_, recovery ? theme::kCanvasContent.width : kColumnWidth);
     lv_obj_remove_flag(title_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_pos(title_, kColumnX, recovery ? kFailureTitleY : kTitleY);
 
+    if (recovery) {
+        session_running_ = false;
+        session_clock_.clear();
+        if (recovery_entry_clock_.armed) {
+            place_recovery_entry(0);
+            return;
+        }
+    } else {
+        recovery_entry_clock_.clear();
+        theme::apply_text_style(title_, theme::TextRole::Body, theme::Colour::Primary);
+        lv_obj_set_width(title_, kColumnWidth);
+    }
+
+    recovery_progress_ = kRecoveryProgressEnd;
     for (std::size_t index = 0; index < kRowCount; ++index) {
-        const RowBox& box = kRowBoxes[index];
+        const auto& box = kRowBoxes[index];
         Row& current = rows_[index];
-        const auto width = recovery ? kColumnWidth : box.width;
-        const auto alignment = recovery ? LV_TEXT_ALIGN_LEFT : box.align;
-        lv_obj_set_width(current.caption, width);
-        lv_obj_set_style_text_align(current.caption, alignment, LV_PART_MAIN);
-        lv_obj_set_width(current.value, width);
-        lv_obj_set_style_text_align(current.value, alignment, LV_PART_MAIN);
-        theme::apply_text_style(current.value,
-                                recovery ? theme::TextRole::Body : kValueRoles[index],
-                                recovery ? theme::Colour::Primary : kValueColours[index]);
+        set_row_style(index, recovery);
         if (!recovery) {
             lv_obj_set_pos(current.caption, box.x, box.y);
             lv_obj_set_pos(current.value, box.x, box.y + theme::kLineCaption);
         }
     }
-    if (recovery) {
-        // The failure composition uses fully visible credentials from its first frame.
-        session_running_ = false;
-        session_clock_.clear();
-    } else {
-        recovery_qr_clock_.clear();
-    }
-    lv_obj_set_y(qr_panel_, recovery && !recovery_qr_clock_.armed ? kRecoveryQrY : kQrBlockRect.y);
+    lv_obj_set_y(qr_panel_, recovery ? kRecoveryQrY : kQrBlockRect.y);
 }
 
 // The shared full-screen message composition — the one every family that states a condition in
@@ -776,7 +834,7 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
     if (layout_changed) {
 #ifndef PRD_OLD_SETUP_QR_SNAP
         if (failed && previously_offering_network && !returning_from_statement && was_drawn_) {
-            recovery_qr_clock_.arm();
+            recovery_entry_clock_.arm();
         }
 #endif
         layout_session(use_recovery_layout);
@@ -786,9 +844,9 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
     const bool title_changed = title_text != lv_label_get_text(title_);
 
     // These are changes INSIDE the same scene, so the controller's scene-entry clock does not
-    // see them. Bind the new status now. On first failure each line waits only for its
-    // final box to clear the QR. The manual rows stay readable and the QR never restarts
-    // during a retry. Ordinary setup retains its existing scene entry and title ramp.
+    // see them. Bind the new status now. First failure starts the intact QR and manual
+    // rows moving while the exact reason is already readable beside the QR. The movement
+    // never restarts during a retry. Ordinary setup keeps its existing title ramp.
 #ifndef PRD_OLD_SETUP_PHASE_STATIC
     const bool ordinary_phase_changed = phase_seen_ && phase != phase_ && !running_;
     const bool recovery_copy_changed =
@@ -824,9 +882,10 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
     }
 
     if (recovery_layout_) {
-        place_recovery_qr(lv_obj_get_style_y(qr_panel_, LV_PART_MAIN));
+        place_recovery_copy(lv_obj_get_style_y(qr_panel_, LV_PART_MAIN));
     }
-    if (recovery_layout_ && (layout_changed || returning_from_statement)) {
+    if (recovery_layout_ && !recovery_entry_clock_.armed &&
+        (layout_changed || returning_from_statement)) {
         layout_recovery_rows();
     }
     if (phase_running_ || recovery_layout_) {
@@ -862,7 +921,7 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
     // cannot disagree about which network they describe, which is the failure that would
     // make the QR worse than useless: a code that joins something the panel does not name.
     apply_qr();
-    if (recovery_layout_) {
+    if (recovery_layout_ && !recovery_entry_clock_.armed) {
         layout_recovery_rows();
     }
     if (!previously_offering_network) {
@@ -920,7 +979,7 @@ void ProvisioningScene::apply_session(const SetupSession& session) {
     set_row(RowIndex::Password, session_.password.view());
     set_row(RowIndex::Address, session_.url.view());
     apply_qr();
-    if (recovery_layout_) {
+    if (recovery_layout_ && !recovery_entry_clock_.armed) {
         layout_recovery_rows();
     }
     if (!had_session) {
@@ -1025,9 +1084,19 @@ void ProvisioningScene::paint_session(const std::int32_t level) {
     theme::apply_text_level(title_, theme::Opacity::Full, title_level);
     theme::apply_text_level(action_, theme::Opacity::Full, title_level);
 
-    for (auto& current : rows_) {
-        theme::apply_text_level(current.caption, theme::Opacity::Full, session_level);
-        theme::apply_text_level(current.value, theme::Opacity::Full, session_level);
+    auto exchange_level = session_level;
+    if (recovery_entry_clock_.armed) {
+        exchange_level = recovery_progress_ < kManualReflow
+                             ? lv_map(recovery_progress_, 0, kManualFadeOutEnd, session_level, 0)
+                             : lv_map(recovery_progress_, kManualFadeInStart, kRecoveryProgressEnd,
+                                      0, session_level);
+    }
+    for (std::size_t index = 0; index < kRowCount; ++index) {
+        Row& current = rows_[index];
+        const auto row_level =
+            index == static_cast<std::size_t>(RowIndex::Network) ? session_level : exchange_level;
+        theme::apply_text_level(current.caption, theme::Opacity::Full, row_level);
+        theme::apply_text_level(current.value, theme::Opacity::Full, row_level);
     }
 
     if (qr_panel_ != nullptr) {
@@ -1074,7 +1143,7 @@ void ProvisioningScene::paint(const std::int32_t level) {
 }
 
 bool ProvisioningScene::step(const bool panel_visible, const std::uint32_t now) {
-    if (!running_ && !phase_running_ && !session_running_ && !recovery_qr_clock_.armed) {
+    if (!running_ && !phase_running_ && !session_running_ && !recovery_entry_clock_.armed) {
         return false;
     }
 
@@ -1116,20 +1185,20 @@ bool ProvisioningScene::step(const bool panel_visible, const std::uint32_t now) 
         }
     }
 
-    if (recovery_qr_clock_.advance(panel_visible, now)) {
-        const auto elapsed = recovery_qr_clock_.elapsed();
-        if (elapsed >= kRecoveryQrEntryMs) {
-            recovery_qr_clock_.clear();
-            place_recovery_qr(kRecoveryQrY);
+    if (recovery_entry_clock_.advance(panel_visible, now)) {
+        const auto elapsed = recovery_entry_clock_.elapsed();
+        if (elapsed >= kRecoveryEntryMs) {
+            recovery_entry_clock_.clear();
+            place_recovery_entry(kRecoveryProgressEnd);
         } else {
-            constexpr std::int32_t bezier_max = LV_BEZIER_VAL_MAX;
-            const auto time =
-                lv_map(static_cast<std::int32_t>(elapsed), 0, kRecoveryQrEntryMs, 0, bezier_max);
+            const auto time = lv_map(static_cast<std::int32_t>(elapsed), 0, kRecoveryEntryMs, 0,
+                                     kRecoveryProgressEnd);
             const auto eased =
                 lv_cubic_bezier(time, LV_BEZIER_VAL_FLOAT(0.25), LV_BEZIER_VAL_FLOAT(0.1),
-                                LV_BEZIER_VAL_FLOAT(0.25), bezier_max);
-            const auto travel = kRecoveryQrY - kQrBlockRect.y;
-            place_recovery_qr(kQrBlockRect.y + ((travel * eased + bezier_max / 2) / bezier_max));
+                                LV_BEZIER_VAL_FLOAT(0.25), kRecoveryProgressEnd);
+            if (eased != recovery_progress_) {
+                place_recovery_entry(eased);
+            }
         }
     }
 
@@ -1146,7 +1215,7 @@ bool ProvisioningScene::step(const bool panel_visible, const std::uint32_t now) 
     }
 
     paint(level_ < 0 ? theme::opacity(theme::Opacity::Full) : level_);
-    return running_ || phase_running_ || session_running_ || recovery_qr_clock_.armed;
+    return running_ || phase_running_ || session_running_ || recovery_entry_clock_.armed;
 }
 
 } // namespace prd::ui::scene
