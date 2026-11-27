@@ -2218,6 +2218,50 @@ int main(int argc, char** argv) {
         };
 
         auto* screen = lv_screen_active();
+        const auto title_ink = [&](lv_obj_t* const title) {
+            // Isolate the renderer's actual ink, including pixels a sibling could cover.
+            // The title's transparent layout bounds do not describe its animated glyphs.
+            const auto composed = pixels;
+            lv_obj_add_flag(title, LV_OBJ_FLAG_HIDDEN);
+            lv_refr_now(d);
+            const auto beneath = pixels;
+            lv_obj_remove_flag(title, LV_OBJ_FLAG_HIDDEN);
+
+            auto* const parent = lv_obj_get_parent(title);
+            std::vector<lv_obj_t*> siblings;
+            for (std::uint32_t index = 0; index < lv_obj_get_child_count(parent); ++index) {
+                auto* const child = lv_obj_get_child(parent, static_cast<std::int32_t>(index));
+                if (child != title && !lv_obj_has_flag(child, LV_OBJ_FLAG_HIDDEN)) {
+                    siblings.push_back(child);
+                    lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN);
+                }
+            }
+            lv_refr_now(d);
+
+            lv_area_t ink{w, h, 0, 0};
+            for (int y = 0; y < h; ++y) {
+                for (int x = 0; x < w; ++x) {
+                    const auto index = static_cast<std::size_t>(y * w + x);
+                    if (pixels[index] != pixels.front()) {
+                        require(beneath[index] == pixels.front() &&
+                                    composed[index] == pixels[index],
+                                "title ink avoids the complete QR, the action and all manual ink");
+                        ink.x1 = std::min<std::int32_t>(ink.x1, x);
+                        ink.y1 = std::min<std::int32_t>(ink.y1, y);
+                        ink.x2 = std::max<std::int32_t>(ink.x2, x);
+                        ink.y2 = std::max<std::int32_t>(ink.y2, y);
+                    }
+                }
+            }
+            require(ink.x1 <= ink.x2 && ink.y1 <= ink.y2,
+                    "the truthful title has actual native ink on every frame");
+            for (auto* const sibling : siblings) {
+                lv_obj_remove_flag(sibling, LV_OBJ_FLAG_HIDDEN);
+            }
+            lv_refr_now(d);
+            require(pixels == composed, "isolating title ink preserves the full ordinary frame");
+            return ink;
+        };
         const auto check_manual = [&](const std::string_view reason, const std::string_view action,
                                       const int qr_top) {
             auto bottom = theme::kCanvasContent.y - 1;
@@ -2242,6 +2286,11 @@ int main(int argc, char** argv) {
                             lv_area_get_width(&box) == theme::kCanvasContent.width &&
                             lv_area_get_height(&box) == height,
                         "wide setup copy starts in its final native rectangles");
+                const auto role =
+                    text == reason ? theme::TextRole::StateTitle : theme::TextRole::Body;
+                require(lv_obj_get_style_text_font(label, LV_PART_MAIN) ==
+                            prd::ui::fonts::for_role(role),
+                        "the settled reason and action use their exact native type roles");
                 bottom = box.y2;
             }
             for (const auto text : manual) {
@@ -2306,19 +2355,48 @@ int main(int argc, char** argv) {
                     action_at = time;
                 }
                 last_qr_top = qr_top;
-                require((visible_label(screen, test.action) != nullptr) == action_visible,
+                const auto* const action = visible_label(screen, test.action);
+                require((action != nullptr) == action_visible,
                         "the action appears at its first clear frame and stays visible");
                 require(!visible_label(screen, "Checking that network"),
                         "the previous Checking text is absent throughout failure entry");
                 std::array<lv_area_t, moving.size()> boxes{};
                 std::array<bool, moving.size()> drawn{};
-                for (std::size_t index = 0; index < moving.size(); ++index) {
+                auto* const title = visible_label(screen, test.reason);
+                require(title, "the current reason is retained");
+                boxes[0] = title_ink(title);
+                drawn[0] = true;
+                const auto& reason = boxes[0];
+                require(reason.x1 >= theme::kCanvasContent.x &&
+                            reason.x2 < theme::kCanvasContent.right() &&
+                            reason.y1 >= theme::kCanvasContent.y && reason.y2 < h,
+                        "the animated reason stays inside the inset");
+                if (time == 48) {
+                    require(std::abs(reason.x2 - preceding[0].x2) <= theme::kSpace1 &&
+                                std::abs(reason.y2 - preceding[0].y2) <= theme::kSpace1 / 2,
+                            "native title ink advances without the old 47-to-48 ms role snap");
+                }
+                if (action != nullptr) {
+                    lv_area_t action_box{};
+                    lv_obj_get_coords(action, &action_box);
+                    require(reason.y2 < action_box.y1 && action_box.y2 < qr_top,
+                            "the title clears the action before its original QR-safe reveal");
+                    bool action_ink = false;
+                    for (int y = action_box.y1; y <= action_box.y2; ++y) {
+                        const auto row = pixels.begin() + y * w + action_box.x1;
+                        action_ink |=
+                            std::any_of(row, row + lv_area_get_width(&action_box),
+                                        [&](const auto pixel) { return pixel != pixels.front(); });
+                    }
+                    require(action_ink, "the action has actual visible ink on its reveal frame");
+                }
+                for (std::size_t index = 1; index < moving.size(); ++index) {
                     auto* const label = visible_label(screen, moving[index]);
                     require(label, "the exact cause and each complete manual label are retained");
                     lv_obj_get_coords(label, &boxes[index]);
                     const auto& box = boxes[index];
                     if (lv_obj_get_style_text_opa(label, LV_PART_MAIN) < LV_OPA_MIN) {
-                        require(index >= 3, "reason and network stay readable through the entry");
+                        require(index >= 3, "network stays readable through the entry");
                         continue;
                     }
                     drawn[index] = true;
@@ -2334,22 +2412,17 @@ int main(int argc, char** argv) {
                                     "animated labels never paint over another label");
                         }
                     }
-                    if (index > 0 && previous_ink[index] && box.y1 != preceding[index].y1) {
+                    if (previous_ink[index] && box.y1 != preceding[index].y1) {
                         require(std::abs(box.y1 - preceding[index].y1) <= 1,
                                 "a visible manual label does not snap");
                         manual_moved[(index - 1) / 2] = true;
                     }
                 }
                 if (time == 0) {
-                    const auto& reason = boxes[0];
-                    unsigned ink = 0;
-                    for (auto y = reason.y1; y <= reason.y2; ++y) {
-                        for (auto x = reason.x1; x <= reason.x2; ++x) {
-                            ink += pixels[y * w + x] != pixels[0] ? 1U : 0U;
-                        }
-                    }
-                    require(ink > 0 && reason.y2 < boxes[1].y1 && reason.x2 < kSetupQrLeft,
-                            "the first failed frame paints the exact reason beside the intact QR");
+                    require(reason.y2 < boxes[1].y1 && reason.x2 < kSetupQrLeft &&
+                                lv_obj_get_style_text_font(title, LV_PART_MAIN) ==
+                                    prd::ui::fonts::for_role(theme::TextRole::Body),
+                            "the first frame paints the native compact reason beside the QR");
                     require(drawn[3] && drawn[4] && drawn[5] && drawn[6] &&
                                 boxes[1].x1 == boxes[5].x1 && boxes[5].y1 < boxes[3].y1 &&
                                 boxes[4].x2 >= kSetupQrLeft,
@@ -2358,11 +2431,9 @@ int main(int argc, char** argv) {
                 preceding = boxes;
                 previous_ink = drawn;
             }
-            require(action_at > 0 && action_at < kRecoveryQrEntryMs &&
-                        last_qr_top == kFailureQrTop &&
-                        std::all_of(
-                            manual_moved.begin(), manual_moved.end(),
-                            [](const bool moved) { return moved; }),
+            require(action_at == 91 && last_qr_top == kFailureQrTop &&
+                        std::all_of(manual_moved.begin(), manual_moved.end(),
+                                    [](const bool moved) { return moved; }),
                     "QR, action and all three manual rows settle through the shared entry");
             std::printf("QR and manual entry %.*s / %s: reason=0 ms, action=%u ms, endpoint=%d\n",
                         static_cast<int>(wide_network.size()), wide_network.data(), test.reason,

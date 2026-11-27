@@ -60,7 +60,7 @@ class SetupTitleMotion {
         const auto suffix_width = lv_text_get_width(
             text.data() + split, static_cast<std::uint32_t>(text.size() - split), body, &wrap);
         const auto side_room =
-            std::clamp(compact_width - suffix_width - theme::kSpace1, 0, body_join);
+            std::clamp<std::int32_t>(compact_width - suffix_width - theme::kSpace1, 0, body_join);
         const auto shift_x =
             mix(0.0F, static_cast<float>(side_room), ease(progress, 0.0F, wrap_clear)) +
             mix(static_cast<float>(side_room - body_join), 0.0F,
@@ -145,12 +145,12 @@ class SetupTitleMotion {
         }
 
         float sample(float u, float v) const {
-            const auto x = u * metrics.box_w - 0.5F;
-            const auto y = v * metrics.box_h - 0.5F;
-            const auto col = static_cast<int>(std::floor(x));
-            const auto row = static_cast<int>(std::floor(y));
-            const auto dx = x - static_cast<float>(col);
-            const auto dy = y - static_cast<float>(row);
+            const auto sample_x = u * metrics.box_w - 0.5F;
+            const auto sample_y = v * metrics.box_h - 0.5F;
+            const auto col = static_cast<int>(std::floor(sample_x));
+            const auto row = static_cast<int>(std::floor(sample_y));
+            const auto dx = sample_x - static_cast<float>(col);
+            const auto dy = sample_y - static_cast<float>(row);
             return mix(mix(pixel(col, row), pixel(col + 1, row), dx),
                        mix(pixel(col, row + 1), pixel(col + 1, row + 1), dx), dy);
         }
