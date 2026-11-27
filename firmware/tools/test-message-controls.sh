@@ -50,7 +50,7 @@ DEFS=(-DPRD_ASAN_MODE="$MODE" -DLV_CONF_INCLUDE_SIMPLE -DPRD_QR_TEMP_AUDIT)
 
 # Restore the old title layout from dbdc99b619a6991ae9750c6a2f13b3218ed85b62
 # (provisioning_scene.cpp blob a783dd831480d078d7b40c8100b03a9d6a1b978f).
-# It precedes the cumulative patch d7dcdaf00e04d9963d84b8d45e13f4d923f669ed2f7eda6b0fdbfa7e79724b33.
+# This source tree is the result of applying the cumulative patch d7dcdaf00e04d9963d84b8d45e13f4d923f669ed2f7eda6b0fdbfa7e79724b33.
 # Leave the QR, action and row paths alone.
 restore_setup_title_snap() {
  python3 - "$1" "$2" <<'PY'
