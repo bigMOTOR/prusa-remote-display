@@ -42,6 +42,7 @@
 #include <filesystem>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace prd::diagnostics {
@@ -70,6 +71,11 @@ constexpr int kFailureQrTop = 66;
 constexpr unsigned kRecoveryQrEntryMs = 180;
 constexpr int kRecoveryTitleBottom = theme::kCanvasContent.y + theme::kLineTitle;
 constexpr int kRecoveryActionBottom = kRecoveryTitleBottom + theme::kSpace1 / 2 + theme::kLineBody;
+// The accepted native replay moves each ink edge at most 5 px per millisecond.
+// Allow one pixel of rounding. The largest RGB565 change is 2464 pixels;
+// 2472 is the exclusive limit for the accepted full transition.
+constexpr int kMaxTitleEdgeStep = 6;
+constexpr unsigned kTitlePixelChangeLimit = 2472;
 int setup_phase_qr_top = kSetupQrTop;
 
 void require(bool ok, const char* why) {
@@ -1445,24 +1451,59 @@ int main(int argc, char** argv) {
                     count_colour(pixels, light) < 1000,
                 "the previous network, password and QR are gone in the first frame");
     };
+    const auto failure_copy_hidden = [&] {
+        return !visible_label(setup_screen, "Printer response incomplete") &&
+               !visible_label(setup_screen, "Check the PrusaLink address.");
+    };
     start_in_flight();
     controller::apply(back);
     recovery_qr_visible = false;
     tick(0);
     retired();
+    require(failure_copy_hidden(), "Back retires both failure lines on the first frame");
+
+    const auto ota_fault = fault(DeviceFaultReason::OtaValidationFailure);
+    controller::apply(ota_fault);
+    tick(0);
+    tick(1120);
+    const auto standalone_statement = pixels;
     start_in_flight();
-    controller::apply(fault(DeviceFaultReason::OtaValidationFailure));
+    auto statement_over_failure = failed;
+    statement_over_failure.layer = ota_fault.layer;
+    statement_over_failure.device_fault = ota_fault.device_fault;
+    controller::apply(statement_over_failure);
     recovery_qr_visible = false;
     tick(0);
     retired();
+    require(failure_copy_hidden(), "a device statement immediately retires both failure lines");
+    tick(1120);
+    require(pixels == standalone_statement,
+            "a statement over an in-flight failure has no residual setup ink");
     controller::apply(failed);
     recovery_qr_visible = true;
     tick(0);
-    require(same_code(pixels, kFailureQrTop), "return from a statement draws the settled QR");
+    require(same_code(pixels, kFailureQrTop) &&
+                visible_label(setup_screen, "Printer response incomplete") &&
+                visible_label(setup_screen, "Check the PrusaLink address."),
+            "return from a statement draws the current failure and settled QR");
+
     start_in_flight();
     controller::clear_setup_session();
     tick(0);
     retired();
+    tick(1120);
+    retired();
+    const auto cleared_failure = pixels;
+    blank();
+    recovery_qr_visible = false;
+    controller::apply(failed);
+    tick(0);
+    retired();
+    tick(1120);
+    retired();
+    require(visible_label(setup_screen, "Printer response incomplete") && pixels == cleared_failure,
+            "failure without a retained session settles without stale title or credential ink");
+
     start_in_flight();
     auto new_session = session;
     require(new_session.ssid.assign("PRD-Setup-BEEF") &&
@@ -2185,8 +2226,8 @@ int main(int argc, char** argv) {
     }
     std::puts("PASS erase activity cadence, boundaries, idle, Off pause, re-entry, invariance");
 
-    // Generated-width credentials must fit beneath the longest compact failure copy
-    // through the first entry in all accepted cases. These passwords use the allowed alphabet.
+    // Every user-visible failure cause follows the real controller through the complete first
+    // entry, including both generated-width credential fixtures.
     for (const auto wide_network :
          {std::string_view{"PRD-Setup-FFFF"}, std::string_view{"PRD-Setup-AAAA"}}) {
         // AAAA is a widest allowed hex suffix in the committed Body face (125 px
@@ -2209,16 +2250,22 @@ int main(int argc, char** argv) {
             {{Stage::Status, Reason::TransportFailed, 200},
              "Printer response incomplete",
              "Check the PrusaLink address."},
-            {{Stage::VersionProbe, Reason::Unauthorized, 403},
-             "Printer access denied",
-             "Check the PrusaLink API key."},
+            {{Stage::Status, Reason::None, 0}, "That did not work", "Scan the QR code."},
+            {{Stage::Status, Reason::Timeout, 0}, "No reply", "Try again."},
             {{Stage::VersionProbe, Reason::Unreachable, 0},
              "Printer unreachable",
              "Check printer power and address."},
+            {{Stage::VersionProbe, Reason::Unauthorized, 403},
+             "Printer access denied",
+             "Check the PrusaLink API key."},
+            {{Stage::Status, Reason::PrinterError, 503}, "Server error", "Try again."},
+            {{Stage::Status, Reason::HostUnusable, 0}, "No link", "Scan the QR code."},
+            {{Stage::Status, Reason::MalformedBody, 200}, "Bad reply", "Scan the QR code."},
         };
 
         auto* screen = lv_screen_active();
-        const auto title_ink = [&](lv_obj_t* const title) {
+        Frame previous_title{};
+        const auto title_ink = [&](lv_obj_t* const title, const int qr_top) {
             // Isolate the renderer's actual ink, including pixels a sibling could cover.
             // The title's transparent layout bounds do not describe its animated glyphs.
             const auto composed = pixels;
@@ -2239,13 +2286,20 @@ int main(int argc, char** argv) {
             lv_refr_now(d);
 
             lv_area_t ink{w, h, 0, 0};
+            unsigned ink_pixels = 0;
+            unsigned changed_pixels = 0;
             for (int y = 0; y < h; ++y) {
                 for (int x = 0; x < w; ++x) {
                     const auto index = static_cast<std::size_t>(y * w + x);
+                    changed_pixels += previous_title[index] != pixels[index];
                     if (pixels[index] != pixels.front()) {
-                        require(beneath[index] == pixels.front() &&
+                        const bool overlaps_qr = x >= kSetupQrLeft &&
+                                                 x < kSetupQrLeft + kSetupQrSide && y >= qr_top &&
+                                                 y < qr_top + kSetupQrSide;
+                        require(!overlaps_qr && beneath[index] == pixels.front() &&
                                     composed[index] == pixels[index],
                                 "title ink avoids the complete QR, the action and all manual ink");
+                        ++ink_pixels;
                         ink.x1 = std::min<std::int32_t>(ink.x1, x);
                         ink.y1 = std::min<std::int32_t>(ink.y1, y);
                         ink.x2 = std::max<std::int32_t>(ink.x2, x);
@@ -2253,14 +2307,14 @@ int main(int argc, char** argv) {
                     }
                 }
             }
-            require(ink.x1 <= ink.x2 && ink.y1 <= ink.y2,
-                    "the truthful title has actual native ink on every frame");
+            require(ink_pixels > 18, "the truthful title has actual native ink on every frame");
+            previous_title = pixels;
             for (auto* const sibling : siblings) {
                 lv_obj_remove_flag(sibling, LV_OBJ_FLAG_HIDDEN);
             }
             lv_refr_now(d);
             require(pixels == composed, "isolating title ink preserves the full ordinary frame");
-            return ink;
+            return std::pair{ink, changed_pixels};
         };
         const auto check_manual = [&](const std::string_view reason, const std::string_view action,
                                       const int qr_top) {
@@ -2343,6 +2397,23 @@ int main(int argc, char** argv) {
             std::array<bool, 3> manual_moved{};
             const std::array moving{test.reason, manual[0], manual[1], manual[2],
                                     manual[3],   manual[4], manual[5]};
+            struct TitleStep {
+                unsigned time;
+                int edge;
+                unsigned pixels;
+                lv_area_t from;
+                lv_area_t to;
+            };
+            const auto print_step = [&](const TitleStep& step, const char* metric) {
+                std::fprintf(stderr,
+                             "Title %s (%s) %s at %u->%u ms: edge=%d px, changed=%u RGB565 "
+                             "pixels, ink=(%d,%d,%d,%d)->(%d,%d,%d,%d)\n",
+                             test.reason, wide_network.data(), metric, step.time - 1, step.time,
+                             step.edge, step.pixels, step.from.x1, step.from.y1, step.from.x2,
+                             step.from.y2, step.to.x1, step.to.y1, step.to.x2, step.to.y2);
+            };
+            TitleStep peak_edge{};
+            TitleStep peak_pixels{};
             for (unsigned time = 0; time <= kRecoveryQrEntryMs; ++time) {
                 if (time > 0) {
                     tick(1);
@@ -2364,17 +2435,32 @@ int main(int argc, char** argv) {
                 std::array<bool, moving.size()> drawn{};
                 auto* const title = visible_label(screen, test.reason);
                 require(title, "the current reason is retained");
-                boxes[0] = title_ink(title);
+                const auto [reason, changed_pixels] = title_ink(title, qr_top);
+                boxes[0] = reason;
                 drawn[0] = true;
-                const auto& reason = boxes[0];
                 require(reason.x1 >= theme::kCanvasContent.x &&
                             reason.x2 < theme::kCanvasContent.right() &&
-                            reason.y1 >= theme::kCanvasContent.y && reason.y2 < h,
+                            reason.y1 >= theme::kCanvasContent.y &&
+                            reason.y2 < kRecoveryActionBottom,
                         "the animated reason stays inside the inset");
-                if (time == 48) {
-                    require(std::abs(reason.x2 - preceding[0].x2) <= theme::kSpace1 &&
-                                std::abs(reason.y2 - preceding[0].y2) <= theme::kSpace1 / 2,
-                            "native title ink advances without the old 47-to-48 ms role snap");
+                if (time > 0) {
+                    const auto& from = preceding[0];
+                    const auto edge =
+                        std::max({std::abs(reason.x1 - from.x1), std::abs(reason.y1 - from.y1),
+                                  std::abs(reason.x2 - from.x2), std::abs(reason.y2 - from.y2)});
+                    const TitleStep step{time, edge, changed_pixels, from, reason};
+                    const bool continuous =
+                        edge <= kMaxTitleEdgeStep && changed_pixels < kTitlePixelChangeLimit;
+                    if (!continuous) {
+                        print_step(step, "discontinuity");
+                    }
+                    require(continuous, "native title ink is continuous between adjacent ticks");
+                    if (time == 1 || edge > peak_edge.edge) {
+                        peak_edge = step;
+                    }
+                    if (time == 1 || changed_pixels > peak_pixels.pixels) {
+                        peak_pixels = step;
+                    }
                 }
                 if (action != nullptr) {
                     lv_area_t action_box{};
@@ -2438,6 +2524,8 @@ int main(int argc, char** argv) {
             std::printf("QR and manual entry %.*s / %s: reason=0 ms, action=%u ms, endpoint=%d\n",
                         static_cast<int>(wide_network.size()), wide_network.data(), test.reason,
                         action_at, last_qr_top);
+            print_step(peak_edge, "peak edge");
+            print_step(peak_pixels, "peak RGB565 change");
             const auto settled_positions = preceding;
             unsigned time = kRecoveryQrEntryMs;
             for (const auto target : {824U, 825U, 826U, 934U, 935U, 936U, 1100U}) {
@@ -2478,8 +2566,8 @@ int main(int argc, char** argv) {
                     "Back immediately retires the wide credentials and QR");
         }
         std::printf(
-            "PASS wide generated setup (%.*s) through three failure entries, retry and Back\n",
-            static_cast<int>(wide_network.size()), wide_network.data());
+            "PASS wide generated setup (%.*s) through %zu failure entries, retry and Back\n",
+            static_cast<int>(wide_network.size()), wide_network.data(), std::size(cases));
     }
 
     require(prd::diagnostics::qr_temp_audit_count() > first_qr_audit_count &&

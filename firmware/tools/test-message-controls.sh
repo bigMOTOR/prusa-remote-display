@@ -5,8 +5,8 @@
 # Causal negative controls for the message family, in the style of test-repair-controls.py.
 #
 # ⛔ WHAT MAKES THESE CONTROLS RATHER THAN DECORATION. Each one restores the ACTUAL pre-repair
-# production behaviour — through a PRD_OLD_* macro compiled into a disposable object, never into a
-# shipped one — relinks the real renderer suite against it, and requires that suite to FAIL with
+# production behaviour in a disposable object, using a PRD_OLD_* macro or a scratch source
+# replacement. It relinks the real renderer suite against it and requires that suite to FAIL with
 # the assertion the repair exists for. A control that does not fire proves the test is measuring
 # nothing, which is the failure mode every instrument in this repository has had at least once.
 #
@@ -49,7 +49,34 @@ for component in ui app_model app_store app_core prusalink validation fake_sourc
 done
 DEFS=(-DPRD_ASAN_MODE="$MODE" -DLV_CONF_INCLUDE_SIMPLE -DPRD_QR_TEMP_AUDIT)
 
-# name | macro | the repair it removes | the assertion that must fail | translation units to rebuild
+# Restore the title layout from d7dcdaf, leaving the QR, action and row paths alone.
+restore_setup_title_snap() {
+ python3 - "$1" "$2" <<'PY'
+from pathlib import Path
+import sys
+
+source, destination = map(Path, sys.argv[1:])
+code = source.read_text()
+start = "    const auto width = progress == 0 ? kColumnWidth : theme::kCanvasContent.width;\n"
+end = "    // Keep the approved full-width action below the title once its own box is clear.\n"
+before, found_start, after_start = code.partition(start)
+motion, found_end, after = after_start.partition(end)
+if (not found_start or not found_end or code.count(start) != 1 or code.count(end) != 1
+        or "recovery_title_motion_.update(title_," not in motion):
+    raise SystemExit("setup title snap control: production title placement has changed")
+destination.write_text(before + """    const bool full_title = qr_y >= kFailureTitleY + theme::kLineTitle;
+    const auto width = full_title ? theme::kCanvasContent.width : kColumnWidth;
+    if (lv_obj_get_style_width(title_, LV_PART_MAIN) != width) {
+        lv_obj_set_width(title_, width);
+        theme::apply_text_style(title_,
+                                full_title ? theme::TextRole::StateTitle : theme::TextRole::Body,
+                                theme::Colour::Primary);
+    }
+""" + found_end + after)
+PY
+}
+
+# name | macro or source mutation | repair removed | required assertion | units to rebuild
 CONTROLS=(
  "symbol|PRD_OLD_MESSAGE_SYMBOL|R1 the shared symbol reproduces the accepted operational one|the settled shared symbol reproduces the accepted operational symbol exactly|components/ui/src/components/message_form.cpp"
  "reset-crossfade|PRD_OLD_RESET_CROSSFADE|R2 the answered question is retired at once|the answered question is gone from the first frame|components/ui/src/scenes/factory_reset_scene.cpp"
@@ -58,6 +85,7 @@ CONTROLS=(
  "setup-static|PRD_OLD_SETUP_STATIC|the protected setup composition animates on return|returning to the setup composition is an entry|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-phase-static|PRD_OLD_SETUP_PHASE_STATIC|an internal setup phase changes visibly without disturbing the session|an internal setup phase transition drives the tick|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-qr-snap|PRD_OLD_SETUP_QR_SNAP|first failure moves the QR from the validation coordinate|first failure QR starts at the unchanged validation coordinate|components/ui/src/scenes/provisioning_scene.cpp"
+ "setup-title-snap|@setup_title_snap|first failure title reflows smoothly above the moving QR|native title ink is continuous between adjacent ticks|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-qr-redraw|PRD_OLD_SETUP_QR_REDRAW|an unchanged setup QR is not invalidated on every phase-motion tick|the QR block has no flushed area during the phase transition|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-early-session|PRD_OLD_SETUP_EARLY_SESSION|an early session stays private until the offer exists|an early session cannot reveal the credential under SetupRequired|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-session-reveal|PRD_OLD_SETUP_SESSION_REVEAL|the newly offered QR emerges on the shared clock|new QR starts at zero luminance rather than appearing in one frame|components/ui/src/scenes/provisioning_scene.cpp"
@@ -105,8 +133,15 @@ for control in "${CONTROLS[@]}"; do
     -c "$LV/src/libs/qrcode/lv_qrcode.c" -o "$scratch/objects/$qr_object"
   else
    base="$(basename "${source%.cpp}")"
-   "$CXX" "${SAN[@]}" "${DEFS[@]}" "-D$macro=1" "${INC[@]}" -std=gnu++17 -Wno-unused-parameter \
-    -c "$FW/$source" -o "$scratch/objects/p_$base.o"
+   if [ "$macro" = "@setup_title_snap" ]; then
+    # Preserve the exact control source beside its compacted log and object hashes.
+    restore_setup_title_snap "$FW/$source" "$WORK/$name.cpp"
+    "$CXX" "${SAN[@]}" "${DEFS[@]}" "${INC[@]}" -I"$(dirname "$FW/$source")" -std=gnu++17 \
+     -Wno-unused-parameter -c "$WORK/$name.cpp" -o "$scratch/objects/p_$base.o"
+   else
+    "$CXX" "${SAN[@]}" "${DEFS[@]}" "-D$macro=1" "${INC[@]}" -std=gnu++17 -Wno-unused-parameter \
+     -c "$FW/$source" -o "$scratch/objects/p_$base.o"
+   fi
   fi
  done
 
@@ -132,7 +167,7 @@ for control in "${CONTROLS[@]}"; do
  fi
 
  # A control that crashes rather than asserting proves nothing about the assertion.
- if grep -qE 'ERROR: AddressSanitizer|runtime error:' "$scratch/control.log"; then
+ if grep -qE 'AddressSanitizer|UndefinedBehaviorSanitizer|runtime error:' "$scratch/control.log"; then
   echo "CONTROL FAULTED RATHER THAN FAILING ITS ASSERTION: $name" >&2
   exit 1
  fi
