@@ -183,6 +183,7 @@ class ProvisioningScene {
     void set_row(RowIndex index, std::string_view value);
     void layout_session(bool recovery);
     void layout_recovery_rows();
+    void place_recovery_qr(std::int32_t y);
 
     // Rebuilds the code from the retained session, or hides it. Called on every path that
     // changes the session, so the drawn code and the drawn password can never disagree.
@@ -206,8 +207,7 @@ class ProvisioningScene {
     // would have drawn the code over the statement.
     component::MessageForm form_;
 
-    // The statement's own entry clock. The session composition has none; see step(). It HOLDS
-    // while the panel is Off rather than only refusing to start — see HoldClock.
+    // The scene and statement entry holds while the panel is Off.
     HoldClock clock_{};
     bool running_{false};
     bool statement_{false};
@@ -219,6 +219,8 @@ class ProvisioningScene {
     app_model::ProvisioningPhase phase_{app_model::ProvisioningPhase::Inactive};
     bool phase_seen_{false};
     bool recovery_layout_{false};
+    // The single QR travels only when a drawn ordinary offer first enters recovery.
+    HoldClock recovery_qr_clock_{};
     bool phase_running_{false};
     std::int32_t phase_from_level_{0};
     std::int32_t phase_level_{0};

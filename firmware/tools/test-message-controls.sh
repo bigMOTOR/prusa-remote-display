@@ -57,6 +57,7 @@ CONTROLS=(
  "statement-swap|PRD_OLD_STATEMENT_SWAP|R4 a displacing statement enters rather than swapping|a displacing fault drives the tick|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-static|PRD_OLD_SETUP_STATIC|the protected setup composition animates on return|returning to the setup composition is an entry|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-phase-static|PRD_OLD_SETUP_PHASE_STATIC|an internal setup phase changes visibly without disturbing the session|an internal setup phase transition drives the tick|components/ui/src/scenes/provisioning_scene.cpp"
+ "setup-qr-snap|PRD_OLD_SETUP_QR_SNAP|first failure moves the QR from the validation coordinate|first failure QR starts at the unchanged validation coordinate|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-qr-redraw|PRD_OLD_SETUP_QR_REDRAW|an unchanged setup QR is not invalidated on every phase-motion tick|the QR block has no flushed area during the phase transition|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-early-session|PRD_OLD_SETUP_EARLY_SESSION|an early session stays private until the offer exists|an early session cannot reveal the credential under SetupRequired|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-session-reveal|PRD_OLD_SETUP_SESSION_REVEAL|the newly offered QR emerges on the shared clock|new QR starts at zero luminance rather than appearing in one frame|components/ui/src/scenes/provisioning_scene.cpp"

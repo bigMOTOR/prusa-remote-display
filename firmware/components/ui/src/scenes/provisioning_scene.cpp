@@ -42,6 +42,7 @@ constexpr std::string_view kTag = diagnostics::tag::kUi;
 //   - A full-width StateTitle row does not fit beside a 164 px block and a 40 px password
 //     row: 24 + 164 + 40 exceeds the 216 px of content height. The title therefore joins
 //     the text column, at Body, and that is the one presentation the QR cost.
+constexpr std::uint32_t kRecoveryQrEntryMs = 180;
 constexpr std::int32_t kFailureTitleY = theme::kCanvasContent.y;
 constexpr std::int32_t kFailureCopyGap = theme::kSpace1 / 2;
 constexpr std::int32_t kFailureActionY = kFailureTitleY + theme::kLineTitle + kFailureCopyGap;
@@ -339,6 +340,10 @@ void ProvisioningScene::apply_qr() {
     }
 
     was_drawn_ = false;
+    if (recovery_qr_clock_.armed) {
+        recovery_qr_clock_.clear();
+        place_recovery_qr(kRecoveryQrY);
+    }
 }
 
 void ProvisioningScene::set_row(const RowIndex index, const std::string_view value) {
@@ -435,6 +440,27 @@ void ProvisioningScene::layout_recovery_rows() {
     }
 }
 
+void ProvisioningScene::place_recovery_qr(const std::int32_t y) {
+    if (lv_obj_get_style_y(qr_panel_, LV_PART_MAIN) != y) {
+        lv_obj_set_y(qr_panel_, y);
+    }
+    if (!session_drawable_) {
+        return;
+    }
+
+    // Reveal each final line box as soon as the complete QR and its quiet zone clear it.
+    const auto show_copy = [y](lv_obj_t* label, const std::int32_t bottom, const bool present) {
+        if (present && y >= bottom) {
+            lv_obj_remove_flag(label, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+        }
+    };
+    show_copy(title_, kFailureTitleY + theme::kLineTitle, true);
+    show_copy(action_, kFailureActionY + theme::kLineBody,
+              phase_ == app_model::ProvisioningPhase::SetupFailed);
+}
+
 void ProvisioningScene::layout_session(const bool recovery) {
     recovery_layout_ = recovery;
     theme::apply_text_style(title_, recovery ? theme::TextRole::StateTitle : theme::TextRole::Body,
@@ -461,12 +487,13 @@ void ProvisioningScene::layout_session(const bool recovery) {
         }
     }
     if (recovery) {
-        // The failure frame has its final QR and manual path at once. Only the
-        // new reason and action run an entry ramp.
+        // The failure composition uses fully visible credentials from its first frame.
         session_running_ = false;
         session_clock_.clear();
+    } else {
+        recovery_qr_clock_.clear();
     }
-    lv_obj_set_y(qr_panel_, recovery ? kRecoveryQrY : kQrBlockRect.y);
+    lv_obj_set_y(qr_panel_, recovery && !recovery_qr_clock_.armed ? kRecoveryQrY : kQrBlockRect.y);
 }
 
 // The shared full-screen message composition — the one every family that states a condition in
@@ -747,6 +774,11 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
     const bool leaving_recovery_layout = recovery_layout_ && !use_recovery_layout;
     const bool layout_changed = use_recovery_layout != recovery_layout_;
     if (layout_changed) {
+#ifndef PRD_OLD_SETUP_QR_SNAP
+        if (failed && previously_offering_network && !returning_from_statement && was_drawn_) {
+            recovery_qr_clock_.arm();
+        }
+#endif
         layout_session(use_recovery_layout);
     }
 
@@ -754,10 +786,9 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
     const bool title_changed = title_text != lv_label_get_text(title_);
 
     // These are changes INSIDE the same scene, so the controller's scene-entry clock does not
-    // see them. The new status is written now, not after the animation; only its luminance
-    // resolves. In particular the network/password/address and QR stay put and readable while
-    // a submitted configuration is checked or a failure returns to the form. Ordinary setup
-    // uses the existing scene entry while it runs; recovery copy has its own preview ramp.
+    // see them. Bind the new status now. On first failure each line waits only for its
+    // final box to clear the QR. The manual rows stay readable and the QR never restarts
+    // during a retry. Ordinary setup retains its existing scene entry and title ramp.
 #ifndef PRD_OLD_SETUP_PHASE_STATIC
     const bool ordinary_phase_changed = phase_seen_ && phase != phase_ && !running_;
     const bool recovery_copy_changed =
@@ -785,7 +816,6 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
         if (action != lv_label_get_text(action_)) {
             set_label(action_, action);
         }
-        lv_obj_remove_flag(action_, LV_OBJ_FLAG_HIDDEN);
     } else {
         lv_obj_add_flag(action_, LV_OBJ_FLAG_HIDDEN);
         if (lv_label_get_text(action_)[0] != '\0') {
@@ -793,6 +823,9 @@ void ProvisioningScene::apply(const app_model::Presentation& presentation) {
         }
     }
 
+    if (recovery_layout_) {
+        place_recovery_qr(lv_obj_get_style_y(qr_panel_, LV_PART_MAIN));
+    }
     if (recovery_layout_ && (layout_changed || returning_from_statement)) {
         layout_recovery_rows();
     }
@@ -1041,7 +1074,7 @@ void ProvisioningScene::paint(const std::int32_t level) {
 }
 
 bool ProvisioningScene::step(const bool panel_visible, const std::uint32_t now) {
-    if (!running_ && !phase_running_ && !session_running_) {
+    if (!running_ && !phase_running_ && !session_running_ && !recovery_qr_clock_.armed) {
         return false;
     }
 
@@ -1083,6 +1116,23 @@ bool ProvisioningScene::step(const bool panel_visible, const std::uint32_t now) 
         }
     }
 
+    if (recovery_qr_clock_.advance(panel_visible, now)) {
+        const auto elapsed = recovery_qr_clock_.elapsed();
+        if (elapsed >= kRecoveryQrEntryMs) {
+            recovery_qr_clock_.clear();
+            place_recovery_qr(kRecoveryQrY);
+        } else {
+            constexpr std::int32_t bezier_max = LV_BEZIER_VAL_MAX;
+            const auto time =
+                lv_map(static_cast<std::int32_t>(elapsed), 0, kRecoveryQrEntryMs, 0, bezier_max);
+            const auto eased =
+                lv_cubic_bezier(time, LV_BEZIER_VAL_FLOAT(0.25), LV_BEZIER_VAL_FLOAT(0.1),
+                                LV_BEZIER_VAL_FLOAT(0.25), bezier_max);
+            const auto travel = kRecoveryQrY - kQrBlockRect.y;
+            place_recovery_qr(kQrBlockRect.y + ((travel * eased + bezier_max / 2) / bezier_max));
+        }
+    }
+
     if (session_running_) {
         session_clock_.advance(panel_visible, now);
         const auto elapsed = session_clock_.elapsed();
@@ -1096,7 +1146,7 @@ bool ProvisioningScene::step(const bool panel_visible, const std::uint32_t now) 
     }
 
     paint(level_ < 0 ? theme::opacity(theme::Opacity::Full) : level_);
-    return running_ || phase_running_ || session_running_;
+    return running_ || phase_running_ || session_running_ || recovery_qr_clock_.armed;
 }
 
 } // namespace prd::ui::scene

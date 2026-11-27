@@ -67,6 +67,9 @@ constexpr int kSetupQrSide = (33 + 2 * 4) * 4;
 constexpr int kSetupQrLeft = theme::kCanvasContent.right() - kSetupQrSide;
 constexpr int kSetupQrTop = theme::kCanvasContent.y;
 constexpr int kFailureQrTop = 66;
+constexpr unsigned kRecoveryQrEntryMs = 180;
+constexpr int kRecoveryTitleBottom = theme::kCanvasContent.y + theme::kLineTitle;
+constexpr int kRecoveryActionBottom = kRecoveryTitleBottom + theme::kSpace1 / 2 + theme::kLineBody;
 int setup_phase_qr_top = kSetupQrTop;
 
 void require(bool ok, const char* why) {
@@ -1151,6 +1154,30 @@ int main(int argc, char** argv) {
         }
         return true;
     };
+    const auto recovery_qr_top = [&](const Frame& source) {
+        // The right edge stays clear of the text even when copy has the QR's light colour.
+        constexpr auto right = kSetupQrLeft + kSetupQrSide - 1;
+        const auto quiet = source[kSetupQrTop * w + right];
+        int first = -1;
+        int count = 0;
+        for (int y = 0; y < h; ++y) {
+            if (pixels[y * w + right] == quiet) {
+                if (first < 0) {
+                    first = y;
+                }
+                ++count;
+            }
+        }
+        require(first >= kSetupQrTop && first <= kFailureQrTop && count == kSetupQrSide,
+                "one intact QR quiet-zone edge occupies a single in-bounds block");
+        for (int row = 0; row < kSetupQrSide; ++row) {
+            const auto expected = source.begin() + (kSetupQrTop + row) * w + kSetupQrLeft;
+            const auto actual = pixels.begin() + (first + row) * w + kSetupQrLeft;
+            require(std::equal(expected, expected + kSetupQrSide, actual),
+                    "each recovery QR pixel including its quiet zone matches validation");
+        }
+        return first;
+    };
     auto save_setup_phase = [&](const char* name) {
         const auto path = out / (std::string{"setup-phase-"} + name + ".rgb565");
         FILE* const file = std::fopen(path.c_str(), "wb");
@@ -1209,19 +1236,37 @@ int main(int argc, char** argv) {
     recovery_qr_visible = true;
     controller::apply(failed);
     require(tick(0), "validation failure is another internal phase transition");
-    {
-        Drawn drawn;
-        collect(lv_screen_active(), drawn);
-        require(drawn.labels.count("That did not work") == 1,
-                "the failure title replaces validation immediately");
-    }
-    require(same_code(pixels, kFailureQrTop),
-            "first failure immediately draws the complete QR at its approved coordinate");
+    auto* setup_screen = lv_screen_active();
+    require(recovery_qr_top(settled_setup) == kSetupQrTop,
+            "first failure QR starts at the unchanged validation coordinate");
+    require(!visible_label(setup_screen, "Checking that network") &&
+                !visible_label(setup_screen, "That did not work"),
+            "old checking is gone and final failure copy waits for the QR to clear");
     save_setup_phase("first-failure-start");
     const auto first_failure = pixels;
+    int previous_qr_top = kSetupQrTop;
     for (unsigned elapsed = 16; elapsed < 1100; elapsed += 16) {
         require(tick(16), "first failure copy remains in motion");
-        require(same_code(pixels, kFailureQrTop), "the complete failure QR is stationary");
+        const auto qr_top = recovery_qr_top(settled_setup);
+        require(qr_top >= previous_qr_top && qr_top - previous_qr_top < kFailureQrTop - kSetupQrTop,
+                "first failure moves the intact QR down without snapping or reversing");
+        require((visible_label(setup_screen, "That did not work") != nullptr) ==
+                    (qr_top >= kRecoveryTitleBottom),
+                "the current reason becomes visible as soon as its final box is clear");
+        if (elapsed > kRecoveryQrEntryMs) {
+            require(qr_top == kFailureQrTop, "the QR remains at the accepted recovery endpoint");
+        }
+        previous_qr_top = qr_top;
+        if (elapsed == 48) {
+            const auto moving_frame = pixels;
+            const auto before_hold = flushes;
+            controller::note_panel_visible(false);
+            tick(5000);
+            require(pixels == moving_frame && flushes == before_hold,
+                    "Off holds a QR in flight without flushing");
+            controller::note_panel_visible(true);
+            require(tick(0) && pixels == moving_frame, "wake resumes the same QR position");
+        }
         if (elapsed == 320) {
             require(pixels != first_failure, "failure copy has a painted opacity ramp");
             const auto paused_frame = pixels;
@@ -1347,15 +1392,95 @@ int main(int argc, char** argv) {
     controller::apply(failed);
     recovery_qr_visible = true;
     require(tick(0), "failure interrupts the running setup scene entry");
-    Drawn interrupted_setup;
-    collect(lv_screen_active(), interrupted_setup);
-    require(interrupted_setup.labels.count("Printer response incomplete") == 1 &&
-                interrupted_setup.labels.count("Check the PrusaLink address.") == 1 &&
+    require(recovery_qr_top(settled_setup) == kSetupQrTop &&
+                !visible_label(setup_screen, "Join this network") &&
+                !visible_label(setup_screen, "Printer response incomplete"),
+            "the full QR starts at the interrupted offer position and retires its old title");
+    tick(60);
+    const auto interrupted_top = recovery_qr_top(settled_setup);
+    require(interrupted_top > kSetupQrTop && interrupted_top < kFailureQrTop,
+            "an interrupted offer keeps the same bounded path");
+    controller::apply(validating);
+    tick(0);
+    require(recovery_qr_top(settled_setup) == interrupted_top &&
+                !visible_label(setup_screen, "Printer response incomplete") &&
+                !visible_label(setup_screen, "Check the PrusaLink address."),
+            "retry clears both stale failure lines without moving the QR");
+    tick(40);
+    const auto retry_top = recovery_qr_top(settled_setup);
+    require(retry_top > interrupted_top && retry_top < kFailureQrTop &&
+                visible_label(setup_screen, "Checking that network"),
+            "retry continues the existing QR motion with the current title");
+    controller::apply(failed);
+    tick(0);
+    require(recovery_qr_top(settled_setup) == retry_top &&
+                !visible_label(setup_screen, "Checking that network"),
+            "a second failure during the entry does not restart or reverse the QR");
+    tick(220);
+    require(visible_label(setup_screen, "Printer response incomplete") &&
+                visible_label(setup_screen, "Check the PrusaLink address.") &&
                 same_code(pixels, kFailureQrTop),
-            "the true copy and full QR appear at the final positions on the interrupted frame");
-    tick(320);
+            "the true copy and full QR settle at the accepted endpoint");
     save_setup_phase("interrupted-failure-middle");
     std::puts("PASS backing out retires recovery and a first failure can interrupt scene entry");
+
+    const auto start_in_flight = [&] {
+        blank();
+        controller::clear_setup_session();
+        controller::set_setup_session(session);
+        controller::apply(validating);
+        tick(0);
+        tick(1100);
+        tick(1100);
+        controller::apply(failed);
+        recovery_qr_visible = true;
+        tick(0);
+        tick(72);
+        const auto qr_top = recovery_qr_top(settled_setup);
+        require(qr_top > kSetupQrTop && qr_top < kFailureQrTop,
+                "the privacy control begins during QR travel");
+    };
+    const auto retired = [&] {
+        require(!visible_label(setup_screen, session_password) &&
+                    !visible_label(setup_screen, "PRD-SETUP-A1B2") &&
+                    count_colour(pixels, light) < 1000,
+                "the previous network, password and QR are gone in the first frame");
+    };
+    start_in_flight();
+    controller::apply(back);
+    recovery_qr_visible = false;
+    tick(0);
+    retired();
+    start_in_flight();
+    controller::apply(fault(DeviceFaultReason::OtaValidationFailure));
+    recovery_qr_visible = false;
+    tick(0);
+    retired();
+    controller::apply(failed);
+    recovery_qr_visible = true;
+    tick(0);
+    require(same_code(pixels, kFailureQrTop), "return from a statement draws the settled QR");
+    start_in_flight();
+    controller::clear_setup_session();
+    tick(0);
+    retired();
+    start_in_flight();
+    auto new_session = session;
+    require(new_session.ssid.assign("PRD-Setup-BEEF") &&
+                new_session.password.assign("AM23456789BC"),
+            "replacement fixture fits the setup session");
+    controller::set_setup_session(new_session);
+    tick(0);
+    require(!visible_label(setup_screen, session_password) &&
+                !visible_label(setup_screen, "PRD-SETUP-A1B2") &&
+                visible_label(setup_screen, "AM23456789BC") &&
+                pixels[kFailureQrTop * w + kSetupQrLeft] == light &&
+                !same_code(pixels, kFailureQrTop),
+            "replacement clears old credentials and draws its different QR at rest");
+    controller::clear_setup_session();
+    tick(0);
+    std::puts(
+        "PASS Back, statement, clear and replacement interrupt QR travel without old secrets");
 
     auto require_no_setup_failure = [&] {
         Drawn drawn;
@@ -2062,7 +2187,7 @@ int main(int argc, char** argv) {
     std::puts("PASS erase activity cadence, boundaries, idle, Off pause, re-entry, invariance");
 
     // Generated-width credentials must fit beneath the longest compact failure copy
-    // beneath the same fixed layout from the first frame. These passwords use the allowed alphabet.
+    // through the first entry in all accepted cases. These passwords use the allowed alphabet.
     for (const auto wide_network :
          {std::string_view{"PRD-Setup-FFFF"}, std::string_view{"PRD-Setup-AAAA"}}) {
         // AAAA is a widest allowed hex suffix in the committed Body face (125 px
@@ -2094,8 +2219,8 @@ int main(int argc, char** argv) {
         };
 
         auto* screen = lv_screen_active();
-        const auto check_manual = [&](const std::string_view reason,
-                                      const std::string_view action) {
+        const auto check_manual = [&](const std::string_view reason, const std::string_view action,
+                                      const int qr_top) {
             auto bottom = theme::kCanvasContent.y - 1;
             for (const auto text : {reason, action}) {
                 if (text.empty()) {
@@ -2108,7 +2233,7 @@ int main(int argc, char** argv) {
                         "wide setup copy stays within the accepted fade range");
                 lv_area_t box{};
                 lv_obj_get_coords(label, &box);
-                require(box.y1 > bottom && box.y2 < kFailureQrTop,
+                require(box.y1 > bottom && box.y2 < qr_top,
                         "wide setup keeps copy ordered and clear of the QR quiet zone");
                 const auto y = text == reason ? theme::kCanvasContent.y
                                               : theme::kCanvasContent.y + theme::kLineTitle +
@@ -2152,9 +2277,18 @@ int main(int argc, char** argv) {
             controller::apply(failed);
             recovery_qr_visible = true;
             tick(0);
-            check_manual(test.reason, test.action);
-            const auto fixed_failure = pixels;
-            constexpr auto fixed_start = kFailureQrTop * w;
+            const auto first_wide_failure = pixels;
+            constexpr auto manual_top = kRecoveryActionBottom;
+            const auto manual_unchanged = [&] {
+                for (int y = manual_top; y < h; ++y) {
+                    const auto start = y * w;
+                    if (!std::equal(pixels.begin() + start, pixels.begin() + start + kSetupQrLeft,
+                                    first_wide_failure.begin() + start)) {
+                        return false;
+                    }
+                }
+                return true;
+            };
             const auto qr_matches = [&](const int candidate_top) {
                 for (int row = 0; row < kSetupQrSide; ++row) {
                     const auto source = wide_offer.begin() + (kSetupQrTop + row) * w + kSetupQrLeft;
@@ -2165,33 +2299,63 @@ int main(int argc, char** argv) {
                 }
                 return true;
             };
-            require(qr_matches(kFailureQrTop),
-                    "wide recovery starts with the complete QR at its endpoint");
-            unsigned time = 0;
+            require(qr_matches(kSetupQrTop), "wide recovery starts on the validation QR");
+            int last_qr_top = kSetupQrTop;
+            unsigned reason_at = 0;
+            unsigned action_at = 0;
+            for (unsigned time = 0; time <= kRecoveryQrEntryMs; ++time) {
+                if (time > 0) {
+                    tick(1);
+                }
+                const auto qr_top = recovery_qr_top(wide_offer);
+                require(qr_top >= last_qr_top && qr_top - last_qr_top <= 2,
+                        "wide recovery advances monotonically without a pixel jump");
+                const bool reason_visible = qr_top >= kRecoveryTitleBottom;
+                const bool action_visible = qr_top >= kRecoveryActionBottom;
+                if (!reason_at && reason_visible) {
+                    reason_at = time;
+                }
+                if (!action_at && action_visible) {
+                    action_at = time;
+                }
+                last_qr_top = qr_top;
+                require((visible_label(screen, test.reason) != nullptr) == reason_visible &&
+                            (visible_label(screen, test.action) != nullptr) == action_visible,
+                        "each line appears at the first clear frame and stays visible");
+                check_manual(reason_visible ? test.reason : "", action_visible ? test.action : "",
+                             qr_top);
+                require(manual_unchanged(),
+                        "all manual glyph pixels remain fixed and fully visible");
+            }
+            require(reason_at > 0 && reason_at < action_at && action_at < kRecoveryQrEntryMs &&
+                        last_qr_top == kFailureQrTop,
+                    "both final lines arrive progressively before the QR finishes");
+            std::printf("QR entry %.*s / %s: reason=%u ms, action=%u ms, endpoint=%d\n",
+                        static_cast<int>(wide_network.size()), wide_network.data(), test.reason,
+                        reason_at, action_at, last_qr_top);
+            unsigned time = kRecoveryQrEntryMs;
             for (const auto target : {824U, 825U, 826U, 934U, 935U, 936U, 1100U}) {
                 while (time < target) {
                     const auto step = std::min(16U, target - time);
                     tick(step);
                     time += step;
-                    require(
-                        std::equal(pixels.begin() + fixed_start, pixels.end(),
-                                   fixed_failure.begin() + fixed_start),
-                        "wide recovery keeps the QR and manual path unchanged through the ramp");
-                    check_manual(test.reason, test.action);
+                    require(qr_matches(kFailureQrTop) && manual_unchanged(),
+                            "wide recovery holds the final QR and manual rows through the ramp");
+                    check_manual(test.reason, test.action, kFailureQrTop);
                 }
             }
             require(!tick(16), "wide recovery copy settles without idle work");
 
             controller::apply(validating);
             tick(0);
-            check_manual("Checking that network", "");
+            check_manual("Checking that network", "", kFailureQrTop);
             require(!visible_label(screen, test.reason) && !visible_label(screen, test.action) &&
                         qr_matches(kFailureQrTop),
                     "wide retry retires copy and holds QR");
             tick(1120);
             controller::apply(setup);
             tick(0);
-            check_manual("Join this network", "");
+            check_manual("Join this network", "", kFailureQrTop);
             require(qr_matches(kFailureQrTop), "wide editing retains the recovery QR");
             controller::apply(back);
             recovery_qr_visible = false;

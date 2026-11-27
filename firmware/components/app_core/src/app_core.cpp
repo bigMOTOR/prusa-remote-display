@@ -451,11 +451,14 @@ void display_tick(const std::uint32_t now_ms) {
                 // reports go quiet, the retained observation still ages from its last body.
                 const auto now = platform::monotonic_time();
                 const auto freshness = g_store.observation_freshness_at(now);
+                const auto phase = state.printer_connection.phase;
+                using app_model::ConnectionPhase;
+                const bool transient_failure = phase == ConnectionPhase::PrinterUnavailable ||
+                                               phase == ConnectionPhase::InvalidResponse ||
+                                               phase == ConnectionPhase::Degraded;
                 if ((freshness == DataFreshness::Stale || freshness == DataFreshness::Expired) &&
                     (!state.display.observation_interrupted ||
-                     (state.printer_connection.phase ==
-                          app_model::ConnectionPhase::PrinterUnavailable &&
-                      g_store.printer_attempt_grace_elapsed(now)))) {
+                     (transient_failure && g_store.printer_attempt_grace_elapsed(now)))) {
                     g_store.age_observation_if_due(now);
                 }
             }
