@@ -71,11 +71,10 @@ constexpr int kFailureQrTop = 66;
 constexpr unsigned kRecoveryQrEntryMs = 180;
 constexpr int kRecoveryTitleBottom = theme::kCanvasContent.y + theme::kLineTitle;
 constexpr int kRecoveryActionBottom = kRecoveryTitleBottom + theme::kSpace1 / 2 + theme::kLineBody;
-// The accepted native replay moves each ink edge at most 5 px per millisecond.
-// Allow one pixel of rounding. The largest RGB565 change is 2464 pixels;
-// 2472 is the exclusive limit for the accepted full transition.
+// The native corpus peaks at 5 px per millisecond for each measure. Keep the
+// existing edge tolerance and allow three pixels for strong-ink support changes.
 constexpr int kMaxTitleEdgeStep = 6;
-constexpr unsigned kTitlePixelChangeLimit = 2472;
+constexpr int kMaxTitleInkStep = 8;
 int setup_phase_qr_top = kSetupQrTop;
 
 void require(bool ok, const char* why) {
@@ -210,6 +209,91 @@ struct Box {
     const auto g = static_cast<std::uint16_t>(((rgb >> 8) & 0xFFU) >> 2);
     const auto b = static_cast<std::uint16_t>((rgb & 0xFFU) >> 3);
     return static_cast<std::uint16_t>((r << 11) | (g << 5) | b);
+}
+
+[[nodiscard]] int green565(const std::uint16_t value) {
+    return (value >> 5) & 0x3F;
+}
+
+// Compare the location of strong ink to the other frame's more permissive support.
+// This allows adjacent antialiasing levels to change without treating them as displaced ink.
+// The distance is Chebyshev (pixels on the farther axis), with both directions checked.
+[[nodiscard]] int title_ink_step(const Frame& before, const Frame& after, const lv_area_t& from,
+                                 const lv_area_t& to) {
+    const int left = std::min(from.x1, to.x1);
+    const int right = std::max(from.x2, to.x2);
+    const int top = std::min(from.y1, to.y1);
+    const int bottom = std::max(from.y2, to.y2);
+    const int stride = right - left + 3;
+    const int rows = bottom - top + 3;
+    constexpr int unreachable = w + h;
+    const int paper = green565(after.front());
+    const int solid = green565(rgb565(theme::kColorPrimary));
+    const int support = paper + (solid - paper) * 15 / 100;
+    const int core = paper + (solid - paper) * 55 / 100;
+    std::vector<int> distance(rows * stride, unreachable);
+    const auto directed = [&](const Frame& source, const Frame& target) {
+        // The padded border remains unreachable. Two passes give the distance to
+        // the nearest support pixel across each row, column and diagonal.
+        for (int row = 1; row < rows - 1; ++row) {
+            for (int column = 1; column < stride - 1; ++column) {
+                const int i = row * stride + column;
+                if (green565(target[(top + row - 1) * w + left + column - 1]) >= support) {
+                    distance[i] = 0;
+                } else {
+                    distance[i] =
+                        std::min(unreachable,
+                                 1 + std::min({distance[i - 1], distance[i - stride - 1],
+                                               distance[i - stride], distance[i - stride + 1]}));
+                }
+            }
+        }
+        int worst = -1;
+        for (int row = rows - 2; row > 0; --row) {
+            for (int column = stride - 2; column > 0; --column) {
+                const int i = row * stride + column;
+                distance[i] = std::min(
+                    distance[i], 1 + std::min({distance[i + 1], distance[i + stride - 1],
+                                               distance[i + stride], distance[i + stride + 1]}));
+                if (green565(source[(top + row - 1) * w + left + column - 1]) >= core) {
+                    worst = std::max(worst, distance[i]);
+                }
+            }
+        }
+        require(worst >= 0, "the native title has high-contrast ink on every frame");
+        return worst;
+    };
+    const int forward = directed(before, after);
+    return std::max(forward, directed(after, before));
+}
+
+void jump_title_second_line(Frame& frame, const lv_area_t& ink) {
+    // Use the actual compact «Printer response incomplete» title. Move its second
+    // line to the right while the first line anchors the horizontal extremes.
+    constexpr int shift = 34;
+    const auto background = frame.front();
+    const int second_line = ink.y1 + lv_area_get_height(&ink) / 2;
+    require(lv_area_get_width(&ink) > shift, "interior jump has room to move inside the ink box");
+    for (int y = second_line; y <= ink.y2; ++y) {
+        auto row = frame.begin() + y * w;
+        const auto end = row + ink.x2 + 1;
+        require(
+            std::all_of(end - shift, end, [=](const auto pixel) { return pixel == background; }),
+            "interior jump moves native ink without losing pixels");
+        std::move_backward(row + ink.x1, end - shift, end);
+        std::fill_n(row + ink.x1, shift, background);
+    }
+    const auto reaches_column = [&](const int x) {
+        for (int y = ink.y1; y <= ink.y2; ++y) {
+            if (frame[y * w + x] != background) {
+                return true;
+            }
+        }
+        return false;
+    };
+    require(ink_top(frame) == ink.y1 && ink_bottom(frame) == ink.y2 && reaches_column(ink.x1) &&
+                reaches_column(ink.x2),
+            "interior jump preserves all four native ink edges");
 }
 
 // --- The object tree -------------------------------------------------------
@@ -436,10 +520,22 @@ int main(int argc, char** argv) {
     if (argc == 2 && std::strcmp(argv[1], "--controls") == 0) {
         return controls();
     }
-    require(argc == 2, "output directory, or --controls");
+    require(argc == 2, "output directory, --controls, or --title-interior-jump");
 
     namespace controller = prd::ui::controller;
     const std::filesystem::path out{argv[1]};
+    const bool interior_jump_control = std::strcmp(argv[1], "--title-interior-jump") == 0;
+    const auto save_frame = [&](const std::string& name, const char* open_failure,
+                                const char* write_failure) {
+        if (!interior_jump_control) {
+            const auto path = out / (name + ".rgb565");
+            auto* const file = std::fopen(path.c_str(), "wb");
+            require(file, open_failure);
+            require(std::fwrite(pixels.data(), 2, pixels.size(), file) == pixels.size(),
+                    write_failure);
+            std::fclose(file);
+        }
+    };
 
     lv_init();
     lv_log_register_print_cb([](lv_log_level_t, const char* msg) {
@@ -492,13 +588,8 @@ int main(int argc, char** argv) {
         const auto first = pixels;
         for (unsigned t = 16; t <= 1120; t += 16) {
             tick(16);
-            const auto path =
-                out / (std::string{current.name} + "-" + std::to_string(t) + ".rgb565");
-            auto* file = std::fopen(path.c_str(), "wb");
-            require(file, "frame file");
-            require(std::fwrite(pixels.data(), 2, pixels.size(), file) == pixels.size(),
-                    "frame write");
-            std::fclose(file);
+            save_frame(std::string{current.name} + "-" + std::to_string(t), "frame file",
+                       "frame write");
         }
         require(first != pixels, "the entry actually advanced rather than appearing at once");
 
@@ -1185,12 +1276,8 @@ int main(int argc, char** argv) {
         return first;
     };
     auto save_setup_phase = [&](const char* name) {
-        const auto path = out / (std::string{"setup-phase-"} + name + ".rgb565");
-        FILE* const file = std::fopen(path.c_str(), "wb");
-        require(file != nullptr, "setup phase frame opens");
-        require(std::fwrite(pixels.data(), 2, pixels.size(), file) == pixels.size(),
-                "setup phase frame writes");
-        std::fclose(file);
+        save_frame(std::string{"setup-phase-"} + name, "setup phase frame opens",
+                   "setup phase frame writes");
     };
 
     Presentation validating = setup;
@@ -1853,12 +1940,8 @@ int main(int argc, char** argv) {
     tick(0);
 
     auto save_beta_handoff = [&](const char* name) {
-        const auto path = out / (std::string{"beta-handoff-"} + name + ".rgb565");
-        FILE* const file = std::fopen(path.c_str(), "wb");
-        require(file != nullptr, "beta handoff frame opens");
-        require(std::fwrite(pixels.data(), 2, pixels.size(), file) == pixels.size(),
-                "beta handoff frame writes");
-        std::fclose(file);
+        save_frame(std::string{"beta-handoff-"} + name, "beta handoff frame opens",
+                   "beta handoff frame writes");
     };
     auto assert_no_setup_residue = [&] {
         Drawn drawn;
@@ -2101,12 +2184,8 @@ int main(int argc, char** argv) {
                 tick(16);
             }
             require(running_title() == target, "each dot state is reached");
-            const auto path = out / ("erasing-" + std::to_string(wanted) + "dot.rgb565");
-            auto* file = std::fopen(path.c_str(), "wb");
-            require(file, "dot frame file");
-            require(std::fwrite(pixels.data(), 2, pixels.size(), file) == pixels.size(),
-                    "dot frame write");
-            std::fclose(file);
+            save_frame("erasing-" + std::to_string(wanted) + "dot", "dot frame file",
+                       "dot frame write");
         }
         const int height = label_height(lv_screen_active(), "Erasing settings");
         require(height > 0 && height <= theme::kLineTitle,
@@ -2287,11 +2366,9 @@ int main(int argc, char** argv) {
 
             lv_area_t ink{w, h, 0, 0};
             unsigned ink_pixels = 0;
-            unsigned changed_pixels = 0;
             for (int y = 0; y < h; ++y) {
                 for (int x = 0; x < w; ++x) {
                     const auto index = static_cast<std::size_t>(y * w + x);
-                    changed_pixels += previous_title[index] != pixels[index];
                     if (pixels[index] != pixels.front()) {
                         const bool overlaps_qr = x >= kSetupQrLeft &&
                                                  x < kSetupQrLeft + kSetupQrSide && y >= qr_top &&
@@ -2308,13 +2385,13 @@ int main(int argc, char** argv) {
                 }
             }
             require(ink_pixels > 18, "the truthful title has actual native ink on every frame");
-            previous_title = pixels;
+            const Frame isolated = pixels;
             for (auto* const sibling : siblings) {
                 lv_obj_remove_flag(sibling, LV_OBJ_FLAG_HIDDEN);
             }
             lv_refr_now(d);
             require(pixels == composed, "isolating title ink preserves the full ordinary frame");
-            return std::pair{ink, changed_pixels};
+            return std::pair{ink, isolated};
         };
         const auto check_manual = [&](const std::string_view reason, const std::string_view action,
                                       const int qr_top) {
@@ -2400,20 +2477,20 @@ int main(int argc, char** argv) {
             struct TitleStep {
                 unsigned time;
                 int edge;
-                unsigned pixels;
+                int ink_step;
                 lv_area_t from;
                 lv_area_t to;
             };
             const auto print_step = [&](const TitleStep& step, const char* metric) {
                 std::fprintf(stderr,
-                             "Title %s (%s) %s at %u->%u ms: edge=%d px, changed=%u RGB565 "
-                             "pixels, ink=(%d,%d,%d,%d)->(%d,%d,%d,%d)\n",
+                             "Title %s (%s) %s at %u->%u ms: edge=%d px, core-to-support=%d px, "
+                             "ink=(%d,%d,%d,%d)->(%d,%d,%d,%d)\n",
                              test.reason, wide_network.data(), metric, step.time - 1, step.time,
-                             step.edge, step.pixels, step.from.x1, step.from.y1, step.from.x2,
+                             step.edge, step.ink_step, step.from.x1, step.from.y1, step.from.x2,
                              step.from.y2, step.to.x1, step.to.y1, step.to.x2, step.to.y2);
             };
             TitleStep peak_edge{};
-            TitleStep peak_pixels{};
+            TitleStep peak_ink{};
             for (unsigned time = 0; time <= kRecoveryQrEntryMs; ++time) {
                 if (time > 0) {
                     tick(1);
@@ -2435,7 +2512,7 @@ int main(int argc, char** argv) {
                 std::array<bool, moving.size()> drawn{};
                 auto* const title = visible_label(screen, test.reason);
                 require(title, "the current reason is retained");
-                const auto [reason, changed_pixels] = title_ink(title, qr_top);
+                auto [reason, isolated] = title_ink(title, qr_top);
                 boxes[0] = reason;
                 drawn[0] = true;
                 require(reason.x1 >= theme::kCanvasContent.x &&
@@ -2448,20 +2525,32 @@ int main(int argc, char** argv) {
                     const auto edge =
                         std::max({std::abs(reason.x1 - from.x1), std::abs(reason.y1 - from.y1),
                                   std::abs(reason.x2 - from.x2), std::abs(reason.y2 - from.y2)});
-                    const TitleStep step{time, edge, changed_pixels, from, reason};
-                    const bool continuous =
-                        edge <= kMaxTitleEdgeStep && changed_pixels < kTitlePixelChangeLimit;
-                    if (!continuous) {
-                        print_step(step, "discontinuity");
+                    if (interior_jump_control && time == 1 &&
+                        std::string_view{test.reason} == "Printer response incomplete") {
+                        require(edge == 0 && previous_title == isolated,
+                                "interior jump starts from identical native title frames");
+                        jump_title_second_line(isolated, reason);
                     }
-                    require(continuous, "native title ink is continuous between adjacent ticks");
+                    const int ink_step = title_ink_step(previous_title, isolated, from, reason);
+                    const TitleStep step{time, edge, ink_step, from, reason};
+                    if (edge > kMaxTitleEdgeStep) {
+                        print_step(step, "edge discontinuity");
+                    }
+                    require(edge <= kMaxTitleEdgeStep,
+                            "native title edges are continuous between adjacent ticks");
+                    if (ink_step > kMaxTitleInkStep) {
+                        print_step(step, "interior discontinuity");
+                    }
+                    require(ink_step <= kMaxTitleInkStep,
+                            "native title interior ink is continuous between adjacent ticks");
                     if (time == 1 || edge > peak_edge.edge) {
                         peak_edge = step;
                     }
-                    if (time == 1 || changed_pixels > peak_pixels.pixels) {
-                        peak_pixels = step;
+                    if (time == 1 || ink_step > peak_ink.ink_step) {
+                        peak_ink = step;
                     }
                 }
+                previous_title = isolated;
                 if (action != nullptr) {
                     lv_area_t action_box{};
                     lv_obj_get_coords(action, &action_box);
@@ -2525,7 +2614,7 @@ int main(int argc, char** argv) {
                         static_cast<int>(wide_network.size()), wide_network.data(), test.reason,
                         action_at, last_qr_top);
             print_step(peak_edge, "peak edge");
-            print_step(peak_pixels, "peak RGB565 change");
+            print_step(peak_ink, "peak core-to-support");
             const auto settled_positions = preceding;
             unsigned time = kRecoveryQrEntryMs;
             for (const auto target : {824U, 825U, 826U, 934U, 935U, 936U, 1100U}) {

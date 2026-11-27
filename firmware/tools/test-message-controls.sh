@@ -4,11 +4,10 @@
 #
 # Causal negative controls for the message family, in the style of test-repair-controls.py.
 #
-# ⛔ WHAT MAKES THESE CONTROLS RATHER THAN DECORATION. Each one restores the ACTUAL pre-repair
-# production behaviour in a disposable object, using a PRD_OLD_* macro or a scratch source
-# replacement. It relinks the real renderer suite against it and requires that suite to FAIL with
-# the assertion the repair exists for. A control that does not fire proves the test is measuring
-# nothing, which is the failure mode every instrument in this repository has had at least once.
+# ⛔ WHAT MAKES THESE CONTROLS RATHER THAN DECORATION. Restore the ACTUAL pre-repair production
+# behaviour in a disposable object, using a PRD_OLD_* macro or a scratch source replacement.
+# Relink the real renderer suite against it and require that suite to FAIL with the exact
+# assertion for the repair. A separate control tests a jump inside the real rendered title ink.
 #
 # The production objects are never touched: each control compiles into its own scratch directory
 # and the original .o files are restored by construction, because they are read and never written.
@@ -49,7 +48,10 @@ for component in ui app_model app_store app_core prusalink validation fake_sourc
 done
 DEFS=(-DPRD_ASAN_MODE="$MODE" -DLV_CONF_INCLUDE_SIMPLE -DPRD_QR_TEMP_AUDIT)
 
-# Restore the title layout from d7dcdaf, leaving the QR, action and row paths alone.
+# Restore the old title layout from dbdc99b619a6991ae9750c6a2f13b3218ed85b62
+# (provisioning_scene.cpp blob a783dd831480d078d7b40c8100b03a9d6a1b978f).
+# It precedes the cumulative patch d7dcdaf00e04d9963d84b8d45e13f4d923f669ed2f7eda6b0fdbfa7e79724b33.
+# Leave the QR, action and row paths alone.
 restore_setup_title_snap() {
  python3 - "$1" "$2" <<'PY'
 from pathlib import Path
@@ -85,7 +87,7 @@ CONTROLS=(
  "setup-static|PRD_OLD_SETUP_STATIC|the protected setup composition animates on return|returning to the setup composition is an entry|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-phase-static|PRD_OLD_SETUP_PHASE_STATIC|an internal setup phase changes visibly without disturbing the session|an internal setup phase transition drives the tick|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-qr-snap|PRD_OLD_SETUP_QR_SNAP|first failure moves the QR from the validation coordinate|first failure QR starts at the unchanged validation coordinate|components/ui/src/scenes/provisioning_scene.cpp"
- "setup-title-snap|@setup_title_snap|first failure title reflows smoothly above the moving QR|native title ink is continuous between adjacent ticks|components/ui/src/scenes/provisioning_scene.cpp"
+ "setup-title-snap|@setup_title_snap|first failure title reflows smoothly above the moving QR|native title edges are continuous between adjacent ticks|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-qr-redraw|PRD_OLD_SETUP_QR_REDRAW|an unchanged setup QR is not invalidated on every phase-motion tick|the QR block has no flushed area during the phase transition|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-early-session|PRD_OLD_SETUP_EARLY_SESSION|an early session stays private until the offer exists|an early session cannot reveal the credential under SetupRequired|components/ui/src/scenes/provisioning_scene.cpp"
  "setup-session-reveal|PRD_OLD_SETUP_SESSION_REVEAL|the newly offered QR emerges on the shared clock|new QR starts at zero luminance rather than appearing in one frame|components/ui/src/scenes/provisioning_scene.cpp"
@@ -108,6 +110,33 @@ CONTROLS=(
  # title is the fixed three-dot string and the cycle never leaves it.
  "reset-static|PRD_OLD_RESET_STATIC|the erase screen's activity cadence|the running line is drawn, at its first dot|components/ui/src/scenes/factory_reset_scene.cpp"
 )
+
+require_control_failure() {
+ local name="$1" status="$2" expected="$3" log="$4"
+ if [ "$status" -eq 0 ]; then
+  echo "CONTROL DID NOT FIRE: $name" >&2
+  exit 1
+ fi
+ if ! grep -qxF "FAIL $expected" "$log"; then
+  echo "CONTROL FIRED ON THE WRONG ASSERTION: $name" >&2
+  echo "  expected: FAIL $expected" >&2
+  grep -E '^FAIL' "$log" >&2 || true
+  exit 1
+ fi
+ if grep -qE 'AddressSanitizer|UndefinedBehaviorSanitizer|runtime error:' "$log"; then
+  echo "CONTROL FAULTED RATHER THAN FAILING ITS ASSERTION: $name" >&2
+  exit 1
+ fi
+}
+
+# Use the ordinary suite and renderer to move real title ink inside fixed outer edges.
+interior_log="$WORK/setup-title-interior.log"
+status=0
+ASAN_OPTIONS=detect_leaks=0 "$OUT/message-tests" --title-interior-jump > "$interior_log" 2>&1 ||
+ status=$?
+require_control_failure setup-title-interior "$status" \
+ "native title interior ink is continuous between adjacent ticks" "$interior_log"
+echo "control setup-title-interior: a rendered suffix moved inside the same bounds; the suite failed as required"
 
 for control in "${CONTROLS[@]}"; do
  IFS='|' read -r name macro repair expected sources <<< "$control"
@@ -149,28 +178,10 @@ for control in "${CONTROLS[@]}"; do
   "$scratch/objects"/*.o -o "$scratch/control"
 
  mkdir -p "$scratch/frames"
- set +e
- ASAN_OPTIONS=detect_leaks=0 "$scratch/control" "$scratch/frames" > "$scratch/control.log" 2>&1
- status=$?
- set -e
-
- if [ "$status" -eq 0 ]; then
-  echo "CONTROL DID NOT FIRE: $name — the suite passed with $repair removed" >&2
-  exit 1
- fi
-
- if ! grep -qxF "FAIL $expected" "$scratch/control.log"; then
-  echo "CONTROL FIRED ON THE WRONG ASSERTION: $name" >&2
-  echo "  expected: FAIL $expected" >&2
-  grep -E '^FAIL' "$scratch/control.log" >&2 || true
-  exit 1
- fi
-
- # A control that crashes rather than asserting proves nothing about the assertion.
- if grep -qE 'AddressSanitizer|UndefinedBehaviorSanitizer|runtime error:' "$scratch/control.log"; then
-  echo "CONTROL FAULTED RATHER THAN FAILING ITS ASSERTION: $name" >&2
-  exit 1
- fi
+ status=0
+ ASAN_OPTIONS=detect_leaks=0 "$scratch/control" "$scratch/frames" > "$scratch/control.log" 2>&1 ||
+  status=$?
+ require_control_failure "$name" "$status" "$expected" "$scratch/control.log"
 
  echo "control $name: $repair removed; the suite failed as required"
  python3 "$FW/tools/control-artifacts.py" compact "$scratch" "$expected"
